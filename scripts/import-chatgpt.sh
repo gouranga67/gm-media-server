@@ -15,10 +15,9 @@ if [[ ! -f "$transfer_file" || -L "$transfer_file" ]]; then
 fi
 
 chmod 0600 "$transfer_file"
-docker compose --project-directory "$project_root" --profile tools run --rm --no-deps \
-  --volume "$transfer_file:/import/chatgpt.json:ro" \
+docker compose --project-directory "$project_root" --profile tools run --rm --no-deps --build -T \
   chatgpt-enroll python -m app.chatgpt_enroll \
-  --import-credentials /import/chatgpt.json
+  --import-credentials /dev/stdin <"$transfer_file"
 
 if command -v shred >/dev/null 2>&1; then
   shred --remove "$transfer_file"

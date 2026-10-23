@@ -76,8 +76,12 @@ def _validate_id_token(
 def import_credentials(import_path: Path) -> None:
     settings = get_settings()
     try:
-        imported = json.loads(import_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
+        serialized = import_path.read_text(encoding="utf-8")
+    except OSError as error:
+        raise RuntimeError("the transferred ChatGPT credential could not be read") from error
+    try:
+        imported = json.loads(serialized)
+    except json.JSONDecodeError as error:
         raise RuntimeError("the transferred ChatGPT credential is not valid JSON") from error
     if not isinstance(imported, dict):
         raise RuntimeError("the transferred ChatGPT credential is not an object")
