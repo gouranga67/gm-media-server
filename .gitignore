@@ -1,0 +1,63 @@
+# Dependencies and generated application output
+node_modules/
+.next/
+.eve/
+.superdesign/tmp/
+.superdesign/init/
+.superdesign/resume.json
+dist/
+coverage/
+*.tsbuildinfo
+
+# Local configuration and secrets
+.env
+.env.local
+.env.*.local
+!.env.example
+gm-studio-chatgpt.json
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
+
+# Media is never committed to Git
+/media/
+*.mp4
+*.mov
+*.mkv
+*.wav
+*.mp3
+*.m4a
+*.aac
+*.flac
+*.webm
+*.avi
+*.heic
+*.heif
+*.jpg
+*.jpeg
+*.png
+
+# Runtime data and logs
+postgres-data/
+redis-data/
+upload-data/
+auth-data/
+exports/
+originals/
+proxies/
+analysis/
+previews/
+*.log
+
+# Editors and operating systems
+.DS_Store
+.idea/
+.vscode/

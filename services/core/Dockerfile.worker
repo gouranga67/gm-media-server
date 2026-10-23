@@ -1,0 +1,35 @@
+FROM nvidia/cuda:12.3.2-cudnn9-runtime-ubuntu22.04
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    HF_HUB_DISABLE_TELEMETRY=1 \
+    PATH=/opt/venv/bin:$PATH
+
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends \
+        ca-certificates \
+        ffmpeg \
+        python3 \
+        python3-venv \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY requirements.txt requirements-worker.txt ./
+RUN python3 -m venv /opt/venv \
+    && pip install --no-cache-dir --requirement requirements.txt --requirement requirements-worker.txt
+
+ARG WHISPER_MODEL_REPOSITORY=Systran/faster-whisper-small
+ARG WHISPER_MODEL_REVISION=536b0662742c02347bc0e980a01041f333bce120
+RUN python -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='${WHISPER_MODEL_REPOSITORY}', revision='${WHISPER_MODEL_REVISION}', local_dir='/models/faster-whisper-small')"
+
+RUN groupadd --gid 10001 gmmedia \
+    && useradd --uid 10001 --gid gmmedia --create-home --shell /usr/sbin/nologin gmmedia \
+    && chown -R gmmedia:gmmedia /models
+
+COPY --chown=gmmedia:gmmedia app ./app
+COPY --chown=gmmedia:gmmedia migrations ./migrations
+
+USER gmmedia

@@ -1,0 +1,22 @@
+[Unit]
+Description=GM Media Server container stack
+Requires=docker.service
+After=docker.service network-online.target tailscaled.service
+Wants=network-online.target tailscaled.service
+ConditionPathExists=@PROJECT_ROOT@/compose.yaml
+ConditionPathExists=@PROJECT_ROOT@/.env
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=@PROJECT_ROOT@
+UMask=0027
+ExecStartPre=/usr/bin/docker compose config --quiet
+ExecStart=/usr/bin/docker compose up --detach --build --wait --wait-timeout 300
+ExecReload=/usr/bin/docker compose up --detach --build --wait --wait-timeout 300
+ExecStop=/usr/bin/docker compose stop --timeout 30
+TimeoutStartSec=0
+TimeoutStopSec=120
+
+[Install]
+WantedBy=multi-user.target

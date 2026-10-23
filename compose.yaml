@@ -1,0 +1,267 @@
+name: gm-media-server
+
+x-app-security: &app-security
+  read_only: true
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  init: true
+  restart: unless-stopped
+
+x-core-environment: &core-environment
+  APP_ENV: production
+  DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
+  REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+  MEDIA_ROOT: /media
+  UPLOAD_ROOT: /uploads
+  MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-21474836480}
+  UPLOAD_HOOK_SECRET: ${UPLOAD_HOOK_SECRET:?Set UPLOAD_HOOK_SECRET in .env}
+
+services:
+  postgres:
+    image: postgres:17.6-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-gm_media}
+      POSTGRES_USER: ${POSTGRES_USER:-gm_media}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    security_opt:
+      - no-new-privileges:true
+
+  redis:
+    image: redis:8.2.2-bookworm
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1"]
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+
+  migrate:
+    build:
+      context: ./services/core
+    command: ["python", "-m", "app.migrate"]
+    restart: "no"
+    environment: *core-environment
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - backend
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+  media-init:
+    build:
+      context: ./services/core
+    user: "0:0"
+    command: ["python", "-m", "app.init_media"]
+    environment: *core-environment
+    restart: "no"
+    volumes:
+      - media-data:/media
+      - upload-data:/uploads
+      - auth-data:/auth
+    networks:
+      - backend
+    security_opt:
+      - no-new-privileges:true
+
+  api:
+    <<: *app-security
+    build:
+      context: ./services/core
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]
+    environment: *core-environment
+    expose:
+      - "8000"
+    volumes:
+      - media-data:/media
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+    depends_on:
+      media-init:
+        condition: service_completed_successfully
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    networks:
+      - backend
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  worker:
+    <<: *app-security
+    build:
+      context: ./services/core
+      dockerfile: Dockerfile.worker
+    command: ["python", "-m", "app.worker"]
+    environment:
+      <<: *core-environment
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,video,utility
+      TRANSCRIPTION_MODEL_PATH: /models/faster-whisper-small
+      TRANSCRIPTION_DEVICE: auto
+      MEDIA_MIN_FREE_BYTES: ${MEDIA_MIN_FREE_BYTES:-53687091200}
+      MEDIA_MIN_FREE_PERCENT: ${MEDIA_MIN_FREE_PERCENT:-15}
+      CHATGPT_CREDENTIAL_PATH: /auth/chatgpt.json
+      CHATGPT_MODEL: ${CHATGPT_MODEL:-gpt-6.1-sol}
+      AI_GATEWAY_FALLBACK_ENABLED: ${AI_GATEWAY_FALLBACK_ENABLED:-false}
+      AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:-}
+      AI_GATEWAY_MODEL: ${AI_GATEWAY_MODEL:-openai/gpt-6.1-sol}
+    gpus: all
+    stop_grace_period: 2m
+    volumes:
+      - media-data:/media
+      - upload-data:/uploads
+      - auth-data:/auth
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    depends_on:
+      media-init:
+        condition: service_completed_successfully
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    networks:
+      - edge
+      - backend
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.worker_health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  tusd:
+    image: tusproject/tusd:v2.8.0
+    command:
+      - -host=0.0.0.0
+      - -port=1080
+      - -base-path=/files/
+      - -behind-proxy
+      - -upload-dir=/data
+      - -max-size=${MAX_UPLOAD_BYTES:-21474836480}
+      - -hooks-http=http://api:8000/api/v1/upload-hooks?token=${UPLOAD_HOOK_SECRET:?Set UPLOAD_HOOK_SECRET in .env}
+      - -hooks-enabled-events=pre-create,post-create,post-finish,post-terminate
+    restart: unless-stopped
+    user: "10001:10001"
+    expose:
+      - "1080"
+    volumes:
+      - upload-data:/data
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - backend
+    security_opt:
+      - no-new-privileges:true
+
+  web-agent:
+    <<: *app-security
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    environment:
+      NODE_ENV: production
+      HOSTNAME: 0.0.0.0
+      PORT: 3000
+      API_BASE_URL: http://api:8000
+      TUSD_BASE_URL: http://tusd:1080/files/
+      AI_GATEWAY_MODEL: ${AI_GATEWAY_MODEL:-openai/gpt-6.1-sol}
+      AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:-}
+      NEXT_TELEMETRY_DISABLED: "1"
+    ports:
+      - "127.0.0.1:${WEB_PORT:-3000}:3000"
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+    depends_on:
+      api:
+        condition: service_healthy
+      tusd:
+        condition: service_started
+    networks:
+      - edge
+      - backend
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  chatgpt-enroll:
+    <<: *app-security
+    profiles: ["tools"]
+    build:
+      context: ./services/core
+    command: ["python", "-m", "app.chatgpt_enroll"]
+    environment:
+      <<: *core-environment
+      CHATGPT_CREDENTIAL_PATH: /auth/chatgpt.json
+    volumes:
+      - auth-data:/auth
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    depends_on:
+      media-init:
+        condition: service_completed_successfully
+    networks:
+      - edge
+
+networks:
+  edge: {}
+  backend:
+    internal: true
+
+volumes:
+  postgres-data: {}
+  redis-data: {}
+  media-data: {}
+  upload-data: {}
+  auth-data: {}
