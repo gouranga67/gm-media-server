@@ -16,8 +16,13 @@ if [[ ! "$project_root" =~ ^/[A-Za-z0-9._/-]+$ ]]; then
 fi
 
 docker compose --project-directory "$project_root" config --quiet
-unit_rendered=$(mktemp --tmpdir gm-media-server.service.XXXXXX)
-trap 'rm -f "$unit_rendered"' EXIT
+unit_rendered_dir=$(mktemp --directory --tmpdir gm-media-server-systemd.XXXXXX)
+unit_rendered="$unit_rendered_dir/gm-media-server.service"
+cleanup() {
+  rm -f -- "$unit_rendered"
+  rmdir -- "$unit_rendered_dir"
+}
+trap cleanup EXIT
 sed "s|@PROJECT_ROOT@|$project_root|g" "$unit_source" >"$unit_rendered"
 systemd-analyze verify "$unit_rendered"
 install -o root -g root -m 0644 "$unit_rendered" "$unit_target"
