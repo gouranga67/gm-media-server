@@ -17,6 +17,7 @@ x-core-environment: &core-environment
   UPLOAD_ROOT: /uploads
   MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-21474836480}
   UPLOAD_HOOK_SECRET: ${UPLOAD_HOOK_SECRET:?Set UPLOAD_HOOK_SECRET in .env}
+  CHATGPT_MODEL: ${CHATGPT_MODEL:-gpt-6.1-sol}
 
 services:
   postgres:

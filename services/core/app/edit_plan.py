@@ -1,7 +1,8 @@
 import hashlib
 import json
+import math
 from collections import defaultdict
-from typing import Any, Literal
+from typing import Any, Literal, TypeAlias
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -10,7 +11,9 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 EDIT_PLAN_SCHEMA_VERSION = "1.1"
 MAX_PREVIEW_SECONDS = 60.0
 MAX_CLIPS = 24
+MAX_MONTAGE_CLIPS = 48
 TARGET_DURATION_RANGES = {
+    15: (12.0, 18.0),
     20: (15.0, 25.0),
     30: (24.0, 36.0),
     45: (36.0, 52.0),
@@ -54,6 +57,42 @@ class TalkingHeadEditPlan(BaseModel):
     post_copy: str = Field(default="", max_length=2200)
     music_track_id: UUID | None = None
     music_mix: Literal["none", "subtle", "present"] = "none"
+
+
+class MontageClip(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    asset_id: UUID
+    media_kind: Literal["video", "image"]
+    source_in: float = Field(ge=0)
+    source_out: float = Field(ge=0)
+    duration: float = Field(ge=0.5, le=8.0)
+    crop: Literal["center_fill"]
+    transition: Literal["cut", "dip_to_black"] = "cut"
+    visual_preset: Literal[
+        "standard",
+        "punch_in",
+        "slow_push_in",
+        "slow_pull_out",
+    ] = "standard"
+    include_source_audio: bool = False
+
+
+class MontageEditPlan(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal["1.0"]
+    recipe: Literal["montage"]
+    clips: list[MontageClip] = Field(min_length=2, max_length=MAX_MONTAGE_CLIPS)
+    audio_preset: Literal["montage_mix_v1"]
+    end_card: Literal["none"]
+    editorial_summary: str = Field(min_length=1, max_length=600)
+    post_copy: str = Field(default="", max_length=2200)
+    music_track_id: UUID | None = None
+    music_mix: Literal["none", "subtle", "present"] = "none"
+
+
+EditPlan: TypeAlias = TalkingHeadEditPlan | MontageEditPlan
 
 
 # This schema is intentionally small and contains only Structured Outputs
@@ -122,6 +161,73 @@ EDIT_PLAN_JSON_SCHEMA: dict[str, Any] = {
 }
 
 
+MONTAGE_EDIT_PLAN_JSON_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "schema_version": {"type": "string", "enum": ["1.0"]},
+        "recipe": {"type": "string", "enum": ["montage"]},
+        "clips": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": MAX_MONTAGE_CLIPS,
+            "items": {
+                "type": "object",
+                "properties": {
+                    "asset_id": {"type": "string", "format": "uuid"},
+                    "media_kind": {"type": "string", "enum": ["video", "image"]},
+                    "source_in": {"type": "number", "minimum": 0},
+                    "source_out": {"type": "number", "minimum": 0},
+                    "duration": {"type": "number", "minimum": 0.5, "maximum": 8.0},
+                    "crop": {"type": "string", "enum": ["center_fill"]},
+                    "transition": {"type": "string", "enum": ["cut", "dip_to_black"]},
+                    "visual_preset": {
+                        "type": "string",
+                        "enum": ["standard", "punch_in", "slow_push_in", "slow_pull_out"],
+                    },
+                    "include_source_audio": {"type": "boolean"},
+                },
+                "required": [
+                    "asset_id",
+                    "media_kind",
+                    "source_in",
+                    "source_out",
+                    "duration",
+                    "crop",
+                    "transition",
+                    "visual_preset",
+                    "include_source_audio",
+                ],
+                "additionalProperties": False,
+            },
+        },
+        "audio_preset": {"type": "string", "enum": ["montage_mix_v1"]},
+        "end_card": {"type": "string", "enum": ["none"]},
+        "editorial_summary": {"type": "string", "minLength": 1, "maxLength": 600},
+        "post_copy": {"type": "string", "maxLength": 2200},
+        "music_track_id": {"type": ["string", "null"], "format": "uuid"},
+        "music_mix": {"type": "string", "enum": ["none", "subtle", "present"]},
+    },
+    "required": [
+        "schema_version",
+        "recipe",
+        "clips",
+        "audio_preset",
+        "end_card",
+        "editorial_summary",
+        "post_copy",
+        "music_track_id",
+        "music_mix",
+    ],
+    "additionalProperties": False,
+}
+
+
+def schema_for_recipe(recipe: str) -> dict[str, Any]:
+    if recipe == "montage":
+        return MONTAGE_EDIT_PLAN_JSON_SCHEMA
+    return EDIT_PLAN_JSON_SCHEMA
+
+
 def document_sha256(document: dict[str, Any]) -> str:
     canonical = json.dumps(document, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
@@ -134,7 +240,15 @@ def validate_edit_plan(
     allow_post_copy: bool = False,
     creative_direction: dict[str, Any] | None = None,
     music_tracks: list[dict[str, Any]] | None = None,
-) -> TalkingHeadEditPlan:
+) -> EditPlan:
+    if document.get("recipe") == "montage":
+        return validate_montage_plan(
+            document,
+            assets,
+            allow_post_copy=allow_post_copy,
+            creative_direction=creative_direction,
+            music_tracks=music_tracks,
+        )
     plan = TalkingHeadEditPlan.model_validate(document)
     if plan.post_copy and not allow_post_copy:
         raise ValueError("AI-written post copy was not enabled for this project")
@@ -230,6 +344,99 @@ def validate_edit_plan(
     return plan
 
 
+def validate_montage_plan(
+    document: dict[str, Any],
+    assets: list[dict[str, Any]],
+    *,
+    allow_post_copy: bool = False,
+    creative_direction: dict[str, Any] | None = None,
+    music_tracks: list[dict[str, Any]] | None = None,
+) -> MontageEditPlan:
+    plan = MontageEditPlan.model_validate(document)
+    if plan.post_copy and not allow_post_copy:
+        raise ValueError("AI-written post copy was not enabled for this project")
+    inventory = {str(asset["asset_id"]): asset for asset in assets}
+    total_duration = 0.0
+    used_ranges: dict[str, list[tuple[float, float]]] = defaultdict(list)
+    for index, clip in enumerate(plan.clips):
+        asset_id = str(clip.asset_id)
+        asset = inventory.get(asset_id)
+        if asset is None:
+            raise ValueError(f"asset {asset_id} does not belong to this job")
+        is_image = str(asset.get("mime_type") or "").startswith("image/")
+        if clip.media_kind == "image":
+            if not is_image:
+                raise ValueError(f"asset {asset_id} is not an image source")
+            if clip.source_in != 0 or clip.source_out != 0:
+                raise ValueError("image montage clips must use zero source timecodes")
+            if clip.include_source_audio:
+                raise ValueError("image montage clips cannot include source audio")
+        else:
+            if is_image or not asset.get("has_video"):
+                raise ValueError(f"asset {asset_id} is not a video source")
+            source_duration = clip.source_out - clip.source_in
+            if source_duration < 0.5:
+                raise ValueError("video montage clips must be at least 0.5 seconds long")
+            if abs(source_duration - clip.duration) > 0.05:
+                raise ValueError("video montage duration must match its source time range")
+            available = float(asset.get("duration_seconds") or 0)
+            if clip.source_out > available + 0.01:
+                raise ValueError(
+                    f"asset {asset_id} ends at {available:.3f}s, before requested "
+                    f"source_out {clip.source_out:.3f}s"
+                )
+            if clip.include_source_audio and not asset.get("has_audio"):
+                raise ValueError(f"asset {asset_id} has no source audio")
+            used_ranges[asset_id].append((clip.source_in, clip.source_out))
+        if index == 0 and clip.transition != "cut":
+            raise ValueError("the first montage clip must begin with a cut")
+        total_duration += clip.duration
+
+    if total_duration > MAX_PREVIEW_SECONDS + 0.01:
+        raise ValueError(f"preview duration {total_duration:.3f}s exceeds 60 seconds")
+    direction = creative_direction or {}
+    target = direction.get("target_duration_seconds")
+    if target in TARGET_DURATION_RANGES:
+        minimum, maximum = TARGET_DURATION_RANGES[target]
+        has_still = any(
+            str(asset.get("mime_type") or "").startswith("image/") for asset in assets
+        )
+        if not has_still:
+            available = sum(
+                float(asset.get("duration_seconds") or 0)
+                for asset in assets
+                if asset.get("has_video")
+            )
+            minimum = min(minimum, max(1.0, available - 0.5))
+        if total_duration < minimum - 0.01 or total_duration > maximum + 0.01:
+            raise ValueError(
+                f"montage duration {total_duration:.3f}s is outside the "
+                f"{minimum:.3f}–{maximum:.3f}s range for a {target}s target"
+            )
+    for asset_id, ranges in used_ranges.items():
+        ordered = sorted(ranges)
+        for previous, current in zip(ordered, ordered[1:], strict=False):
+            if current[0] < previous[1] - 0.01:
+                raise ValueError(f"asset {asset_id} contains overlapping source ranges")
+
+    tracks = {str(track["track_id"]): track for track in music_tracks or []}
+    requested_music = direction.get("music_mode") or "none"
+    if plan.music_track_id is None:
+        if plan.music_mix != "none":
+            raise ValueError("a music mix requires an approved music track")
+        if requested_music != "none" and tracks:
+            raise ValueError("this montage requested music but did not select a track")
+    else:
+        track_id = str(plan.music_track_id)
+        if requested_music == "none":
+            raise ValueError("music was not enabled for this montage")
+        if track_id not in tracks:
+            raise ValueError(f"music track {track_id} is not in the approved library")
+        if plan.music_mix != requested_music:
+            raise ValueError("the music mix does not match the job's requested music level")
+    return plan
+
+
 def deterministic_plan(
     assets: list[dict[str, Any]],
     target_duration_seconds: int | None = None,
@@ -294,6 +501,109 @@ def deterministic_plan(
         music_mix=music_mode if isinstance(selected_track, dict) else "none",
     )
     return validate_edit_plan(
+        plan.model_dump(mode="json"),
+        assets,
+        creative_direction={
+            "target_duration_seconds": target_duration_seconds,
+            "edit_style": edit_style,
+            "music_mode": music_mode,
+        },
+        music_tracks=music_tracks,
+    )
+
+
+def deterministic_montage_plan(
+    assets: list[dict[str, Any]],
+    target_duration_seconds: int | None,
+    edit_style: str,
+    music_mode: str,
+    music_tracks: list[dict[str, Any]] | None,
+) -> MontageEditPlan:
+    eligible = [
+        asset
+        for asset in assets
+        if asset.get("has_video") or str(asset.get("mime_type") or "").startswith("image/")
+    ]
+    if not eligible:
+        raise ValueError("the montage recipe needs at least one video or image")
+    requested_target = float(target_duration_seconds or 30)
+    has_still = any(
+        str(asset.get("mime_type") or "").startswith("image/") for asset in eligible
+    )
+    available_video = sum(
+        float(asset.get("duration_seconds") or 0)
+        for asset in eligible
+        if asset.get("has_video")
+    )
+    target = requested_target if has_still else min(requested_target, available_video)
+    if target < 1.0:
+        raise ValueError("the montage recipe needs at least one second of usable source media")
+    clip_count = min(
+        MAX_MONTAGE_CLIPS,
+        max(2, math.ceil(target / 8), round(target / 3)),
+    )
+    clip_duration = round(target / clip_count, 3)
+    clips: list[MontageClip] = []
+    video_offsets: dict[str, float] = defaultdict(float)
+    candidate_index = 0
+    total_duration = 0.0
+    attempts = 0
+    while total_duration < target - 0.01 and len(clips) < MAX_MONTAGE_CLIPS:
+        attempts += 1
+        if attempts > MAX_MONTAGE_CLIPS * max(2, len(eligible)):
+            break
+        asset = eligible[candidate_index % len(eligible)]
+        candidate_index += 1
+        asset_id = str(asset["asset_id"])
+        is_image = str(asset.get("mime_type") or "").startswith("image/")
+        duration = min(clip_duration, target - total_duration)
+        if is_image:
+            source_in = source_out = 0.0
+        else:
+            available = float(asset.get("duration_seconds") or 0)
+            source_in = video_offsets[asset_id]
+            duration = min(duration, available - source_in)
+            source_out = source_in + duration
+            duration = round(source_out - source_in, 3)
+            if duration < 0.5:
+                continue
+            video_offsets[asset_id] = source_out
+        index = len(clips)
+        clips.append(
+            MontageClip(
+                asset_id=UUID(asset_id),
+                media_kind="image" if is_image else "video",
+                source_in=round(source_in, 3),
+                source_out=round(source_out, 3),
+                duration=duration,
+                crop="center_fill",
+                transition="dip_to_black" if index and index % 4 == 0 else "cut",
+                visual_preset=(
+                    "slow_push_in"
+                    if is_image
+                    else "punch_in"
+                    if edit_style == "energetic" and index % 3 == 1
+                    else "standard"
+                ),
+                include_source_audio=bool(asset.get("has_audio")) and index % 5 == 0,
+            )
+        )
+        total_duration += duration
+    if len(clips) < 2:
+        raise ValueError("the montage recipe needs enough source media for at least two shots")
+    selected_track = (music_tracks or [None])[0] if music_mode != "none" else None
+    plan = MontageEditPlan(
+        schema_version="1.0",
+        recipe="montage",
+        clips=clips,
+        audio_preset="montage_mix_v1",
+        end_card="none",
+        editorial_summary="Local-only source-led montage assembled from eligible media.",
+        post_copy="",
+        music_track_id=UUID(str(selected_track["track_id"])) if isinstance(selected_track, dict) else None,
+        music_mix=music_mode if isinstance(selected_track, dict) else "none",
+    )
+    return validate_montage_plan(
         plan.model_dump(mode="json"),
         assets,
         creative_direction={

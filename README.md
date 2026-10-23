@@ -135,9 +135,10 @@ python3 scripts/verify-phase3.py
 python3 scripts/verify-phase4.py
 python3 scripts/verify-phase5.py
 python3 scripts/verify-phase6.py
+python3 scripts/verify-phase6b.py
 ```
 
-The Phase 3 check exercises interrupted/resumed tus uploads, Phase 4 verifies real-media analysis, Phase 5 proves strict edit-plan validation plus a downloadable deterministic preview, and Phase 6 exercises revision, approval, and full delivery packaging.
+The Phase 3 check exercises interrupted/resumed tus uploads, Phase 4 verifies real-media analysis, Phase 5 proves strict edit-plan validation plus a downloadable deterministic preview, and Phase 6 exercises revision, approval, and full delivery packaging. Phase 6B verifies a deployed montage plus its model catalogue and usage ledger after a real montage has been created from the phone.
 
 ## Repository map
 

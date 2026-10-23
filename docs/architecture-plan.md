@@ -151,6 +151,10 @@ Use a simple filesystem layout on a dedicated media root:
 
 The application should never trust uploaded filenames as paths. Originals are immutable and content-addressed in metadata. Temporary files are written beside their destination and atomically renamed after successful completion.
 
+The current upload lifecycle is: tus writes resumable chunks into the persistent `upload-data` staging volume; the worker verifies the completed size, copies the bytes into the persistent `media-data` volume at `/media/originals/<project>/<asset-id>/source`, calculates SHA-256, atomically installs the read-only original, removes the staging upload, and queues local analysis. Proxies, thumbnails, contact sheets, transcripts, previews, and deliveries live separately in `media-data`, so rendering never modifies the original. PostgreSQL stores the searchable ownership, job attachment, status, and hash records in its own persistent volume.
+
+Phase 6C adds a logical content library over those originals. Jobs will attach references to existing library assets rather than copying files. Because the present `assets.project_id` relationship owns deletion, cross-project reuse requires separating library ownership from project/job attachment first; this prevents one old project deletion from unexpectedly removing footage used by another job.
+
 Keep at least 15% of the NVMe free. Default retention proposal: proxies 14 days after final approval, previews 30 days, exports 90 days, originals until explicitly archived or deleted. Show the expected space recovery before deletion.
 
 Before real use, add a second copy of originals and final exports. The minimum is a large external drive with nightly restic backups and periodic restore tests. A NAS or encrypted object-storage backup is better. The database and brand/template library also need backup. RAID alone would not replace this backup.

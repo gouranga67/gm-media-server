@@ -1,6 +1,6 @@
 # Build phases and live status
 
-Updated: 2026-10-23 (Australia/Brisbane)
+Updated: 2026-10-24 (Australia/Brisbane)
 
 This is the working plan for turning the Lenovo into a private media-editing appliance. A phase is complete only when its exit checks pass. Discussion, generated files, and installed packages do not count as a completed phase by themselves.
 
@@ -14,8 +14,10 @@ This is the working plan for turning the Lenovo into a private media-editing app
 | 3 | Projects, jobs, and resumable phone uploads | In progress |
 | 4 | Local ingest and media analysis | Complete |
 | 5 | Bounded editor agent and deterministic reel rendering | Complete |
-| 6 | Phone review, revisions, delivery, and provenance | In progress |
-| 6A | Creative duration, motion, transitions, and licensed music | In progress |
+| 6 | Phone review, revisions, delivery, and provenance | Complete |
+| 6A | Creative duration, motion, transitions, and licensed music | Complete |
+| 6B | Montage recipe, model controls, and usage visibility | Complete |
+| 6C | Reusable on-server content library | Planned |
 | 7 | Appliance hardening, backup, and recovery | Not started |
 
 ## Phase 0 — inventory and guardrails
@@ -135,7 +137,7 @@ Build:
 - 1080 × 1920 H.264 export, cover image, captions, and optional approved post copy.
 - Provenance manifest containing hashes, source ranges, models, tool versions, template version, render settings, and QA results.
 
-Current build checkpoint (2026-10-23): the source tree contains transcript-validated caption corrections, versioned revision requests linked to the prior edit plan, explicit per-version approval, a durable crash-recoverable final-export queue, and a phone review interface. Approved versions render locally at 1080 × 1920 with WebVTT captions, a source-derived JPEG cover, a provenance and technical-QA manifest, individual downloads, and a combined ZIP package. The editor and Eve tools remain bounded to registered assets and approved API transitions. Static verification passes; production deployment and the live Phase 6 acceptance run remain.
+Completion evidence (2026-10-24): the deployed phone workflow completed a ChatGPT-planned revision and recovered its initially failed final export without another planning call. The accepted version rendered with NVENC at 1080 × 1920, and the live verifier downloaded and validated its MP4, WebVTT captions, JPEG cover, ZIP package, provenance manifest, source-policy record, and technical QA. **Passed.**
 
 Acceptance helper after deployment: `python3 scripts/verify-phase6.py` selects a ready preview, requests one bounded revision, approves the new version, waits for the final GPU render, and verifies the MP4, captions, cover, package, provenance, and source-only policy.
 
@@ -153,9 +155,47 @@ Build:
 - A local music catalogue requiring an operator-supplied file, SHA-256, licence URL and proof record, commercial-use confirmation, attribution, and explicit platform scope.
 - Automatic speech normalization, music trimming/fades, and side-chain ducking. Music remains off by default and the agent cannot browse for or download tracks.
 
-Current build checkpoint (2026-10-23): implementation and static checks are in progress. Existing EDL 1.0 plans and jobs remain valid; creative constraints apply to newly directed jobs without rewriting historical versions.
+Completion evidence (2026-10-23): the production phone flow generated a positively reviewed talking-head edit from a clear direction brief using bounded duration, motion, transition, and music controls. Existing EDL 1.0 plans and jobs remain valid; creative constraints apply to newly directed jobs without rewriting historical versions. **Passed.**
 
 Exit check: from the phone, request a 45-second energetic reel from sufficiently long footage, observe bounded visual emphasis and at least one transition, and confirm a rights-approved test track ducks under speech only when music is explicitly enabled.
+
+## Phase 6B — montage, model controls, and usage visibility
+
+**Purpose:** support a second useful editing recipe and make the hosted editor's resource use understandable from the phone.
+
+Build:
+
+- Phone-selectable Montage recipe for uploaded video and photos, with 15/30/45/60-second targets and vertical or landscape delivery.
+- Strict montage EDL containing source asset IDs, bounded source ranges, fixed transition/motion presets, and optional approved-library music only.
+- Deterministic local FFmpeg preview and full-resolution renderer with NVENC and CPU fallback; the model chooses the edit but never renders or generates media.
+- Account-specific model catalogue from the connected ChatGPT account, a per-job model selector, and Low/Medium/High reasoning control.
+- Durable per-request token ledger recording input, cached input, output, reasoning, total tokens, and latency.
+- Per-job usage on the review/download screen plus a 30-day model usage screen.
+- Local beat-grid analysis for operator-imported rights-approved music, used as timing context rather than as generated content.
+
+Completion evidence (2026-10-24): the deployed verifier refreshed an approved legacy montage through the current renderer without another planning request. The vertical final used `h264_nvenc`, included five source-speech caption events, exposed its WebVTT captions and phone download, and preserved the approved edit as version 3. The connected ChatGPT account returned seven selectable models; the verified run recorded `gpt-6.1-sol` at medium reasoning with 68,281 measured tokens, while the all-time dashboard reported 17 requests across 16 jobs. **Passed.**
+
+Planning recovery now records every hosted request immediately and allows one low-effort correction when an otherwise schema-valid plan fails deterministic validation. The correction receives the exact validator error and rejected plan, while all source, overlap, duration, music, and effect constraints remain unchanged.
+
+Montage stills render from the clean, metadata-stripped JPEG derivative created during ingest. This avoids malformed phone-camera APP metadata breaking a multi-input FFmpeg render, reduces decode cost, and preserves the immutable original hash as the provenance source.
+
+Acceptance helper after deployment and one approved montage: `python3 scripts/verify-phase6b.py` verifies the account model catalogue, per-job and 30-day usage ledgers, final montage dimensions, MP4, ZIP package, and manifest.
+
+Exit check: select at least two real videos/photos on the phone, request a montage, review it, approve it, download the final package, and confirm that its job screen displays the selected model and non-negative measured token totals. **Passed.**
+
+## Phase 6C — reusable on-server content library
+
+**Purpose:** stop re-uploading footage that the Lenovo already holds, without copying or weakening ownership and deletion rules.
+
+Planned build:
+
+- A searchable **Server library** beside the phone file picker, with thumbnails, source names, dates, media type, duration, project, and analysis readiness.
+- An explicit **Attach to this job** operation that adds a database reference to an existing original; it does not copy the media bytes.
+- SHA-256 duplicate detection so a repeated upload can offer the existing item rather than silently storing another full original.
+- Clear **remove from job**, **archive**, and **delete original** semantics. Detaching a job never deletes the original; deleting the final retained library item requires confirmation and later backup coverage.
+- Filters for recent footage and prior projects, which directly addresses repeated testing with similar clips.
+
+This is deliberately after Phase 6B. The current schema makes an asset belong to one project, so a safe cross-project library needs a small ownership migration rather than a UI shortcut that could cascade-delete shared originals.
 
 ## Phase 7 — appliance hardening and recovery
 

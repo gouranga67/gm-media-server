@@ -10,11 +10,19 @@ from pathlib import Path
 from typing import Any
 
 from app.config import Settings, get_settings
-from app.edit_plan import EDIT_PLAN_JSON_SCHEMA, TalkingHeadEditPlan, deterministic_plan
+from app.edit_plan import (
+    EditPlan,
+    MontageEditPlan,
+    TalkingHeadEditPlan,
+    deterministic_montage_plan,
+    deterministic_plan,
+    schema_for_recipe,
+)
 from app.media_analysis import resolve_source
 
 
 OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
+OPENAI_MODELS_URL = "https://api.openai.com/v1/models"
 OPENAI_TOKEN_URL = "https://auth.openai.com/api/accounts/oauth/token"
 GATEWAY_RESPONSES_URL = "https://ai-gateway.vercel.sh/v1/responses"
 REQUIRED_PLAN_SCOPE = "chatgpt.tokens.use.direct"
@@ -146,6 +154,47 @@ def usable_chatgpt_credentials(settings: Settings) -> dict[str, Any]:
     return credentials
 
 
+def list_chatgpt_models(settings: Settings | None = None) -> list[dict[str, str]]:
+    settings = settings or get_settings()
+    credentials = usable_chatgpt_credentials(settings)
+    request = urllib.request.Request(
+        OPENAI_MODELS_URL,
+        headers={"authorization": f"Bearer {credentials['access_token']}"},
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=settings.editor_request_timeout_seconds) as response:
+            payload = _read_json_response(response)
+    except urllib.error.HTTPError as error:
+        raise ProviderUnavailable(f"ChatGPT model catalogue failed: {_safe_http_error(error)}") from error
+    except OSError as error:
+        raise ProviderUnavailable("ChatGPT model catalogue could not reach OpenAI") from error
+    models = payload.get("models")
+    if not isinstance(models, list):
+        raise ProviderResponseError("ChatGPT model catalogue returned an unexpected response")
+    visible: list[dict[str, str]] = []
+    for model in models:
+        if not isinstance(model, dict) or model.get("visibility") != "list":
+            continue
+        slug = model.get("slug")
+        display_name = model.get("display_name")
+        if (
+            not isinstance(slug, str)
+            or not isinstance(display_name, str)
+            or not display_name.strip()
+        ):
+            continue
+        if not slug or len(slug) > 160 or any(
+            character not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_."
+            for character in slug
+        ):
+            continue
+        visible.append({"slug": slug, "display_name": display_name.strip()[:160]})
+    if not visible:
+        raise ProviderResponseError("ChatGPT model catalogue did not include selectable models")
+    return visible
+
+
 def _public_context(context: dict[str, Any], max_characters: int) -> dict[str, Any]:
     public = deepcopy(context)
     for asset in public.get("assets", []):
@@ -204,23 +253,52 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
             "while preserving requested strengths and all source-led constraints. Caption corrections "
             "are applied deterministically after planning; do not alter spoken words to simulate them.\n\n"
         )
+    correction = public.get("validation_correction")
+    correction_instruction = ""
+    if isinstance(correction, dict):
+        correction_instruction = (
+            "Your previous edit plan was rejected by the deterministic validator. Correct the supplied "
+            "rejected_plan so it satisfies every original instruction and this exact validation error: "
+            f"{str(correction.get('error') or 'invalid edit plan')[:1000]}. Return a complete replacement "
+            "plan, not a patch. Do not repeat overlapping source ranges from the same video asset.\n\n"
+        )
+    recipe = str(public.get("job", {}).get("recipe") or "talking_head")
+    if recipe == "montage":
+        task_instruction = (
+            "Create one source-led montage JSON edit plan. Choose only uploaded video and image assets. "
+            "Prefer sharp, varied shots and coherent visual progression grounded in the brief. Video clip "
+            "duration must exactly match source_out minus source_in; image clips use zero source timecodes. "
+            "Use 1.5–4 second shots for energetic work and 3–6 second shots for calm work. Keep every clip "
+            "between 0.5 and 8 seconds, keep the assembled duration near the requested target, use only named "
+            "presets, and select music only from music_library when requested. If the brief names dialogue or "
+            "a spoken phrase, include the whole supported utterance and enable source audio for that clip; do "
+            "not begin or end in the middle of a word. Use source audio sparingly for complete dialogue beats "
+            "or useful natural sound, never as arbitrary fragments. When no music is requested, favor a few "
+            "coherent audio passages over rapid on/off audio switching. When a selected track has a beat grid, "
+            "prefer cumulative cut times near those beats."
+        )
+    else:
+        task_instruction = (
+            "Create one JSON edit plan from this trusted job context. The validator will reject invented "
+            "asset IDs, out-of-range timecodes, overlapping ranges, unsupported effects, and previews longer "
+            "than 60 seconds. Prefer a coherent 15–60 second transcript-led story, preserve the speaker's "
+            "meaning, remove obvious dead air, and keep chronological order unless the brief clearly requires "
+            "otherwise. Treat job.target_duration_seconds as a real delivery target, job.must_include as "
+            "required subject matter when supported by the transcript, and job.edit_style as the visual pacing "
+            "direction. Use only the named visual and transition presets. For energetic edits, split around "
+            "genuine emphasis beats, alternate standard framing with restrained punch-ins, and include a "
+            "transition beat when the edit is at least 20 seconds. For clean edits, favor stable framing. For "
+            "calm edits, favor longer clips and slow moves. Select music only from music_library and only when "
+            "job.music_mode requests it; otherwise return no music."
+        )
     content: list[dict[str, Any]] = [
         {
             "type": "input_text",
             "text": (
-                "Create one JSON edit plan from this trusted job context. The validator will reject "
-                "invented asset IDs, out-of-range timecodes, overlapping ranges, unsupported effects, "
-                "and previews longer than 60 seconds. Prefer a coherent 15–60 second transcript-led "
-                "story, preserve the speaker's meaning, remove obvious dead air, and keep chronological "
-                "order unless the brief clearly requires otherwise. Treat job.target_duration_seconds "
-                "as a real delivery target, job.must_include as required subject matter when supported "
-                "by the transcript, and job.edit_style as the visual pacing direction. Use only the "
-                "named visual and transition presets. For energetic edits, split around genuine emphasis "
-                "beats, alternate standard framing with restrained punch-ins, and include a transition "
-                "beat when the edit is at least 20 seconds. For clean edits, favor "
-                "stable framing. For calm edits, favor longer clips and slow moves. Select music only from "
-                "music_library and only when job.music_mode requests it; otherwise return no music.\n\n"
+                task_instruction
+                + "\n\n"
                 + revision_instruction
+                + correction_instruction
                 + json.dumps(public, ensure_ascii=False)
             ),
         }
@@ -228,8 +306,9 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
     if context.get("project", {}).get("privacy_mode") != "hybrid":
         return content
 
-    for asset in context.get("assets", [])[:4]:
-        key = asset.get("_contact_sheet_key")
+    image_limit = 12 if recipe == "montage" else 4
+    for asset in context.get("assets", [])[:image_limit]:
+        key = asset.get("_contact_sheet_key") or asset.get("_preview_key")
         if not isinstance(key, str):
             continue
         try:
@@ -255,9 +334,10 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
     return content
 
 
-def _parse_sse_response(response: Any) -> str:
+def _parse_sse_response(response: Any) -> tuple[str, dict[str, Any]]:
     chunks: list[str] = []
     completed = False
+    completion: dict[str, Any] = {}
     for raw_line in response:
         line = raw_line.decode("utf-8", errors="replace").strip()
         if not line.startswith("data:"):
@@ -271,6 +351,9 @@ def _parse_sse_response(response: Any) -> str:
             chunks.append(event["delta"])
         elif event_type == "response.completed":
             completed = True
+            response_payload = event.get("response")
+            if isinstance(response_payload, dict):
+                completion = response_payload
         elif event_type in {"response.failed", "response.incomplete", "error"}:
             error = event.get("error") or event.get("response", {}).get("error") or {}
             code = error.get("code") if isinstance(error, dict) else None
@@ -287,7 +370,26 @@ def _parse_sse_response(response: Any) -> str:
     output = "".join(chunks).strip()
     if not output:
         raise ProviderResponseError("editor model completed without an edit plan")
-    return output
+    usage = completion.get("usage") if isinstance(completion.get("usage"), dict) else {}
+    input_details = (
+        usage.get("input_tokens_details")
+        if isinstance(usage.get("input_tokens_details"), dict)
+        else {}
+    )
+    output_details = (
+        usage.get("output_tokens_details")
+        if isinstance(usage.get("output_tokens_details"), dict)
+        else {}
+    )
+    return output, {
+        "response_id": completion.get("id") if isinstance(completion.get("id"), str) else None,
+        "actual_model": completion.get("model") if isinstance(completion.get("model"), str) else None,
+        "input_tokens": int(usage.get("input_tokens") or 0),
+        "cached_input_tokens": int(input_details.get("cached_tokens") or 0),
+        "output_tokens": int(usage.get("output_tokens") or 0),
+        "reasoning_tokens": int(output_details.get("reasoning_tokens") or 0),
+        "total_tokens": int(usage.get("total_tokens") or 0),
+    }
 
 
 def _request_plan(
@@ -295,14 +397,17 @@ def _request_plan(
     endpoint: str,
     token: str,
     model: str,
+    reasoning_effort: str,
     context: dict[str, Any],
     settings: Settings,
-) -> dict[str, Any]:
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    recipe = str(context.get("job", {}).get("recipe") or "talking_head")
+    schema = schema_for_recipe(recipe)
     body = {
         "model": model,
         "instructions": (
-            "You are GM Studio's bounded talking-head editor. Make editorial selections only from "
-            "the supplied source inventory and transcript. Do not invent media, words, asset IDs, "
+            "You are GM Studio's bounded source-led video editor. Make editorial selections only from "
+            "the supplied source inventory, analysis, and transcript. Do not invent media, words, asset IDs, "
             "timecodes, paths, or operations outside the schema's named presets. Return only the "
             "required structured edit plan. "
             "Set post_copy to an empty string unless project.ai_copy_allowed is true. When it is true, "
@@ -313,12 +418,13 @@ def _request_plan(
         "text": {
             "format": {
                 "type": "json_schema",
-                "name": "talking_head_edit_plan",
-                "description": "A source-led edit decision list for one vertical talking-head preview.",
+                "name": f"{recipe}_edit_plan",
+                "description": f"A source-led edit decision list for one {recipe} preview.",
                 "strict": True,
-                "schema": EDIT_PLAN_JSON_SCHEMA,
+                "schema": schema,
             }
         },
+        "reasoning": {"effort": reasoning_effort},
         "store": False,
         "stream": True,
     }
@@ -332,9 +438,10 @@ def _request_plan(
         },
         method="POST",
     )
+    started = time.monotonic()
     try:
         with urllib.request.urlopen(request, timeout=settings.editor_request_timeout_seconds) as response:
-            output = _parse_sse_response(response)
+            output, usage = _parse_sse_response(response)
     except urllib.error.HTTPError as error:
         detail = _safe_http_error(error)
         if error.code in {401, 403, 429, 503}:
@@ -351,23 +458,36 @@ def _request_plan(
         raise ProviderResponseError("editor model returned invalid JSON") from error
     if not isinstance(document, dict):
         raise ProviderResponseError("editor model returned a non-object edit plan")
-    return document
+    usage["latency_ms"] = max(0, round((time.monotonic() - started) * 1000))
+    return document, usage
 
 
 def create_edit_plan(
     context: dict[str, Any], settings: Settings | None = None
-) -> tuple[TalkingHeadEditPlan, dict[str, str]]:
+) -> tuple[EditPlan, dict[str, Any]]:
     settings = settings or get_settings()
     privacy_mode = context.get("project", {}).get("privacy_mode")
     assets = context.get("assets", [])
+    recipe = str(context.get("job", {}).get("recipe") or "talking_head")
+    selected_model = str(context.get("job", {}).get("editor_model") or settings.chatgpt_model)
+    requested_reasoning_effort = str(
+        context.get("job", {}).get("reasoning_effort") or "medium"
+    )
+    reasoning_effort = (
+        "low" if isinstance(context.get("validation_correction"), dict) else requested_reasoning_effort
+    )
     if privacy_mode == "local_only":
         revision = context.get("revision")
         if isinstance(revision, dict) and isinstance(revision.get("previous_plan"), dict):
-            return TalkingHeadEditPlan.model_validate(revision["previous_plan"]), {
+            plan_type = MontageEditPlan if recipe == "montage" else TalkingHeadEditPlan
+            return plan_type.model_validate(revision["previous_plan"]), {
                 "provider": "local_fixed_revision",
-                "model": "talking_head_v1",
+                "model": f"{recipe}_v1",
+                "reasoning_effort": None,
+                "usage": {},
             }
-        return deterministic_plan(
+        planner = deterministic_montage_plan if recipe == "montage" else deterministic_plan
+        return planner(
             assets,
             context.get("job", {}).get("target_duration_seconds"),
             context.get("job", {}).get("edit_style") or "clean",
@@ -375,22 +495,29 @@ def create_edit_plan(
             context.get("music_library", []),
         ), {
             "provider": "local_fixed_recipe",
-            "model": "talking_head_v1",
+            "model": f"{recipe}_v1",
+            "reasoning_effort": None,
+            "usage": {},
         }
 
     primary_error: Exception | None = None
     try:
         credentials = usable_chatgpt_credentials(settings)
-        document = _request_plan(
+        document, usage = _request_plan(
             endpoint=OPENAI_RESPONSES_URL,
             token=str(credentials["access_token"]),
-            model=settings.chatgpt_model,
+            model=selected_model,
+            reasoning_effort=reasoning_effort,
             context=context,
             settings=settings,
         )
-        return TalkingHeadEditPlan.model_validate(document), {
+        plan_type = MontageEditPlan if recipe == "montage" else TalkingHeadEditPlan
+        return plan_type.model_validate(document), {
             "provider": "chatgpt_plan",
-            "model": settings.chatgpt_model,
+            "model": usage.get("actual_model") or selected_model,
+            "requested_model": selected_model,
+            "reasoning_effort": reasoning_effort,
+            "usage": usage,
         }
     except ProviderUnavailable as error:
         primary_error = error
@@ -400,16 +527,21 @@ def create_edit_plan(
             raise ProviderUnavailable(
                 "AI Gateway fallback is enabled but AI_GATEWAY_API_KEY is not set"
             ) from primary_error
-        document = _request_plan(
+        document, usage = _request_plan(
             endpoint=GATEWAY_RESPONSES_URL,
             token=settings.ai_gateway_api_key,
             model=settings.ai_gateway_model,
+            reasoning_effort=reasoning_effort,
             context=context,
             settings=settings,
         )
-        return TalkingHeadEditPlan.model_validate(document), {
+        plan_type = MontageEditPlan if recipe == "montage" else TalkingHeadEditPlan
+        return plan_type.model_validate(document), {
             "provider": "vercel_ai_gateway",
-            "model": settings.ai_gateway_model,
+            "model": usage.get("actual_model") or settings.ai_gateway_model,
+            "requested_model": settings.ai_gateway_model,
+            "reasoning_effort": reasoning_effort,
+            "usage": usage,
         }
 
     assert primary_error is not None

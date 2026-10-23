@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -10,6 +11,7 @@ from app.schemas import (
     AssetAnalysisResponse,
     AssetCreate,
     AssetResponse,
+    EditorModelResponse,
     JobCreate,
     JobResponse,
     MusicTrackResponse,
@@ -21,12 +23,38 @@ from app.schemas import (
 router = APIRouter(prefix="/api/v1", tags=["projects"])
 
 
+@router.get("/editor/models", response_model=list[EditorModelResponse])
+def list_editor_models() -> list[dict[str, Any]]:
+    with connection() as database:
+        rows = database.execute(
+            """
+            SELECT slug, display_name, provider, available, refreshed_at
+            FROM editor_models
+            WHERE available = true
+            ORDER BY sort_order, display_name, slug
+            """
+        ).fetchall()
+    if rows:
+        return list(rows)
+    settings = get_settings()
+    return [
+        {
+            "slug": settings.chatgpt_model,
+            "display_name": settings.chatgpt_model,
+            "provider": "chatgpt_plan",
+            "available": True,
+            "refreshed_at": datetime.now(timezone.utc),
+        }
+    ]
+
+
 @router.get("/music-tracks", response_model=list[MusicTrackResponse])
 def list_music_tracks() -> list[dict[str, Any]]:
     with connection() as database:
         rows = database.execute(
             """
             SELECT id, title, artist, duration_seconds, mood, energy, bpm,
+                   beat_grid_seconds,
                    license_name, license_source_url, allowed_platforms,
                    attribution, created_at
             FROM music_tracks
@@ -117,13 +145,27 @@ def create_job(project_id: UUID, payload: JobCreate) -> dict[str, Any]:
     job_id = payload.id or uuid4()
     try:
         with connection() as database:
+            if payload.editor_model is not None:
+                available_model = database.execute(
+                    "SELECT 1 FROM editor_models WHERE slug = %s AND available = true",
+                    (payload.editor_model,),
+                ).fetchone()
+                catalog_exists = database.execute("SELECT 1 FROM editor_models LIMIT 1").fetchone()
+                if available_model is None and not (
+                    catalog_exists is None and payload.editor_model == get_settings().chatgpt_model
+                ):
+                    raise HTTPException(
+                        status_code=422,
+                        detail="the selected editor model is not available to the connected ChatGPT account",
+                    )
             row = database.execute(
                 """
                 INSERT INTO jobs (
                     id, project_id, recipe, target_duration_seconds,
-                    edit_style, music_mode, target_platform, must_include
+                    edit_style, music_mode, target_platform, must_include,
+                    editor_model, reasoning_effort, output_aspect
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING *
                 """,
                 (
@@ -135,6 +177,9 @@ def create_job(project_id: UUID, payload: JobCreate) -> dict[str, Any]:
                     payload.music_mode.value,
                     payload.target_platform.value,
                     payload.must_include,
+                    payload.editor_model,
+                    payload.reasoning_effort.value,
+                    payload.output_aspect.value,
                 ),
             ).fetchone()
     except ForeignKeyViolation as error:
@@ -150,6 +195,9 @@ def create_job(project_id: UUID, payload: JobCreate) -> dict[str, Any]:
             or row["music_mode"] != payload.music_mode.value
             or row["target_platform"] != payload.target_platform.value
             or row["must_include"] != payload.must_include
+            or row["editor_model"] != payload.editor_model
+            or row["reasoning_effort"] != payload.reasoning_effort.value
+            or row["output_aspect"] != payload.output_aspect.value
         ):
             raise HTTPException(status_code=409, detail="job ID is already in use") from None
     assert row is not None

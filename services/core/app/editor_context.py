@@ -93,9 +93,17 @@ def build_editor_context(
         }
         if include_internal_paths:
             asset["_storage_key"] = row["storage_key"]
+            proxy = manifest.get("derived", {}).get("proxy")
+            if asset["has_video"] and isinstance(proxy, str):
+                asset["_proxy_key"] = proxy
             contact_sheet = manifest.get("derived", {}).get("contact_sheet")
             if isinstance(contact_sheet, str):
                 asset["_contact_sheet_key"] = contact_sheet
+            preview = manifest.get("derived", {}).get("preview") or manifest.get(
+                "derived", {}
+            ).get("thumbnail")
+            if isinstance(preview, str):
+                asset["_preview_key"] = preview
         assets.append(asset)
 
     ready = bool(assets) and all(
@@ -118,6 +126,7 @@ def build_editor_context(
             "mood": row["mood"],
             "energy": row["energy"],
             "bpm": float(row["bpm"]) if row["bpm"] is not None else None,
+            "beat_grid_seconds": row.get("beat_grid_seconds") or [],
             "license_name": row["license_name"],
             "license_source_url": row["license_source_url"],
             "license_proof_recorded": bool(row["license_proof"]),
@@ -139,6 +148,9 @@ def build_editor_context(
             "music_mode": job["music_mode"],
             "target_platform": job["target_platform"],
             "must_include": job["must_include"],
+            "editor_model": job.get("editor_model"),
+            "reasoning_effort": job.get("reasoning_effort") or "medium",
+            "output_aspect": job.get("output_aspect") or "vertical",
         },
         "project": {
             "name": job["project_name"],
@@ -164,3 +176,12 @@ def resolve_internal_asset_source(settings: Settings, asset: dict[str, Any]) -> 
     if not isinstance(storage_key, str):
         raise ValueError("editor context does not contain an internal storage key")
     return resolve_source(settings.media_root, storage_key)
+
+
+def resolve_internal_asset_render_source(settings: Settings, asset: dict[str, Any]) -> Path:
+    """Prefer the ingest-normalized video proxy for deterministic rendering."""
+
+    proxy_key = asset.get("_proxy_key")
+    if isinstance(proxy_key, str):
+        return resolve_source(settings.media_root, proxy_key)
+    return resolve_internal_asset_source(settings, asset)

@@ -7,7 +7,7 @@ from typing import Any
 
 from app.config import Settings, get_settings
 from app.edit_plan import TalkingHeadEditPlan, document_sha256
-from app.editor_context import resolve_internal_asset_source
+from app.editor_context import resolve_internal_asset_render_source
 from app.media_analysis import (
     READ_ONLY_MODE,
     ensure_capacity,
@@ -95,11 +95,14 @@ def render_ass(
     width: int = PREVIEW_WIDTH,
     height: int = PREVIEW_HEIGHT,
 ) -> str:
-    font_size = 34 if width == PREVIEW_WIDTH else 68
-    outline = 3 if width == PREVIEW_WIDTH else 6
-    shadow = 1 if width == PREVIEW_WIDTH else 2
-    horizontal_margin = 38 if width == PREVIEW_WIDTH else 76
-    vertical_margin = 86 if height == PREVIEW_HEIGHT else 172
+    # Scale from frame height so the same caption style remains proportional
+    # for both vertical reels and landscape montages.
+    scale = height / PREVIEW_HEIGHT
+    font_size = max(18, round(34 * scale))
+    outline = max(1, round(3 * scale))
+    shadow = max(1, round(scale))
+    horizontal_margin = max(24, round(38 * width / PREVIEW_WIDTH))
+    vertical_margin = max(32, round(86 * scale))
     header = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {width}
@@ -153,7 +156,7 @@ def _clip_video_filter(
 ) -> str:
     chain = (
         f"[{index}:v:0]scale={width}:{height}:force_original_aspect_ratio=increase,"
-        f"crop={width}:{height},setsar=1"
+        f"crop={width}:{height},setsar=1,setpts=PTS-STARTPTS"
     )
     total_frames = max(1, round(duration * frames_per_second) - 1)
     if visual_preset == "punch_in":
@@ -178,6 +181,10 @@ def _clip_video_filter(
         chain += f",fade=t=in:st=0:d={transition_seconds:.3f}"
     if fade_out:
         chain += f",fade=t=out:st={duration - transition_seconds:.3f}:d={transition_seconds:.3f}"
+    chain += (
+        f",tpad=stop_mode=clone:stop_duration={duration:.3f},"
+        f"trim=duration={duration:.3f},setpts=PTS-STARTPTS,format=yuv420p"
+    )
     return chain + f"[v{index}]"
 
 
@@ -208,7 +215,12 @@ def _ffmpeg_filter(
                 frames_per_second=frames_per_second,
             )
         )
-        audio = f"[{index}:a:0]aresample=48000,asetpts=PTS-STARTPTS"
+        audio = (
+            f"[{index}:a:0]aresample=48000,atrim=0:{duration:.3f},"
+            f"apad=pad_dur={duration:.3f},atrim=0:{duration:.3f},"
+            "aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo,"
+            "asetpts=PTS-STARTPTS"
+        )
         transition_seconds = min(0.18, duration / 4)
         if fade_in:
             audio += f",afade=t=in:st=0:d={transition_seconds:.3f}"
@@ -230,9 +242,14 @@ def _ffmpeg_filter(
         total_duration = sum(float(clip.source_out - clip.source_in) for clip in plan.clips)
         fade_out_start = max(0.0, total_duration - 1.5)
         volume = "-30dB" if plan.music_mix == "subtle" else "-24dB"
-        filters.append("[acat]loudnorm=I=-16:LRA=11:TP=-1.5,asplit=2[voice][key]")
+        filters.append(
+            "[acat]loudnorm=I=-16:LRA=11:TP=-1.5,aresample=48000,"
+            "aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo,"
+            "asplit=2[voice][key]"
+        )
         filters.append(
             f"[{music_input_index}:a:0]aresample=48000,atrim=0:{total_duration:.3f},"
+            "aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo,"
             f"asetpts=PTS-STARTPTS,afade=t=in:st=0:d=1.000,"
             f"afade=t=out:st={fade_out_start:.3f}:d=1.500,volume={volume}[music]"
         )
@@ -243,6 +260,31 @@ def _ffmpeg_filter(
             "[voice][ducked]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]"
         )
     return ";".join(filters)
+
+
+def _ffmpeg_failure_detail(stderr: str) -> str:
+    """Return the useful tail of FFmpeg stderr without flooding the job screen."""
+
+    lines = [line.strip() for line in stderr.splitlines() if line.strip()]
+    boilerplate = {
+        "Conversion failed!",
+        "Error while filtering: Invalid argument",
+    }
+    useful = [line for line in lines if line not in boilerplate]
+    diagnostic_markers = (
+        "Parsed_",
+        "auto_",
+        "Input link",
+        "Failed to configure",
+        "Error reinitializing filters",
+        "Failed to inject frame",
+        "Error while processing",
+    )
+    diagnostics = [
+        line for line in useful if any(marker in line for marker in diagnostic_markers)
+    ]
+    selected = (diagnostics or useful or lines)[-6:]
+    return " | ".join(selected)[:700] or "FFmpeg returned no diagnostic detail"
 
 
 def _render_video(
@@ -311,6 +353,7 @@ def _render_video(
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = destination.with_name(f".{destination.stem}.part{destination.suffix}")
     temporary.unlink(missing_ok=True)
+    failures: list[str] = []
     try:
         for encoder, arguments in encoders:
             temporary.unlink(missing_ok=True)
@@ -334,9 +377,10 @@ def _render_video(
                 temporary.chmod(READ_ONLY_MODE)
                 os.replace(temporary, destination)
                 return encoder
+            failures.append(f"{encoder}: {_ffmpeg_failure_detail(completed.stderr)}")
             if encoder == "h264_nvenc":
                 print("NVENC preview render unavailable; using libx264 fallback", flush=True)
-        raise RuntimeError("video render failed with both NVENC and libx264")
+        raise RuntimeError("video render failed: " + "; ".join(failures))
     finally:
         temporary.unlink(missing_ok=True)
 
@@ -378,7 +422,7 @@ def render_edit_preview(
     inventory = {str(asset["asset_id"]): asset for asset in context["assets"]}
     sources = [
         (
-            resolve_internal_asset_source(settings, inventory[str(clip.asset_id)]),
+            resolve_internal_asset_render_source(settings, inventory[str(clip.asset_id)]),
             float(clip.source_in),
             float(clip.source_out),
         )
@@ -436,6 +480,11 @@ def render_edit_preview(
                 "source_out": clip.source_out,
                 "transition": clip.transition,
                 "visual_preset": clip.visual_preset,
+                "render_basis": (
+                    "normalized_video_proxy"
+                    if inventory[str(clip.asset_id)].get("_proxy_key")
+                    else "original"
+                ),
             }
             for clip in plan.clips
         ],
@@ -518,7 +567,7 @@ def render_final_delivery(
     inventory = {str(asset["asset_id"]): asset for asset in context["assets"]}
     sources = [
         (
-            resolve_internal_asset_source(settings, inventory[str(clip.asset_id)]),
+            resolve_internal_asset_render_source(settings, inventory[str(clip.asset_id)]),
             float(clip.source_in),
             float(clip.source_out),
         )

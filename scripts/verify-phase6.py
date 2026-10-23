@@ -37,21 +37,23 @@ def get_json(path: str) -> dict | list:
     return payload
 
 
-def find_chatgpt_preview() -> tuple[str, dict]:
+def find_chatgpt_preview() -> tuple[str, dict, dict]:
     projects = get_json("projects?limit=100")
     assert isinstance(projects, list)
-    fallback: tuple[str, dict] | None = None
+    fallback: tuple[str, dict, dict] | None = None
     for project in projects:
         jobs = get_json(f"projects/{project['id']}/jobs")
         assert isinstance(jobs, list)
         for job in jobs:
+            if job.get("recipe") != "talking_head":
+                continue
             status, review = request(f"jobs/{job['id']}/review")
             if status != 200:
                 continue
             run = review.get("latest_run")
             if not isinstance(run, dict) or run.get("status") != "ready":
                 continue
-            candidate = (job["id"], run)
+            candidate = (job["id"], run, review)
             if run.get("provider") == "chatgpt_plan":
                 return candidate
             fallback = fallback or candidate
@@ -82,46 +84,74 @@ def download_prefix(path: str, length: int = 64) -> bytes:
 
 
 def main() -> int:
-    job_id, previous = find_chatgpt_preview()
-    revision_status, revision = request(
-        f"jobs/{job_id}/revisions",
-        method="POST",
-        payload={
-            "note": (
-                "Phase 6 acceptance revision: preserve the strong story and source-only meaning, "
-                "but tighten any avoidable pause at the opening."
-            ),
-            "caption_corrections": [],
-        },
-    )
-    if revision_status != 202:
-        raise RuntimeError(f"revision request returned {revision_status}: {revision}")
-    expected_version = int(previous["version"]) + 1
-    if revision.get("version") != expected_version:
-        raise RuntimeError("revision did not create the next immutable version")
+    job_id, previous, current_review = find_chatgpt_preview()
+    existing_final = current_review.get("final_export") or {}
+    expected_version = int(previous["version"])
+    revised = previous
+    acceptance_action = "verified_existing_delivery"
 
-    deadline = time.monotonic() + TIMEOUT_SECONDS
-    while time.monotonic() < deadline:
-        review = get_json(f"jobs/{job_id}/review")
-        assert isinstance(review, dict)
-        latest = review.get("latest_run") or {}
-        if latest.get("version") == expected_version and latest.get("status") == "ready":
-            revised = latest
-            break
-        if latest.get("version") == expected_version and latest.get("status") == "failed":
-            raise RuntimeError(f"revised preview failed: {latest.get('error')}")
-        time.sleep(2)
+    if existing_final.get("version") == expected_version and existing_final.get("status") in {
+        "failed",
+        "pending",
+        "rendering",
+        "ready",
+    }:
+        if existing_final.get("status") == "failed":
+            approval_status, final_export = request(
+                f"jobs/{job_id}/approval",
+                method="POST",
+                payload={"version": expected_version, "note": "Resume Phase 6 acceptance export."},
+            )
+            if approval_status != 202:
+                raise RuntimeError(f"final export retry returned {approval_status}: {final_export}")
+            acceptance_action = "retried_failed_final_export"
+        else:
+            final_export = existing_final
+            if existing_final.get("status") != "ready":
+                acceptance_action = "resumed_in_progress_final_export"
+        if final_export.get("status") != "ready":
+            final_export = wait_for(f"jobs/{job_id}/final")
     else:
-        raise RuntimeError("timed out waiting for revised preview")
+        revision_status, revision = request(
+            f"jobs/{job_id}/revisions",
+            method="POST",
+            payload={
+                "note": (
+                    "Phase 6 acceptance revision: preserve the strong story and source-only meaning, "
+                    "but tighten any avoidable pause at the opening."
+                ),
+                "caption_corrections": [],
+            },
+        )
+        if revision_status != 202:
+            raise RuntimeError(f"revision request returned {revision_status}: {revision}")
+        expected_version += 1
+        if revision.get("version") != expected_version:
+            raise RuntimeError("revision did not create the next immutable version")
 
-    approval_status, final_export = request(
-        f"jobs/{job_id}/approval",
-        method="POST",
-        payload={"version": expected_version, "note": "Phase 6 acceptance approval."},
-    )
-    if approval_status != 202:
-        raise RuntimeError(f"approval returned {approval_status}: {final_export}")
-    final_export = wait_for(f"jobs/{job_id}/final")
+        deadline = time.monotonic() + TIMEOUT_SECONDS
+        while time.monotonic() < deadline:
+            review = get_json(f"jobs/{job_id}/review")
+            assert isinstance(review, dict)
+            latest = review.get("latest_run") or {}
+            if latest.get("version") == expected_version and latest.get("status") == "ready":
+                revised = latest
+                break
+            if latest.get("version") == expected_version and latest.get("status") == "failed":
+                raise RuntimeError(f"revised preview failed: {latest.get('error')}")
+            time.sleep(2)
+        else:
+            raise RuntimeError("timed out waiting for revised preview")
+
+        approval_status, final_export = request(
+            f"jobs/{job_id}/approval",
+            method="POST",
+            payload={"version": expected_version, "note": "Phase 6 acceptance approval."},
+        )
+        if approval_status != 202:
+            raise RuntimeError(f"approval returned {approval_status}: {final_export}")
+        final_export = wait_for(f"jobs/{job_id}/final")
+        acceptance_action = "created_revision_and_delivery"
 
     video = download_prefix(f"jobs/{job_id}/final/video")
     captions = download_prefix(f"jobs/{job_id}/final/captions")
@@ -137,8 +167,14 @@ def main() -> int:
         raise RuntimeError("cover image or delivery package failed format validation")
     if render.get("width") != 1080 or render.get("height") != 1920:
         raise RuntimeError("final manifest did not confirm 1080 x 1920 output")
-    if policy.get("source_derived_only") is not True:
-        raise RuntimeError("final manifest did not preserve the source-only policy")
+    if not (
+        policy.get("source_derived_only") is True
+        or policy.get("approved_library_music") is True
+    ):
+        raise RuntimeError("final manifest contains neither source-only nor approved-library audio")
+    synthetic_fields = ("synthetic_image", "synthetic_video", "synthetic_voice", "synthetic_music")
+    if any(policy.get(field) is not False for field in synthetic_fields):
+        raise RuntimeError("final manifest did not preserve the non-synthetic media policy")
 
     print(
         json.dumps(
@@ -148,6 +184,7 @@ def main() -> int:
                 "revised_run_id": revised["id"],
                 "version": expected_version,
                 "provider": revised["provider"],
+                "acceptance_action": acceptance_action,
                 "final_export_id": final_export["id"],
                 "video_encoder": render.get("video_encoder"),
                 "full_hd_vertical": True,

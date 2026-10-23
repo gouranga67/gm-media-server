@@ -53,6 +53,7 @@ class ProbeNormalizationTests(unittest.TestCase):
                     "codec_name": "h264",
                     "width": 1080,
                     "height": 1920,
+                    "duration": "12.467",
                     "r_frame_rate": "30000/1001",
                     "side_data_list": [{"rotation": -90}],
                     "tags": {"title": "private"},
@@ -64,6 +65,7 @@ class ProbeNormalizationTests(unittest.TestCase):
                     "sample_rate": "48000",
                     "channels": 2,
                     "channel_layout": "stereo",
+                    "duration": "12.500",
                 },
             ],
         }
@@ -73,6 +75,8 @@ class ProbeNormalizationTests(unittest.TestCase):
         self.assertEqual(result["format"]["duration_seconds"], 12.5)
         self.assertEqual(result["streams"][0]["frames_per_second"], 29.97)
         self.assertEqual(result["streams"][0]["rotation_degrees"], -90)
+        self.assertEqual(result["streams"][0]["duration_seconds"], 12.467)
+        self.assertEqual(result["streams"][1]["duration_seconds"], 12.5)
         self.assertNotIn("tags", json.dumps(result))
         self.assertNotIn("private", json.dumps(result))
 

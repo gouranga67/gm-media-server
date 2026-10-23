@@ -20,6 +20,8 @@ import {
   requestRevision,
   type EditRun,
   type FinalExport,
+  type OutputAspect,
+  type Recipe,
 } from "@/lib/media-api";
 
 function message(error: unknown) {
@@ -49,11 +51,15 @@ export function JobReviewControls({
   jobId,
   run,
   finalExport,
+  outputAspect,
+  recipe,
   onUpdated,
 }: {
   readonly jobId: string;
   readonly run: EditRun;
   readonly finalExport: FinalExport | null;
+  readonly outputAspect: OutputAspect;
+  readonly recipe: Recipe;
   readonly onUpdated: () => void;
 }) {
   const [note, setNote] = useState("");
@@ -109,17 +115,24 @@ export function JobReviewControls({
     }
   };
 
-  if (finalExport?.status === "ready" && finalExport.files_available) {
+  // A job can have an older delivered version and a newer preview awaiting
+  // approval. Only let a final export replace the review controls when it
+  // belongs to the preview version currently on screen.
+  const currentFinal = finalExport?.version === run.version ? finalExport : null;
+
+  if (currentFinal?.status === "ready" && currentFinal.files_available) {
     const root = `/api/media/jobs/${encodeURIComponent(jobId)}/final`;
+    const dimensions = outputAspect === "landscape" ? "1920 × 1080" : "1080 × 1920";
+    const deliverable = recipe === "montage" ? "montage" : "reel";
     return (
       <section className="space-y-4 rounded-md border border-[#BFE3FF] bg-white p-5">
         <div>
           <p className="flex items-center gap-2 font-mono text-xs font-bold tracking-wide text-[#3A8F63] uppercase">
             <CheckIcon aria-hidden="true" className="size-4" /> Final delivery ready
           </p>
-          <h2 className="mt-2 text-xl font-bold text-[#173F5F]">Download the finished reel</h2>
+          <h2 className="mt-2 text-xl font-bold text-[#173F5F]">Download the finished {deliverable}</h2>
           <p className="mt-2 text-sm leading-relaxed text-[#666862]">
-            Version {finalExport.version} · 1080 × 1920 · non-synthetic media only
+            Version {currentFinal.version} · {dimensions} · non-synthetic media only
           </p>
         </div>
         <Button asChild className="h-14 w-full bg-[#173F5F] text-white hover:bg-[#12344F]">
@@ -132,7 +145,7 @@ export function JobReviewControls({
           <DownloadButton href={`${root}/captions`} icon={<FileTextIcon aria-hidden="true" />} label="Captions" />
           <DownloadButton href={`${root}/cover`} icon={<ImageIcon aria-hidden="true" />} label="Cover image" />
           <DownloadButton href={`${root}/manifest`} icon={<FileTextIcon aria-hidden="true" />} label="Provenance" />
-          {finalExport.post_copy_available ? (
+          {currentFinal.post_copy_available ? (
             <DownloadButton href={`${root}/post-copy`} icon={<FileTextIcon aria-hidden="true" />} label="Post copy" />
           ) : null}
         </div>
@@ -140,7 +153,7 @@ export function JobReviewControls({
     );
   }
 
-  if (finalExport?.status === "pending" || finalExport?.status === "rendering") {
+  if (currentFinal?.status === "pending" || currentFinal?.status === "rendering") {
     return (
       <section className="flex min-h-48 flex-col items-center justify-center rounded-md border border-[#D7D9D3] bg-white p-6 text-center">
         <LoaderCircleIcon aria-hidden="true" className="size-8 animate-spin text-[#173F5F] motion-reduce:animate-none" />
@@ -154,10 +167,10 @@ export function JobReviewControls({
 
   return (
     <div className="space-y-5">
-      {finalExport?.status === "failed" ? (
+      {currentFinal?.status === "failed" ? (
         <section className="rounded-md border border-[#E7C4BC] bg-white p-5">
           <p className="font-mono text-xs font-bold text-[#A23B2A] uppercase">Final export needs attention</p>
-          <p className="mt-2 text-sm text-[#666862]">{finalExport.error}</p>
+          <p className="mt-2 text-sm text-[#666862]">{currentFinal.error}</p>
           <Button className="mt-4 h-12 w-full" disabled={submitting !== undefined} onClick={() => void approve()} variant="outline">
             <RefreshCwIcon aria-hidden="true" /> Retry final export
           </Button>
@@ -192,13 +205,15 @@ export function JobReviewControls({
           placeholder="For example: shorten the opening and reach the strongest point sooner."
           value={note}
         />
-        <fieldset className="mt-5 border-t border-[#D7D9D3] pt-5">
-          <legend className="pr-2 text-sm font-bold text-[#20211F]">Optional caption correction</legend>
-          <label className="mt-2 block text-xs text-[#666862]" htmlFor="caption-original">Current transcript text</label>
-          <Input id="caption-original" maxLength={300} onChange={(event) => setOriginalText(event.target.value)} placeholder="Incorrect name or phrase" value={originalText} />
-          <label className="mt-3 block text-xs text-[#666862]" htmlFor="caption-replacement">Replace with</label>
-          <Input id="caption-replacement" maxLength={300} onChange={(event) => setReplacementText(event.target.value)} placeholder="Correct text" value={replacementText} />
-        </fieldset>
+        {recipe === "talking_head" ? (
+          <fieldset className="mt-5 border-t border-[#D7D9D3] pt-5">
+            <legend className="pr-2 text-sm font-bold text-[#20211F]">Optional caption correction</legend>
+            <label className="mt-2 block text-xs text-[#666862]" htmlFor="caption-original">Current transcript text</label>
+            <Input id="caption-original" maxLength={300} onChange={(event) => setOriginalText(event.target.value)} placeholder="Incorrect name or phrase" value={originalText} />
+            <label className="mt-3 block text-xs text-[#666862]" htmlFor="caption-replacement">Replace with</label>
+            <Input id="caption-replacement" maxLength={300} onChange={(event) => setReplacementText(event.target.value)} placeholder="Correct text" value={replacementText} />
+          </fieldset>
+        ) : null}
         {error ? <p className="mt-4 text-xs text-[#A23B2A]" role="alert">{error}</p> : null}
         <Button className="mt-5 h-12 w-full" disabled={submitting !== undefined} type="submit" variant="outline">
           {submitting === "revision" ? <LoaderCircleIcon aria-hidden="true" className="animate-spin" /> : <SendIcon aria-hidden="true" />}

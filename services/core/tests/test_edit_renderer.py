@@ -8,6 +8,7 @@ from app.edit_plan import TalkingHeadEditPlan
 from app.edit_renderer import (
     _clip_video_filter,
     _create_delivery_package,
+    _ffmpeg_failure_detail,
     _ffmpeg_filter,
     caption_events,
     render_ass,
@@ -15,6 +16,20 @@ from app.edit_renderer import (
 
 
 class CaptionMappingTests(unittest.TestCase):
+    def test_ffmpeg_failure_detail_keeps_actionable_tail(self) -> None:
+        detail = _ffmpeg_failure_detail(
+            "configuration header\n"
+            "[Parsed_sidechaincompress_0] Invalid argument\n"
+            "Input link in0 parameters (size 1920x1080) do not match\n"
+            "Error while filtering: Invalid argument\n"
+            "Conversion failed!\n"
+        )
+
+        self.assertIn("sidechaincompress", detail)
+        self.assertIn("Input link", detail)
+        self.assertNotIn("configuration header", detail)
+        self.assertNotIn("Conversion failed", detail)
+
     def test_maps_source_captions_to_concatenated_timeline(self) -> None:
         first = uuid4()
         second = uuid4()
@@ -110,6 +125,17 @@ class CaptionMappingTests(unittest.TestCase):
         self.assertIn("PlayResY: 1920", ass)
         self.assertIn("GMBlue,Arial,68", ass)
 
+    def test_scales_ass_layout_for_landscape_preview(self) -> None:
+        ass = render_ass(
+            [{"start": 0, "end": 1, "text": "Landscape"}],
+            width=960,
+            height=540,
+        )
+
+        self.assertIn("PlayResX: 960", ass)
+        self.assertIn("PlayResY: 540", ass)
+        self.assertIn("GMBlue,Arial,19", ass)
+
     def test_builds_bounded_push_in_filter(self) -> None:
         result = _clip_video_filter(
             index=0,
@@ -124,6 +150,8 @@ class CaptionMappingTests(unittest.TestCase):
 
         self.assertIn("zoompan", result)
         self.assertIn("min(1+0.12*on/119,1.12)", result)
+        self.assertIn("format=yuv420p", result)
+        self.assertIn("trim=duration=4.000", result)
 
     def test_music_filter_ducks_approved_track_under_voice(self) -> None:
         asset_id = uuid4()
@@ -162,6 +190,8 @@ class CaptionMappingTests(unittest.TestCase):
 
         self.assertIn("sidechaincompress", result)
         self.assertIn("volume=-30dB", result)
+        self.assertGreaterEqual(result.count("channel_layouts=stereo"), 3)
+        self.assertIn("apad=pad_dur=4.000", result)
 
     def test_delivery_package_contains_only_named_outputs(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

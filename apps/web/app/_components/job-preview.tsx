@@ -24,6 +24,10 @@ function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "Preview status is unavailable";
 }
 
+function formatTokens(value: number) {
+  return new Intl.NumberFormat().format(value);
+}
+
 export function JobPreview({ jobId }: { readonly jobId: string }) {
   const [review, setReview] = useState<JobReview>();
   const [error, setError] = useState<string>();
@@ -91,6 +95,8 @@ export function JobPreview({ jobId }: { readonly jobId: string }) {
   const downloadUrl = `${fileRoot}?download=true${run ? `&version=${run.version}` : ""}`;
   const status = run?.status ?? "pending";
   const usesChatGptPlan = run?.provider === "chatgpt_plan";
+  const isMontage = review?.job.recipe === "montage";
+  const isLandscape = review?.job.output_aspect === "landscape";
   const failureMessage = run?.error ?? error ?? "";
   const hasPlanUsageIssue = /subscription_sharing_usage_|chatgpt plan usage is unavailable/i.test(failureMessage);
 
@@ -132,10 +138,12 @@ export function JobPreview({ jobId }: { readonly jobId: string }) {
                 <p className="flex items-center gap-2 font-mono text-xs font-bold tracking-wide text-[#3A8F63] uppercase">
                   <CheckIcon aria-hidden="true" className="size-4" /> Preview ready
                 </p>
-                <h1 className="mt-2 text-2xl font-bold tracking-tight text-[#173F5F]">Your reel is ready to review</h1>
+                <h1 className="mt-2 text-2xl font-bold tracking-tight text-[#173F5F]">
+                  Your {isMontage ? "montage" : "reel"} is ready to review
+                </h1>
               </div>
               <video
-                className="aspect-[9/16] w-full rounded-md bg-black object-contain"
+                className={`${isLandscape ? "aspect-video" : "aspect-[9/16]"} w-full rounded-md bg-black object-contain`}
                 controls
                 playsInline
                 preload="metadata"
@@ -156,8 +164,33 @@ export function JobPreview({ jobId }: { readonly jobId: string }) {
                   finalExport={currentFinalExport}
                   jobId={jobId}
                   onUpdated={() => setPollGeneration((current) => current + 1)}
+                  outputAspect={review?.job.output_aspect ?? "vertical"}
+                  recipe={review?.job.recipe ?? "talking_head"}
                   run={run}
                 />
+              ) : null}
+              {review ? (
+                <section className="rounded-md border border-[#D7D9D3] bg-white p-5">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="font-mono text-xs font-bold tracking-wide text-[#173F5F] uppercase">AI used for this job</p>
+                      <p className="mt-2 text-sm text-[#666862]">
+                        {review.usage.requests > 0
+                          ? `${run?.model ?? "Editor model"} · ${run?.reasoning_effort ?? "default"} effort`
+                          : "No hosted model tokens recorded"}
+                      </p>
+                    </div>
+                    <p className="shrink-0 text-xl font-bold text-[#173F5F]">{formatTokens(review.usage.total_tokens)}</p>
+                  </div>
+                  {review.usage.requests > 0 ? (
+                    <p className="mt-3 font-mono text-[10px] leading-relaxed text-[#666862]">
+                      {formatTokens(review.usage.input_tokens)} input · {formatTokens(review.usage.output_tokens)} output · {formatTokens(review.usage.reasoning_tokens)} reasoning
+                    </p>
+                  ) : null}
+                  <Link className="mt-4 inline-block text-sm font-bold text-[#173F5F] underline underline-offset-4" href="/usage">
+                    View 30-day usage
+                  </Link>
+                </section>
               ) : null}
             </div>
           ) : status === "failed" ? (
@@ -232,6 +265,10 @@ export function JobPreview({ jobId }: { readonly jobId: string }) {
         <footer className="text-center">
           <Link className="text-sm font-bold text-[#173F5F] underline underline-offset-4" href="/jobs/new">
             Start another job
+          </Link>
+          <span aria-hidden="true" className="mx-2 text-[#9A9C96]">·</span>
+          <Link className="text-sm font-bold text-[#173F5F] underline underline-offset-4" href="/usage">
+            AI usage
           </Link>
         </footer>
       </div>

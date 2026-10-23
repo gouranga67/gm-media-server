@@ -1,7 +1,10 @@
 export type PrivacyMode = "hybrid" | "text_only" | "local_only";
 export type EditStyle = "clean" | "energetic" | "calm";
 export type MusicMode = "none" | "subtle" | "present";
-export type TargetDuration = 20 | 30 | 45 | 60;
+export type TargetDuration = 15 | 20 | 30 | 45 | 60;
+export type Recipe = "talking_head" | "montage";
+export type ReasoningEffort = "low" | "medium" | "high";
+export type OutputAspect = "vertical" | "landscape";
 export type TargetPlatform = "all_social" | "facebook" | "instagram" | "linkedin" | "tiktok" | "youtube";
 
 export type Project = {
@@ -17,7 +20,7 @@ export type Project = {
 export type MediaJob = {
   readonly id: string;
   readonly project_id: string;
-  readonly recipe: "talking_head";
+  readonly recipe: Recipe;
   readonly status: string;
   readonly revision: number;
   readonly target_duration_seconds: TargetDuration | null;
@@ -25,6 +28,9 @@ export type MediaJob = {
   readonly music_mode: MusicMode | null;
   readonly target_platform: TargetPlatform | null;
   readonly must_include: string;
+  readonly editor_model: string | null;
+  readonly reasoning_effort: ReasoningEffort;
+  readonly output_aspect: OutputAspect;
   readonly created_at: string;
   readonly updated_at: string;
 };
@@ -51,6 +57,7 @@ export type MusicTrack = {
   readonly mood: string;
   readonly energy: "low" | "medium" | "high";
   readonly bpm: number | null;
+  readonly beat_grid_seconds: readonly number[];
   readonly license_name: string;
   readonly license_source_url: string;
   readonly allowed_platforms: readonly TargetPlatform[];
@@ -66,6 +73,7 @@ export type EditRun = {
   readonly attempts: number;
   readonly provider: string | null;
   readonly model: string | null;
+  readonly reasoning_effort: ReasoningEffort | null;
   readonly based_on_run_id: string | null;
   readonly revision_note: string | null;
   readonly caption_corrections: readonly CaptionCorrection[];
@@ -114,6 +122,67 @@ export type JobReview = {
   readonly latest_run: EditRun | null;
   readonly final_export: FinalExport | null;
   readonly events: readonly JobEvent[];
+  readonly usage: JobUsage;
+};
+
+export type EditorModel = {
+  readonly slug: string;
+  readonly display_name: string;
+  readonly provider: string;
+  readonly available: boolean;
+  readonly refreshed_at: string;
+};
+
+export type AiUsageEvent = {
+  readonly id: string;
+  readonly job_id: string;
+  readonly edit_run_id: string;
+  readonly provider: string;
+  readonly model: string;
+  readonly reasoning_effort: ReasoningEffort | null;
+  readonly request_kind: string;
+  readonly input_tokens: number;
+  readonly cached_input_tokens: number;
+  readonly output_tokens: number;
+  readonly reasoning_tokens: number;
+  readonly total_tokens: number;
+  readonly latency_ms: number;
+  readonly created_at: string;
+};
+
+export type JobUsage = {
+  readonly requests: number;
+  readonly input_tokens: number;
+  readonly cached_input_tokens: number;
+  readonly output_tokens: number;
+  readonly reasoning_tokens: number;
+  readonly total_tokens: number;
+  readonly latency_ms: number;
+  readonly events: readonly AiUsageEvent[];
+};
+
+export type UsageDashboard = {
+  readonly days: number;
+  readonly requests: number;
+  readonly jobs: number;
+  readonly input_tokens: number;
+  readonly cached_input_tokens: number;
+  readonly output_tokens: number;
+  readonly reasoning_tokens: number;
+  readonly total_tokens: number;
+  readonly by_model: readonly { readonly model: string; readonly requests: number; readonly total_tokens: number }[];
+  readonly job_history: readonly UsageJobSummary[];
+};
+
+export type UsageJobSummary = {
+  readonly id: string;
+  readonly project_name: string;
+  readonly recipe: Recipe;
+  readonly status: string;
+  readonly created_at: string;
+  readonly model: string | null;
+  readonly requests: number;
+  readonly total_tokens: number;
 };
 
 async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
@@ -152,27 +221,34 @@ export function createProject(input: {
   });
 }
 
-export function createTalkingHeadJob(
+export function createMediaJob(
   projectId: string,
   input: {
     readonly id?: string;
+    readonly recipe: Recipe;
     readonly targetDurationSeconds: TargetDuration;
     readonly editStyle: EditStyle;
     readonly musicMode: MusicMode;
     readonly targetPlatform: TargetPlatform;
     readonly mustInclude: string;
+    readonly editorModel: string | null;
+    readonly reasoningEffort: ReasoningEffort;
+    readonly outputAspect: OutputAspect;
   },
 ) {
   return apiRequest<MediaJob>(`projects/${projectId}/jobs`, {
     method: "POST",
     body: JSON.stringify({
       id: input.id,
-      recipe: "talking_head",
+      recipe: input.recipe,
       target_duration_seconds: input.targetDurationSeconds,
       edit_style: input.editStyle,
       music_mode: input.musicMode,
       target_platform: input.targetPlatform,
       must_include: input.mustInclude,
+      editor_model: input.editorModel,
+      reasoning_effort: input.reasoningEffort,
+      output_aspect: input.outputAspect,
     }),
   });
 }
@@ -227,6 +303,14 @@ export function getAsset(assetId: string) {
 
 export function getMusicTracks() {
   return apiRequest<readonly MusicTrack[]>("music-tracks", { cache: "no-store" });
+}
+
+export function getEditorModels() {
+  return apiRequest<readonly EditorModel[]>("editor/models", { cache: "no-store" });
+}
+
+export function getUsageDashboard(days = 0) {
+  return apiRequest<UsageDashboard>(`usage?days=${days}`, { cache: "no-store" });
 }
 
 export function requestPreview(jobId: string) {

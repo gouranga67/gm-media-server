@@ -14,6 +14,7 @@ class PrivacyMode(StrEnum):
 
 class Recipe(StrEnum):
     TALKING_HEAD = "talking_head"
+    MONTAGE = "montage"
 
 
 class EditStyle(StrEnum):
@@ -35,6 +36,17 @@ class TargetPlatform(StrEnum):
     LINKEDIN = "linkedin"
     TIKTOK = "tiktok"
     YOUTUBE = "youtube"
+
+
+class ReasoningEffort(StrEnum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+
+
+class OutputAspect(StrEnum):
+    VERTICAL = "vertical"
+    LANDSCAPE = "landscape"
 
 
 class ProjectCreate(BaseModel):
@@ -60,16 +72,30 @@ class ProjectResponse(BaseModel):
 class JobCreate(BaseModel):
     id: UUID | None = None
     recipe: Recipe = Recipe.TALKING_HEAD
-    target_duration_seconds: Literal[20, 30, 45, 60] = 45
+    target_duration_seconds: Literal[15, 20, 30, 45, 60] = 45
     edit_style: EditStyle = EditStyle.ENERGETIC
     music_mode: MusicMode = MusicMode.NONE
     target_platform: TargetPlatform = TargetPlatform.ALL_SOCIAL
     must_include: str = Field(default="", max_length=2000)
+    editor_model: str | None = Field(default=None, min_length=1, max_length=160)
+    reasoning_effort: ReasoningEffort = ReasoningEffort.MEDIUM
+    output_aspect: OutputAspect = OutputAspect.VERTICAL
 
     @field_validator("must_include")
     @classmethod
     def normalize_must_include(cls, value: str) -> str:
         return " ".join(value.split())
+
+    @field_validator("editor_model")
+    @classmethod
+    def normalize_editor_model(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        allowed = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_."
+        if not normalized or any(character not in allowed for character in normalized):
+            raise ValueError("editor model contains unsupported characters")
+        return normalized
 
 
 class JobResponse(BaseModel):
@@ -85,6 +111,9 @@ class JobResponse(BaseModel):
     music_mode: MusicMode | None = None
     target_platform: TargetPlatform | None = None
     must_include: str = ""
+    editor_model: str | None = None
+    reasoning_effort: ReasoningEffort = ReasoningEffort.MEDIUM
+    output_aspect: OutputAspect = OutputAspect.VERTICAL
     created_at: datetime
     updated_at: datetime
 
@@ -147,6 +176,7 @@ class MusicTrackResponse(BaseModel):
     mood: str
     energy: str
     bpm: float | None = None
+    beat_grid_seconds: list[float] = Field(default_factory=list)
     license_name: str
     license_source_url: str
     allowed_platforms: list[str] = Field(default_factory=list)
@@ -164,6 +194,7 @@ class EditRunResponse(BaseModel):
     attempts: int
     provider: str | None = None
     model: str | None = None
+    reasoning_effort: ReasoningEffort | None = None
     based_on_run_id: UUID | None = None
     revision_note: str | None = None
     caption_corrections: list[dict[str, str]] = Field(default_factory=list)
@@ -254,9 +285,80 @@ class JobEventResponse(BaseModel):
     created_at: datetime
 
 
+class EditorModelResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    slug: str
+    display_name: str
+    provider: str
+    available: bool
+    refreshed_at: datetime
+
+
+class AiUsageEventResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    job_id: UUID
+    edit_run_id: UUID
+    provider: str
+    model: str
+    reasoning_effort: ReasoningEffort | None = None
+    request_kind: str
+    input_tokens: int
+    cached_input_tokens: int
+    output_tokens: int
+    reasoning_tokens: int
+    total_tokens: int
+    latency_ms: int
+    created_at: datetime
+
+
+class JobUsageSummary(BaseModel):
+    requests: int = 0
+    input_tokens: int = 0
+    cached_input_tokens: int = 0
+    output_tokens: int = 0
+    reasoning_tokens: int = 0
+    total_tokens: int = 0
+    latency_ms: int = 0
+    events: list[AiUsageEventResponse] = Field(default_factory=list)
+
+
+class UsageModelSummary(BaseModel):
+    model: str
+    requests: int
+    total_tokens: int
+
+
+class UsageJobSummary(BaseModel):
+    id: UUID
+    project_name: str
+    recipe: Recipe
+    status: str
+    created_at: datetime
+    model: str | None = None
+    requests: int = 0
+    total_tokens: int = 0
+
+
+class UsageDashboardResponse(BaseModel):
+    days: int
+    requests: int
+    jobs: int
+    input_tokens: int
+    cached_input_tokens: int
+    output_tokens: int
+    reasoning_tokens: int
+    total_tokens: int
+    by_model: list[UsageModelSummary]
+    job_history: list[UsageJobSummary]
+
+
 class JobReviewResponse(BaseModel):
     job: JobResponse
     versions: list[EditRunResponse]
     latest_run: EditRunResponse | None = None
     final_export: FinalExportResponse | None = None
     events: list[JobEventResponse]
+    usage: JobUsageSummary = Field(default_factory=JobUsageSummary)

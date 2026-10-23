@@ -5,17 +5,20 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
+from pydantic import ValidationError
 from psycopg.types.json import Jsonb
 from redis import Redis
 
 from app.config import get_settings
 from app.database import connection
-from app.edit_plan import TalkingHeadEditPlan, document_sha256, validate_edit_plan
+from app.edit_plan import EditPlan, MontageEditPlan, document_sha256, validate_edit_plan
 from app.edit_renderer import render_edit_preview, render_final_delivery
 from app.editor_context import build_editor_context
-from app.editor_provider import create_edit_plan
+from app.editor_provider import create_edit_plan, list_chatgpt_models
 from app.finalize_upload import finalize_original, upload_source_path
-from app.media_analysis import analyze_asset
+from app.media_analysis import analyze_asset, resolve_source
+from app.montage_renderer import render_montage_delivery, render_montage_preview
+from app.music_analysis import analyze_music_beats
 
 
 @dataclass
@@ -250,8 +253,11 @@ def claim_pending_edit() -> dict[str, Any] | None:
 
 
 def _persist_generated_plan(
-    run: dict[str, Any], plan: TalkingHeadEditPlan, provider: str, model: str
+    run: dict[str, Any], plan: EditPlan, provenance: dict[str, Any]
 ) -> str:
+    provider = str(provenance["provider"])
+    model = str(provenance["model"])
+    reasoning_effort = provenance.get("reasoning_effort")
     document = plan.model_dump(mode="json")
     with connection() as database:
         plan_row = database.execute(
@@ -275,16 +281,50 @@ def _persist_generated_plan(
             """
             UPDATE edit_runs
             SET status = 'rendering', edit_plan_id = %s, provider = %s, model = %s,
+                reasoning_effort = %s,
                 updated_at = now()
             WHERE id = %s
             """,
-            (plan_row["id"], provider, model, run["id"]),
+            (plan_row["id"], provider, model, reasoning_effort, run["id"]),
         )
         database.execute(
             "UPDATE jobs SET status = 'previewing', updated_at = now() WHERE id = %s",
             (run["job_id"],),
         )
     return str(plan_row["id"])
+
+
+def _record_plan_usage(
+    run: dict[str, Any], provenance: dict[str, Any], request_kind: str
+) -> None:
+    usage = provenance.get("usage")
+    if not isinstance(usage, dict) or not usage:
+        return
+    with connection() as database:
+        database.execute(
+            """
+            INSERT INTO ai_usage_events (
+                job_id, edit_run_id, provider, model, reasoning_effort,
+                request_kind, response_id, input_tokens, cached_input_tokens,
+                output_tokens, reasoning_tokens, total_tokens, latency_ms
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                run["job_id"],
+                run["id"],
+                str(provenance["provider"]),
+                str(provenance["model"]),
+                provenance.get("reasoning_effort"),
+                request_kind,
+                usage.get("response_id"),
+                int(usage.get("input_tokens") or 0),
+                int(usage.get("cached_input_tokens") or 0),
+                int(usage.get("output_tokens") or 0),
+                int(usage.get("reasoning_tokens") or 0),
+                int(usage.get("total_tokens") or 0),
+                int(usage.get("latency_ms") or 0),
+            ),
+        )
 
 
 def process_one_edit(state: WorkerState) -> bool:
@@ -316,6 +356,7 @@ def process_one_edit(state: WorkerState) -> bool:
             )
             provider = str(plan_row["provider"])
             model = str(plan_row["model"])
+            reasoning_effort = run.get("reasoning_effort")
         else:
             if run.get("based_on_run_id"):
                 with connection() as database:
@@ -337,30 +378,76 @@ def process_one_edit(state: WorkerState) -> bool:
                     "caption_corrections": run.get("caption_corrections") or [],
                 }
             proposed, provenance = create_edit_plan(context)
-            plan = validate_edit_plan(
-                proposed.model_dump(mode="json"),
-                context["assets"],
-                allow_post_copy=bool(context["project"]["ai_copy_allowed"]),
-                creative_direction=context["job"],
-                music_tracks=context["music_library"],
-            )
+            request_kind = "revision" if run.get("based_on_run_id") else "initial_plan"
+            _record_plan_usage(run, provenance, request_kind)
+            try:
+                plan = validate_edit_plan(
+                    proposed.model_dump(mode="json"),
+                    context["assets"],
+                    allow_post_copy=bool(context["project"]["ai_copy_allowed"]),
+                    creative_direction=context["job"],
+                    music_tracks=context["music_library"],
+                )
+            except (ValueError, ValidationError) as validation_error:
+                if context["project"]["privacy_mode"] == "local_only":
+                    raise
+                with connection() as database:
+                    database.execute(
+                        """
+                        INSERT INTO job_events (job_id, event_type, payload)
+                        VALUES (%s, 'edit_plan_repair_requested', %s)
+                        """,
+                        (
+                            run["job_id"],
+                            Jsonb(
+                                {
+                                    "version": run["version"],
+                                    "validation_error": str(validation_error)[:500],
+                                }
+                            ),
+                        ),
+                    )
+                context["validation_correction"] = {
+                    "error": str(validation_error)[:1000],
+                    "rejected_plan": proposed.model_dump(mode="json"),
+                }
+                proposed, provenance = create_edit_plan(context)
+                _record_plan_usage(run, provenance, "repair")
+                plan = validate_edit_plan(
+                    proposed.model_dump(mode="json"),
+                    context["assets"],
+                    allow_post_copy=bool(context["project"]["ai_copy_allowed"]),
+                    creative_direction=context["job"],
+                    music_tracks=context["music_library"],
+                )
             provider = provenance["provider"]
             model = provenance["model"]
-            _persist_generated_plan(run, plan, provider, model)
+            reasoning_effort = provenance.get("reasoning_effort")
+            _persist_generated_plan(run, plan, provenance)
 
-        manifest = render_edit_preview(
-            context,
-            plan,
-            int(run["version"]),
-            provider,
-            model,
-            list(run.get("caption_corrections") or []),
-        )
+        if isinstance(plan, MontageEditPlan):
+            manifest = render_montage_preview(
+                context,
+                plan,
+                int(run["version"]),
+                provider,
+                model,
+                list(run.get("caption_corrections") or []),
+            )
+        else:
+            manifest = render_edit_preview(
+                context,
+                plan,
+                int(run["version"]),
+                provider,
+                model,
+                list(run.get("caption_corrections") or []),
+            )
         with connection() as database:
             database.execute(
                 """
                 UPDATE edit_runs
-                SET status = 'ready', provider = %s, model = %s,
+                SET status = 'ready', provider = %s, model = %s, reasoning_effort = %s,
                     preview_path = %s, manifest_path = %s, manifest = %s,
                     lease_expires_at = NULL, completed_at = now(), updated_at = now()
                 WHERE id = %s
@@ -368,6 +455,7 @@ def process_one_edit(state: WorkerState) -> bool:
                 (
                     provider,
                     model,
+                    reasoning_effort,
                     manifest["outputs"]["preview"],
                     manifest["manifest_path"],
                     Jsonb(manifest),
@@ -484,15 +572,26 @@ def process_one_final_export(state: WorkerState) -> bool:
         approved_at = export.get("approved_at")
         if approved_at is None:
             raise RuntimeError("the selected edit version is not approved")
-        manifest = render_final_delivery(
-            context,
-            plan,
-            int(export["version"]),
-            str(export["provider"]),
-            str(export["model"]),
-            list(export.get("caption_corrections") or []),
-            approved_at.isoformat(),
-        )
+        if isinstance(plan, MontageEditPlan):
+            manifest = render_montage_delivery(
+                context,
+                plan,
+                int(export["version"]),
+                str(export["provider"]),
+                str(export["model"]),
+                list(export.get("caption_corrections") or []),
+                approved_at.isoformat(),
+            )
+        else:
+            manifest = render_final_delivery(
+                context,
+                plan,
+                int(export["version"]),
+                str(export["provider"]),
+                str(export["model"]),
+                list(export.get("caption_corrections") or []),
+                approved_at.isoformat(),
+            )
         outputs = manifest["outputs"]
         with connection() as database:
             database.execute(
@@ -558,6 +657,65 @@ def process_one_final_export(state: WorkerState) -> bool:
     finally:
         state.active_final_export_id = None
     return True
+
+
+def refresh_editor_model_catalog() -> int:
+    settings = get_settings()
+    models = list_chatgpt_models(settings)
+    with connection() as database:
+        database.execute("UPDATE editor_models SET available = false WHERE provider = 'chatgpt_plan'")
+        for index, model in enumerate(models):
+            database.execute(
+                """
+                INSERT INTO editor_models (
+                    slug, display_name, provider, available, sort_order, refreshed_at
+                ) VALUES (%s, %s, 'chatgpt_plan', true, %s, now())
+                ON CONFLICT (slug) DO UPDATE SET
+                    display_name = EXCLUDED.display_name,
+                    provider = EXCLUDED.provider,
+                    available = true,
+                    sort_order = EXCLUDED.sort_order,
+                    refreshed_at = now()
+                """,
+                (model["slug"], model["display_name"], index),
+            )
+    return len(models)
+
+
+def analyze_pending_music_tracks() -> int:
+    settings = get_settings()
+    with connection() as database:
+        rows = database.execute(
+            """
+            SELECT id, storage_key, duration_seconds
+            FROM music_tracks
+            WHERE active = true
+              AND (bpm IS NULL OR jsonb_array_length(beat_grid_seconds) = 0)
+            ORDER BY created_at
+            """
+        ).fetchall()
+    completed = 0
+    for row in rows:
+        try:
+            source = resolve_source(settings.media_root, str(row["storage_key"]))
+            analysis = analyze_music_beats(
+                source,
+                float(row["duration_seconds"]),
+                settings.analysis_command_timeout_seconds,
+            )
+            with connection() as database:
+                database.execute(
+                    """
+                    UPDATE music_tracks
+                    SET bpm = %s, beat_grid_seconds = %s, updated_at = now()
+                    WHERE id = %s
+                    """,
+                    (analysis["bpm"], Jsonb(analysis["beat_grid_seconds"]), row["id"]),
+                )
+            completed += 1
+        except Exception as error:
+            print(f"music beat analysis deferred for {row['id']}: {error}", flush=True)
+    return completed
 
 
 def heartbeat_loop(state: WorkerState, stop_event: threading.Event) -> None:
@@ -665,8 +823,24 @@ def main() -> None:
     recovered_exports = recover_interrupted_final_exports()
     if recovered_exports:
         print(f"requeued interrupted final exports: {recovered_exports}", flush=True)
+    try:
+        model_count = refresh_editor_model_catalog()
+        print(f"refreshed ChatGPT model catalogue: {model_count} models", flush=True)
+    except Exception as error:
+        print(f"ChatGPT model catalogue refresh deferred: {error}", flush=True)
+    music_count = analyze_pending_music_tracks()
+    if music_count:
+        print(f"analyzed music beat grids: {music_count}", flush=True)
+    next_model_refresh = time.monotonic() + settings.editor_model_refresh_seconds
     print("worker ready", flush=True)
     while not state.stopping:
+        if time.monotonic() >= next_model_refresh:
+            try:
+                model_count = refresh_editor_model_catalog()
+                print(f"refreshed ChatGPT model catalogue: {model_count} models", flush=True)
+            except Exception as error:
+                print(f"ChatGPT model catalogue refresh deferred: {error}", flush=True)
+            next_model_refresh = time.monotonic() + settings.editor_model_refresh_seconds
         while finalize_one_upload():
             if state.stopping:
                 break

@@ -92,6 +92,7 @@ def normalize_probe(payload: dict[str, Any]) -> dict[str, Any]:
             "index": _number(raw_stream.get("index"), int),
             "type": stream_type,
             "codec": raw_stream.get("codec_name"),
+            "duration_seconds": _number(raw_stream.get("duration"), float),
         }
         if stream_type == "video":
             rotation: int | None = None
@@ -198,7 +199,9 @@ def create_video_proxy(source: Path, destination: Path, timeout: int) -> str:
         "-map",
         "0:a?",
         "-vf",
-        "scale='min(1280,iw)':-2",
+        # This proxy is also the deterministic render mezzanine. Preserve up
+        # to 1080p landscape instead of reducing future exports to 720p.
+        "scale='min(1920,iw)':-2",
     ]
     nvenc = [
         *common,

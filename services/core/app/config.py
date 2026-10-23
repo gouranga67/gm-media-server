@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     ai_gateway_model: str = "openai/gpt-6.1-sol"
     editor_request_timeout_seconds: int = Field(default=600, ge=30, le=1800)
     editor_max_context_characters: int = Field(default=120_000, ge=10_000, le=500_000)
+    editor_model_refresh_seconds: int = Field(default=21_600, ge=300, le=86_400)
     edit_lease_seconds: int = Field(default=900, ge=60, le=7200)
 
 

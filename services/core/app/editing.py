@@ -8,7 +8,7 @@ from pydantic import ValidationError
 
 from app.config import get_settings
 from app.database import connection
-from app.edit_plan import TalkingHeadEditPlan, document_sha256, validate_edit_plan
+from app.edit_plan import MontageEditPlan, TalkingHeadEditPlan, document_sha256, validate_edit_plan
 from app.editor_context import build_editor_context
 from app.media_analysis import resolve_source
 from app.schemas import (
@@ -16,11 +16,111 @@ from app.schemas import (
     EditRunResponse,
     FinalExportResponse,
     JobReviewResponse,
+    UsageDashboardResponse,
     RevisionCreate,
 )
 
 
 router = APIRouter(prefix="/api/v1", tags=["editing"])
+
+
+def _job_usage(database: Any, job_id: UUID) -> dict[str, Any]:
+    events = database.execute(
+        """
+        SELECT id, job_id, edit_run_id, provider, model, reasoning_effort,
+               request_kind, input_tokens, cached_input_tokens, output_tokens,
+               reasoning_tokens, total_tokens, latency_ms, created_at
+        FROM ai_usage_events
+        WHERE job_id = %s
+        ORDER BY created_at DESC
+        """,
+        (job_id,),
+    ).fetchall()
+    return {
+        "requests": len(events),
+        "input_tokens": sum(int(row["input_tokens"]) for row in events),
+        "cached_input_tokens": sum(int(row["cached_input_tokens"]) for row in events),
+        "output_tokens": sum(int(row["output_tokens"]) for row in events),
+        "reasoning_tokens": sum(int(row["reasoning_tokens"]) for row in events),
+        "total_tokens": sum(int(row["total_tokens"]) for row in events),
+        "latency_ms": sum(int(row["latency_ms"]) for row in events),
+        "events": list(events),
+    }
+
+
+@router.get("/usage", response_model=UsageDashboardResponse)
+def usage_dashboard(days: int = Query(default=0, ge=0, le=3650)) -> dict[str, Any]:
+    with connection() as database:
+        total = database.execute(
+            """
+            SELECT count(*) AS requests, count(DISTINCT job_id) AS jobs,
+                   COALESCE(sum(input_tokens), 0) AS input_tokens,
+                   COALESCE(sum(cached_input_tokens), 0) AS cached_input_tokens,
+                   COALESCE(sum(output_tokens), 0) AS output_tokens,
+                   COALESCE(sum(reasoning_tokens), 0) AS reasoning_tokens,
+                   COALESCE(sum(total_tokens), 0) AS total_tokens
+            FROM ai_usage_events
+            WHERE %s = 0 OR created_at >= now() - (%s * interval '1 day')
+            """,
+            (days, days),
+        ).fetchone()
+        job_count = database.execute(
+            """
+            SELECT count(*) AS jobs
+            FROM jobs
+            WHERE %s = 0 OR created_at >= now() - (%s * interval '1 day')
+            """,
+            (days, days),
+        ).fetchone()
+        by_model = database.execute(
+            """
+            SELECT model, count(*) AS requests, COALESCE(sum(total_tokens), 0) AS total_tokens
+            FROM ai_usage_events
+            WHERE %s = 0 OR created_at >= now() - (%s * interval '1 day')
+            GROUP BY model
+            ORDER BY total_tokens DESC, model
+            """,
+            (days, days),
+        ).fetchall()
+        job_history = database.execute(
+            """
+            SELECT jobs.id, projects.name AS project_name, jobs.recipe,
+                   jobs.status, jobs.created_at,
+                   COALESCE(latest_usage.model, latest_run.model, jobs.editor_model) AS model,
+                   count(ai_usage_events.id) AS requests,
+                   COALESCE(sum(ai_usage_events.total_tokens), 0) AS total_tokens
+            FROM jobs
+            JOIN projects ON projects.id = jobs.project_id
+            LEFT JOIN ai_usage_events ON ai_usage_events.job_id = jobs.id
+            LEFT JOIN LATERAL (
+                SELECT model
+                FROM ai_usage_events AS recent_usage
+                WHERE recent_usage.job_id = jobs.id
+                ORDER BY recent_usage.created_at DESC
+                LIMIT 1
+            ) AS latest_usage ON true
+            LEFT JOIN LATERAL (
+                SELECT model
+                FROM edit_runs
+                WHERE edit_runs.job_id = jobs.id AND model IS NOT NULL
+                ORDER BY version DESC, created_at DESC
+                LIMIT 1
+            ) AS latest_run ON true
+            WHERE %s = 0 OR jobs.created_at >= now() - (%s * interval '1 day')
+            GROUP BY jobs.id, projects.name, latest_usage.model, latest_run.model
+            ORDER BY jobs.created_at DESC
+            """,
+            (days, days),
+        ).fetchall()
+    assert total is not None
+    assert job_count is not None
+    return {
+        "days": days,
+        **total,
+        "jobs": int(job_count["jobs"]),
+        "by_model": list(by_model),
+        "job_history": list(job_history),
+    }
 
 
 def _response(row: dict[str, Any]) -> dict[str, Any]:
@@ -37,6 +137,18 @@ def _final_response(row: dict[str, Any]) -> dict[str, Any]:
         ),
         "post_copy_available": row.get("status") == "ready" and bool(row.get("post_copy_path")),
     }
+
+
+def _needs_montage_delivery_refresh(job: dict[str, Any], export: dict[str, Any]) -> bool:
+    """Identify approved deliveries made before montage caption provenance."""
+
+    if job.get("recipe") != "montage" or export.get("status") != "ready":
+        return False
+    manifest = export.get("manifest")
+    if not isinstance(manifest, dict):
+        return True
+    captions = manifest.get("captions")
+    return not isinstance(captions, dict) or captions.get("style") != "clean_blue_v1"
 
 
 def _context_or_http(job_id: UUID, *, internal: bool = False) -> dict[str, Any]:
@@ -72,6 +184,46 @@ def request_preview(job_id: UUID) -> dict[str, Any]:
         ).fetchone()
         if existing is not None:
             return _response(existing)
+        failed = database.execute(
+            """
+            SELECT * FROM edit_runs
+            WHERE job_id = %s AND status = 'failed'
+            ORDER BY version DESC LIMIT 1
+            """,
+            (job_id,),
+        ).fetchone()
+        if failed is not None:
+            row = database.execute(
+                """
+                UPDATE edit_runs
+                SET status = 'pending', error = NULL, lease_expires_at = NULL,
+                    completed_at = NULL, updated_at = now()
+                WHERE id = %s
+                RETURNING *
+                """,
+                (failed["id"],),
+            ).fetchone()
+            database.execute(
+                "UPDATE jobs SET status = 'previewing', updated_at = now() WHERE id = %s",
+                (job_id,),
+            )
+            database.execute(
+                """
+                INSERT INTO job_events (job_id, event_type, payload)
+                VALUES (%s, 'preview_retry_requested', %s)
+                """,
+                (
+                    job_id,
+                    Jsonb(
+                        {
+                            "version": failed["version"],
+                            "reused_plan": failed["edit_plan_id"] is not None,
+                        }
+                    ),
+                ),
+            )
+            assert row is not None
+            return _response(row)
         version = database.execute(
             "SELECT COALESCE(max(version), 0) + 1 AS version FROM edit_runs WHERE job_id = %s",
             (job_id,),
@@ -101,7 +253,9 @@ def request_preview(job_id: UUID) -> dict[str, Any]:
     response_model=EditRunResponse,
     status_code=status.HTTP_202_ACCEPTED,
 )
-def submit_edit_plan(job_id: UUID, payload: TalkingHeadEditPlan) -> dict[str, Any]:
+def submit_edit_plan(
+    job_id: UUID, payload: TalkingHeadEditPlan | MontageEditPlan
+) -> dict[str, Any]:
     context = _context_or_http(job_id)
     if not context["ready_for_editing"]:
         raise HTTPException(status_code=409, detail="source analysis is not ready")
@@ -339,7 +493,7 @@ def _select_final_export(
 def approve_edit(job_id: UUID, payload: ApprovalCreate) -> dict[str, Any]:
     with connection() as database:
         job = database.execute(
-            "SELECT id FROM jobs WHERE id = %s FOR UPDATE", (job_id,)
+            "SELECT id, recipe FROM jobs WHERE id = %s FOR UPDATE", (job_id,)
         ).fetchone()
         if job is None:
             raise HTTPException(status_code=404, detail="job not found")
@@ -398,6 +552,36 @@ def approve_edit(job_id: UUID, payload: ApprovalCreate) -> dict[str, Any]:
             (job_id, Jsonb({"version": payload.version}), job_id, payload.version),
         )
         row = _select_final_export(database, job_id, run["id"])
+        if row is not None and _needs_montage_delivery_refresh(job, row):
+            database.execute(
+                """
+                UPDATE final_exports
+                SET status = 'pending', attempts = 0, error = NULL,
+                    video_path = NULL, captions_path = NULL, cover_path = NULL,
+                    post_copy_path = NULL, package_path = NULL, manifest_path = NULL,
+                    manifest = '{}'::jsonb, lease_expires_at = NULL, started_at = NULL,
+                    completed_at = NULL, updated_at = now()
+                WHERE id = %s
+                RETURNING *
+                """,
+                (row["id"],),
+            )
+            database.execute(
+                """
+                INSERT INTO job_events (job_id, event_type, payload)
+                VALUES (%s, 'final_export_refresh_requested', %s)
+                """,
+                (
+                    job_id,
+                    Jsonb(
+                        {
+                            "version": run["version"],
+                            "reason": "montage_caption_provenance_upgrade",
+                        }
+                    ),
+                ),
+            )
+            row = _select_final_export(database, job_id, run["id"])
         database.execute(
             "UPDATE jobs SET status = %s, revision = %s, updated_at = now() WHERE id = %s",
             ("delivered" if row and row["status"] == "ready" else "exporting", payload.version, job_id),
@@ -424,6 +608,7 @@ def job_review(job_id: UUID) -> dict[str, Any]:
             """,
             (job_id,),
         ).fetchall()
+        usage = _job_usage(database, job_id)
     versions = [_response(row) for row in runs]
     return {
         "job": job,
@@ -431,6 +616,7 @@ def job_review(job_id: UUID) -> dict[str, Any]:
         "latest_run": versions[0] if versions else None,
         "final_export": _final_response(export) if export is not None else None,
         "events": list(events),
+        "usage": usage,
     }
 
 

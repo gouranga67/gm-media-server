@@ -2,6 +2,7 @@
 
 import { Component, type DragEvent, type ErrorInfo, type FormEvent, type ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Upload } from "tus-js-client";
 import {
@@ -25,7 +26,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
   createProject,
-  createTalkingHeadJob,
+  createMediaJob,
+  getEditorModels,
   getAsset,
   getMusicTracks,
   getSystemInformation,
@@ -34,9 +36,13 @@ import {
   requestPreview,
   type Asset,
   type EditStyle,
+  type EditorModel,
   type MusicMode,
   type MusicTrack,
   type PrivacyMode,
+  type OutputAspect,
+  type ReasoningEffort,
+  type Recipe,
   type TargetDuration,
   type TargetPlatform,
 } from "@/lib/media-api";
@@ -300,11 +306,15 @@ function RecipeCard({
   detail,
   selected = false,
   disabled = false,
+  value,
+  onChange,
 }: {
   readonly name: string;
   readonly detail: string;
   readonly selected?: boolean;
   readonly disabled?: boolean;
+  readonly value: Recipe;
+  readonly onChange: (value: Recipe) => void;
 }) {
   return (
     <label
@@ -328,9 +338,9 @@ function RecipeCard({
           className="size-5 accent-[#173F5F]"
           disabled={disabled}
           name="recipe"
-          readOnly
+          onChange={() => onChange(value)}
           type="radio"
-          value={name}
+          value={value}
         />
       </span>
     </label>
@@ -536,11 +546,16 @@ function NewJobFormContent() {
   const [brief, setBrief] = useState("");
   const [privacyMode, setPrivacyMode] = useState<PrivacyMode>("hybrid");
   const [aiCopyAllowed, setAiCopyAllowed] = useState(false);
+  const [recipe, setRecipe] = useState<Recipe>("talking_head");
   const [targetDuration, setTargetDuration] = useState<TargetDuration>(45);
   const [editStyle, setEditStyle] = useState<EditStyle>("energetic");
   const [musicMode, setMusicMode] = useState<MusicMode>("none");
   const [targetPlatform, setTargetPlatform] = useState<TargetPlatform>("all_social");
   const [mustInclude, setMustInclude] = useState("");
+  const [editorModels, setEditorModels] = useState<readonly EditorModel[]>([]);
+  const [editorModel, setEditorModel] = useState<string | null>(null);
+  const [reasoningEffort, setReasoningEffort] = useState<ReasoningEffort>("medium");
+  const [outputAspect, setOutputAspect] = useState<OutputAspect>("vertical");
   const [musicTracks, setMusicTracks] = useState<readonly MusicTrack[]>([]);
   const [entries, setEntries] = useState<UploadEntry[]>([]);
   const [serverStatus, setServerStatus] = useState<ServerStatus>("checking");
@@ -558,10 +573,12 @@ function NewJobFormContent() {
   useEffect(() => {
     mountedRef.current = true;
     let cancelled = false;
-    void Promise.all([getSystemInformation(), getMusicTracks()])
-      .then(([, tracks]) => {
+    void Promise.all([getSystemInformation(), getMusicTracks(), getEditorModels()])
+      .then(([, tracks, models]) => {
         if (!cancelled) {
           setMusicTracks(tracks);
+          setEditorModels(models);
+          setEditorModel((current) => current ?? models[0]?.slug ?? null);
           setServerStatus("online");
         }
       })
@@ -637,6 +654,17 @@ function NewJobFormContent() {
       track.allowed_platforms.includes("all_social")
       || track.allowed_platforms.includes(targetPlatform),
   ).length;
+  const durationOptions: readonly TargetDuration[] = recipe === "montage" ? [15, 30, 45, 60] : [20, 30, 45, 60];
+
+  const selectRecipe = (selected: Recipe) => {
+    setRecipe(selected);
+    setFormError(undefined);
+    if (selected === "montage") {
+      setTargetDuration(30);
+    } else if (targetDuration === 15) {
+      setTargetDuration(20);
+    }
+  };
 
   const updateEntry = (localId: string, changes: Partial<UploadEntry>) => {
     if (!mountedRef.current) return;
@@ -800,12 +828,17 @@ function NewJobFormContent() {
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const cleanName = name.trim();
+    const cleanBrief = brief.trim();
     if (cleanName.length === 0) {
       setFormError("Enter a project name.");
       return;
     }
     if (entries.length === 0) {
       setFormError("Add at least one source media file.");
+      return;
+    }
+    if (recipe === "talking_head" && /\bmontage\b/i.test(cleanBrief)) {
+      setFormError("Your brief asks for a montage. Select the Montage recipe, then submit again.");
       return;
     }
 
@@ -818,7 +851,7 @@ function NewJobFormContent() {
         const project = await createProject({
           id: projectRequestIdRef.current,
           name: cleanName,
-          brief: brief.trim(),
+          brief: cleanBrief,
           privacyMode,
           aiCopyAllowed,
         });
@@ -830,13 +863,17 @@ function NewJobFormContent() {
       let activeJobId = jobId;
       if (activeJobId === undefined) {
         jobRequestIdRef.current ??= crypto.randomUUID();
-        const job = await createTalkingHeadJob(activeProjectId, {
+        const job = await createMediaJob(activeProjectId, {
           id: jobRequestIdRef.current,
+          recipe,
           targetDurationSeconds: targetDuration,
           editStyle,
           musicMode,
           targetPlatform,
           mustInclude: mustInclude.trim(),
+          editorModel,
+          reasoningEffort,
+          outputAspect,
         });
         activeJobId = job.id;
         setJobId(job.id);
@@ -919,7 +956,12 @@ function NewJobFormContent() {
     >
       <header className="z-40 shrink-0 border-b border-[#D7D9D3] bg-[#F7F7F5] px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-3">
         <div className="mb-1 flex items-center justify-between gap-3">
-          <p className="text-sm font-bold tracking-tight text-[#173F5F]">GM Studio</p>
+          <div className="flex items-center gap-3">
+            <p className="text-sm font-bold tracking-tight text-[#173F5F]">GM Studio</p>
+            <Link className="font-mono text-[10px] font-bold text-[#173F5F] underline underline-offset-4" href="/usage">
+              AI usage
+            </Link>
+          </div>
           <Badge className="rounded-sm border-[#D7D9D3] bg-white px-2 py-1 font-mono text-[10px] font-bold text-[#173F5F] uppercase dark:bg-white" variant="outline">
             <span
               aria-hidden="true"
@@ -950,9 +992,20 @@ function NewJobFormContent() {
           <legend className="sr-only">Recipe</legend>
           <SectionHeading number="01">Recipe</SectionHeading>
           <div className="space-y-2">
-            <RecipeCard detail="15–60 sec · 9:16" name="Talking-head Reel" selected />
-            <RecipeCard detail="Up to 3 mins · 16:9" disabled name="Montage" />
-            <RecipeCard detail="Static carousel · 4:5" disabled name="Photo Post" />
+            <RecipeCard
+              detail="20–60 sec · transcript-led"
+              name="Talking-head Reel"
+              onChange={selectRecipe}
+              selected={recipe === "talking_head"}
+              value="talking_head"
+            />
+            <RecipeCard
+              detail="15–60 sec · video + photos"
+              name="Montage"
+              onChange={selectRecipe}
+              selected={recipe === "montage"}
+              value="montage"
+            />
           </div>
         </fieldset>
 
@@ -988,7 +1041,10 @@ function NewJobFormContent() {
                 disabled={formLocked}
                 id="project-brief"
                 maxLength={4000}
-                onChange={(event) => setBrief(event.currentTarget.value)}
+                onChange={(event) => {
+                  setBrief(event.currentTarget.value);
+                  setFormError(undefined);
+                }}
                 placeholder="Describe the audience, key message, tone and intended platform…"
                 value={brief}
               />
@@ -1010,7 +1066,7 @@ function NewJobFormContent() {
             <fieldset className="space-y-3" disabled={formLocked}>
               <legend className="text-xs font-bold text-[#173F5F]">TARGET LENGTH</legend>
               <div className="grid grid-cols-4 gap-2">
-                {([20, 30, 45, 60] as const).map((duration) => (
+                {durationOptions.map((duration) => (
                   <label
                     className={cn(
                       "flex min-h-12 cursor-pointer items-center justify-center rounded-md bg-white font-mono text-xs font-bold",
@@ -1030,6 +1086,35 @@ function NewJobFormContent() {
                       value={duration}
                     />
                     {duration} sec
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+            <fieldset className="space-y-3" disabled={formLocked}>
+              <legend className="text-xs font-bold text-[#173F5F]">OUTPUT SHAPE</legend>
+              <div className="grid grid-cols-2 gap-2">
+                {([
+                  { value: "vertical", label: "Vertical 9:16" },
+                  { value: "landscape", label: "Landscape 16:9" },
+                ] as const).map((option) => (
+                  <label
+                    className={cn(
+                      "flex min-h-12 cursor-pointer items-center justify-center rounded-md bg-white text-xs font-bold",
+                      outputAspect === option.value
+                        ? "border-2 border-[#173F5F] text-[#173F5F]"
+                        : "border border-[#D7D9D3] text-[#666862]",
+                    )}
+                    key={option.value}
+                  >
+                    <input
+                      checked={outputAspect === option.value}
+                      className="sr-only"
+                      name="output-aspect"
+                      onChange={() => setOutputAspect(option.value)}
+                      type="radio"
+                      value={option.value}
+                    />
+                    {option.label}
                   </label>
                 ))}
               </div>
@@ -1094,6 +1179,53 @@ function NewJobFormContent() {
                 {compatibleMusicCount > 0
                   ? `${compatibleMusicCount} compatible rights-recorded ${compatibleMusicCount === 1 ? "track" : "tracks"} available.`
                   : "No compatible tracks are imported yet, so this job will remain voice-only."}
+              </p>
+            </fieldset>
+            <fieldset className="space-y-3" disabled={formLocked || privacyMode === "local_only"}>
+              <legend className="text-xs font-bold text-[#173F5F]">EDITOR MODEL</legend>
+              <label className="block space-y-2 text-xs font-bold text-[#173F5F]" htmlFor="editor-model">
+                MODEL
+                <select
+                  className="h-12 w-full rounded-md border border-[#D7D9D3] bg-white px-3 text-sm text-[#20211F] shadow-none focus:border-[#173F5F] focus:outline-none focus:ring-2 focus:ring-[#173F5F]/20 disabled:opacity-60"
+                  id="editor-model"
+                  onChange={(event) => setEditorModel(event.currentTarget.value || null)}
+                  value={editorModel ?? ""}
+                >
+                  {editorModels.length === 0 ? <option value="">Server default</option> : null}
+                  {editorModels.map((model) => (
+                    <option key={model.slug} value={model.slug}>{model.display_name}</option>
+                  ))}
+                </select>
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {([
+                  { value: "low", label: "Economy" },
+                  { value: "medium", label: "Balanced" },
+                  { value: "high", label: "Best" },
+                ] as const).map((option) => (
+                  <label
+                    className={cn(
+                      "flex min-h-12 cursor-pointer items-center justify-center rounded-md bg-white text-xs font-bold",
+                      reasoningEffort === option.value
+                        ? "border-2 border-[#173F5F] text-[#173F5F]"
+                        : "border border-[#D7D9D3] text-[#666862]",
+                    )}
+                    key={option.value}
+                  >
+                    <input
+                      checked={reasoningEffort === option.value}
+                      className="sr-only"
+                      name="reasoning-effort"
+                      onChange={() => setReasoningEffort(option.value)}
+                      type="radio"
+                      value={option.value}
+                    />
+                    {option.label}
+                  </label>
+                ))}
+              </div>
+              <p className="text-xs leading-relaxed text-[#666862]">
+                Lower effort generally uses fewer reasoning tokens. The final screen records the actual usage.
               </p>
             </fieldset>
           </div>
