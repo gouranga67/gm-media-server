@@ -89,6 +89,31 @@ The interface identifies work that used the ChatGPT plan and links to ChatGPT us
 
 For the upstream requirements, see OpenAI's [open-source token sharing guide](https://developers.openai.com/siwc/token-sharing-open-source) and [self-hosted VM flow](https://developers.openai.com/siwc/token-sharing-open-source/self-hosted-vms).
 
+## Import rights-approved music
+
+GM Studio never searches for or downloads music. An operator must supply a local, non-synthetic audio file and record its licence, commercial-use confirmation, attribution, and permitted platforms. After deployment, inspect the importer options:
+
+```bash
+./scripts/import-music.sh /absolute/path/to/track.mp3 --help
+```
+
+Example metadata shape:
+
+```bash
+./scripts/import-music.sh /absolute/path/to/track.mp3 \
+  --title "Track title" \
+  --artist "Artist name" \
+  --mood optimistic \
+  --energy medium \
+  --license-name "Your cross-platform commercial licence" \
+  --license-source-url "https://example.com/licence" \
+  --license-proof "Receipt or licence record reference" \
+  --platform all_social \
+  --commercial-use-confirmed
+```
+
+Importing confirms only what you record; it does not independently grant or verify rights. Tracks remain unavailable to the agent unless they are active, marked for commercial use, non-synthetic, and compatible with the job's selected platform.
+
 ## Verify the build
 
 Host-only checks:

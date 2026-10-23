@@ -27,12 +27,18 @@ import {
   createProject,
   createTalkingHeadJob,
   getAsset,
+  getMusicTracks,
   getSystemInformation,
   mediaTypeForFile,
   registerAsset,
   requestPreview,
   type Asset,
+  type EditStyle,
+  type MusicMode,
+  type MusicTrack,
   type PrivacyMode,
+  type TargetDuration,
+  type TargetPlatform,
 } from "@/lib/media-api";
 import { startResumableUpload } from "@/lib/resumable-upload";
 import { cn } from "@/lib/utils";
@@ -84,6 +90,58 @@ const PRIVACY_OPTIONS: ReadonlyArray<{
     label: "Local only",
     description: "No media-derived material leaves this server; editing uses local fixed recipes.",
   },
+];
+
+const EDIT_STYLE_OPTIONS: ReadonlyArray<{
+  readonly value: EditStyle;
+  readonly label: string;
+  readonly description: string;
+}> = [
+  {
+    value: "clean",
+    label: "Clean",
+    description: "Stable framing, restrained punch-ins and simple cuts.",
+  },
+  {
+    value: "energetic",
+    label: "Energetic",
+    description: "Faster pacing, emphasis punch-ins and occasional dip transitions.",
+  },
+  {
+    value: "calm",
+    label: "Calm",
+    description: "Longer thoughts with subtle push-ins and pull-outs.",
+  },
+];
+
+const MUSIC_OPTIONS: ReadonlyArray<{
+  readonly value: MusicMode;
+  readonly label: string;
+  readonly description: string;
+}> = [
+  { value: "none", label: "No music", description: "Voice only." },
+  {
+    value: "subtle",
+    label: "Subtle",
+    description: "Use a rights-approved local track quietly under speech when available.",
+  },
+  {
+    value: "present",
+    label: "Present",
+    description: "Use a more noticeable approved track with automatic speech ducking.",
+  },
+];
+
+const PLATFORM_OPTIONS: ReadonlyArray<{
+  readonly value: TargetPlatform;
+  readonly label: string;
+}> = [
+  { value: "all_social", label: "All social platforms" },
+  { value: "instagram", label: "Instagram / Reels" },
+  { value: "tiktok", label: "TikTok" },
+  { value: "youtube", label: "YouTube Shorts" },
+  { value: "facebook", label: "Facebook" },
+  { value: "linkedin", label: "LinkedIn" },
 ];
 
 function toErrorMessage(error: unknown): string {
@@ -319,6 +377,48 @@ function PrivacyCard({
   );
 }
 
+function CreativeOptionCard({
+  description,
+  disabled,
+  label,
+  name,
+  selected,
+  value,
+  onChange,
+}: {
+  readonly description: string;
+  readonly disabled: boolean;
+  readonly label: string;
+  readonly name: string;
+  readonly selected: boolean;
+  readonly value: string;
+  readonly onChange: () => void;
+}) {
+  return (
+    <label
+      className={cn(
+        "block rounded-md bg-white p-3",
+        selected ? "border-2 border-[#173F5F]" : "border border-[#D7D9D3]",
+        disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer",
+      )}
+    >
+      <span className="flex items-center gap-2">
+        <input
+          checked={selected}
+          className="size-5 accent-[#173F5F]"
+          disabled={disabled}
+          name={name}
+          onChange={onChange}
+          type="radio"
+          value={value}
+        />
+        <span className="text-sm font-bold text-[#173F5F]">{label}</span>
+      </span>
+      <span className="mt-1 block pl-7 text-xs leading-relaxed text-[#666862]">{description}</span>
+    </label>
+  );
+}
+
 function UploadAction({
   entry,
   onPause,
@@ -436,6 +536,12 @@ function NewJobFormContent() {
   const [brief, setBrief] = useState("");
   const [privacyMode, setPrivacyMode] = useState<PrivacyMode>("hybrid");
   const [aiCopyAllowed, setAiCopyAllowed] = useState(false);
+  const [targetDuration, setTargetDuration] = useState<TargetDuration>(45);
+  const [editStyle, setEditStyle] = useState<EditStyle>("energetic");
+  const [musicMode, setMusicMode] = useState<MusicMode>("none");
+  const [targetPlatform, setTargetPlatform] = useState<TargetPlatform>("all_social");
+  const [mustInclude, setMustInclude] = useState("");
+  const [musicTracks, setMusicTracks] = useState<readonly MusicTrack[]>([]);
   const [entries, setEntries] = useState<UploadEntry[]>([]);
   const [serverStatus, setServerStatus] = useState<ServerStatus>("checking");
   const [formError, setFormError] = useState<string>();
@@ -452,9 +558,12 @@ function NewJobFormContent() {
   useEffect(() => {
     mountedRef.current = true;
     let cancelled = false;
-    void getSystemInformation()
-      .then(() => {
-        if (!cancelled) setServerStatus("online");
+    void Promise.all([getSystemInformation(), getMusicTracks()])
+      .then(([, tracks]) => {
+        if (!cancelled) {
+          setMusicTracks(tracks);
+          setServerStatus("online");
+        }
       })
       .catch(() => {
         if (!cancelled) setServerStatus("offline");
@@ -523,6 +632,11 @@ function NewJobFormContent() {
   const totalBytes = entries.reduce((total, entry) => total + entry.file.size, 0);
   const allReady = entries.length > 0 && entries.every((entry) => entry.phase === "ready");
   const formLocked = projectId !== undefined;
+  const compatibleMusicCount = musicTracks.filter(
+    (track) =>
+      track.allowed_platforms.includes("all_social")
+      || track.allowed_platforms.includes(targetPlatform),
+  ).length;
 
   const updateEntry = (localId: string, changes: Partial<UploadEntry>) => {
     if (!mountedRef.current) return;
@@ -716,7 +830,14 @@ function NewJobFormContent() {
       let activeJobId = jobId;
       if (activeJobId === undefined) {
         jobRequestIdRef.current ??= crypto.randomUUID();
-        const job = await createTalkingHeadJob(activeProjectId, jobRequestIdRef.current);
+        const job = await createTalkingHeadJob(activeProjectId, {
+          id: jobRequestIdRef.current,
+          targetDurationSeconds: targetDuration,
+          editStyle,
+          musicMode,
+          targetPlatform,
+          mustInclude: mustInclude.trim(),
+        });
         activeJobId = job.id;
         setJobId(job.id);
       }
@@ -814,14 +935,14 @@ function NewJobFormContent() {
             {statusCopy}
           </Badge>
         </div>
-        <p className="font-mono text-[10px] text-[#666862]">Source-only editing · originals stay on this server</p>
+        <p className="font-mono text-[10px] text-[#666862]">Source-led editing · originals stay on this server</p>
       </header>
 
       <main className="min-h-0 flex-1 touch-pan-y space-y-10 overflow-y-auto overscroll-contain px-4 py-8">
         <section className="space-y-3">
           <h1 className="text-2xl font-bold tracking-tight text-[#173F5F]">Start a new edit</h1>
           <p className="text-sm leading-relaxed text-[#666862]">
-            Agents plan the edit. Your uploaded footage, photos, and audio are the only media used.
+            Agents plan the edit. Visuals and speech come only from your uploads; optional music comes from your approved local library.
           </p>
         </section>
 
@@ -868,10 +989,113 @@ function NewJobFormContent() {
                 id="project-brief"
                 maxLength={4000}
                 onChange={(event) => setBrief(event.currentTarget.value)}
-                placeholder="Describe the audience, key message, pacing, and must-keep moments…"
+                placeholder="Describe the audience, key message, tone and intended platform…"
                 value={brief}
               />
             </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-[#173F5F]" htmlFor="must-include">
+                MUST-INCLUDE POINTS
+              </label>
+              <Textarea
+                className="min-h-20 rounded-sm border-[#D7D9D3] bg-white text-[#20211F] shadow-none focus-visible:border-[#173F5F] focus-visible:ring-[#173F5F]/20 dark:bg-white dark:text-[#20211F]"
+                disabled={formLocked}
+                id="must-include"
+                maxLength={2000}
+                onChange={(event) => setMustInclude(event.currentTarget.value)}
+                placeholder="For example: include the price, launch date and final call to action."
+                value={mustInclude}
+              />
+            </div>
+            <fieldset className="space-y-3" disabled={formLocked}>
+              <legend className="text-xs font-bold text-[#173F5F]">TARGET LENGTH</legend>
+              <div className="grid grid-cols-4 gap-2">
+                {([20, 30, 45, 60] as const).map((duration) => (
+                  <label
+                    className={cn(
+                      "flex min-h-12 cursor-pointer items-center justify-center rounded-md bg-white font-mono text-xs font-bold",
+                      targetDuration === duration
+                        ? "border-2 border-[#173F5F] text-[#173F5F]"
+                        : "border border-[#D7D9D3] text-[#666862]",
+                      formLocked && "cursor-not-allowed opacity-60",
+                    )}
+                    key={duration}
+                  >
+                    <input
+                      checked={targetDuration === duration}
+                      className="sr-only"
+                      name="target-duration"
+                      onChange={() => setTargetDuration(duration)}
+                      type="radio"
+                      value={duration}
+                    />
+                    {duration} sec
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+            <fieldset className="space-y-3" disabled={formLocked}>
+              <legend className="text-xs font-bold text-[#173F5F]">EDITING STYLE</legend>
+              <div className="space-y-2">
+                {EDIT_STYLE_OPTIONS.map((option) => (
+                  <CreativeOptionCard
+                    description={option.description}
+                    disabled={formLocked}
+                    key={option.value}
+                    label={option.label}
+                    name="edit-style"
+                    onChange={() => setEditStyle(option.value)}
+                    selected={editStyle === option.value}
+                    value={option.value}
+                  />
+                ))}
+              </div>
+            </fieldset>
+            <fieldset className="space-y-3" disabled={formLocked}>
+              <legend className="text-xs font-bold text-[#173F5F]">BACKING MUSIC</legend>
+              <label className="block space-y-2 text-xs font-bold text-[#173F5F]" htmlFor="target-platform">
+                TARGET PLATFORM
+                <select
+                  className="h-12 w-full rounded-md border border-[#D7D9D3] bg-white px-3 text-sm text-[#20211F] shadow-none focus:border-[#173F5F] focus:outline-none focus:ring-2 focus:ring-[#173F5F]/20 disabled:opacity-60"
+                  disabled={formLocked}
+                  id="target-platform"
+                  onChange={(event) => {
+                    const selected = event.currentTarget.value as TargetPlatform;
+                    setTargetPlatform(selected);
+                    const hasCompatibleTrack = musicTracks.some(
+                      (track) =>
+                        track.allowed_platforms.includes("all_social")
+                        || track.allowed_platforms.includes(selected),
+                    );
+                    if (!hasCompatibleTrack) setMusicMode("none");
+                  }}
+                  value={targetPlatform}
+                >
+                  {PLATFORM_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
+              <div className="space-y-2">
+                {MUSIC_OPTIONS.map((option) => (
+                  <CreativeOptionCard
+                    description={option.description}
+                    disabled={formLocked || (option.value !== "none" && compatibleMusicCount === 0)}
+                    key={option.value}
+                    label={option.label}
+                    name="music-mode"
+                    onChange={() => setMusicMode(option.value)}
+                    selected={musicMode === option.value}
+                    value={option.value}
+                  />
+                ))}
+              </div>
+              <p className="text-xs leading-relaxed text-[#666862]">
+                {compatibleMusicCount > 0
+                  ? `${compatibleMusicCount} compatible rights-recorded ${compatibleMusicCount === 1 ? "track" : "tracks"} available.`
+                  : "No compatible tracks are imported yet, so this job will remain voice-only."}
+              </p>
+            </fieldset>
           </div>
         </section>
 
@@ -895,7 +1119,7 @@ function NewJobFormContent() {
             <span className="space-y-1">
               <span className="block text-sm font-bold text-[#173F5F]">Allow AI-written caption copy</span>
               <span className="block text-xs leading-relaxed text-[#666862]">
-                This affects text only. Uploaded visuals and audio remain the only media used.
+                This affects text only. Visuals and speech remain grounded in your uploads.
               </span>
             </span>
             <span className="flex size-11 shrink-0 items-center justify-end">

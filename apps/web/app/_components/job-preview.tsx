@@ -122,7 +122,7 @@ export function JobPreview({ jobId }: { readonly jobId: string }) {
       <div className="mx-auto w-full max-w-lg">
         <header className="border-b border-[#D7D9D3] pb-4">
           <p className="text-sm font-bold tracking-tight text-[#173F5F]">GM Studio</p>
-          <p className="mt-1 font-mono text-[10px] text-[#666862]">Job {jobId.slice(0, 8)} · source-only edit</p>
+          <p className="mt-1 font-mono text-[10px] text-[#666862]">Job {jobId.slice(0, 8)} · source-led edit</p>
         </header>
 
         <section aria-live="polite" className="py-8">
@@ -149,7 +149,7 @@ export function JobPreview({ jobId }: { readonly jobId: string }) {
                 </a>
               </Button>
               <p className="text-center font-mono text-[10px] leading-relaxed text-[#666862]">
-                Version {run?.version} · edited from your uploaded source media only
+                Version {run?.version} · {review?.job.target_duration_seconds ?? 60}s target · {review?.job.edit_style ?? "legacy"} style
               </p>
               {run ? (
                 <JobReviewControls

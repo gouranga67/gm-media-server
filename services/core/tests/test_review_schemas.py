@@ -2,10 +2,17 @@ import unittest
 
 from pydantic import ValidationError
 
-from app.schemas import RevisionCreate
+from app.schemas import JobCreate, RevisionCreate
 
 
 class RevisionSchemaTests(unittest.TestCase):
+    def test_new_job_has_safe_creative_defaults(self) -> None:
+        job = JobCreate()
+
+        self.assertEqual(job.target_duration_seconds, 45)
+        self.assertEqual(job.edit_style.value, "energetic")
+        self.assertEqual(job.music_mode.value, "none")
+        self.assertEqual(job.target_platform.value, "all_social")
     def test_requires_feedback_or_caption_correction(self) -> None:
         with self.assertRaises(ValidationError):
             RevisionCreate()

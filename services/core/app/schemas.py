@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -14,6 +14,27 @@ class PrivacyMode(StrEnum):
 
 class Recipe(StrEnum):
     TALKING_HEAD = "talking_head"
+
+
+class EditStyle(StrEnum):
+    CLEAN = "clean"
+    ENERGETIC = "energetic"
+    CALM = "calm"
+
+
+class MusicMode(StrEnum):
+    NONE = "none"
+    SUBTLE = "subtle"
+    PRESENT = "present"
+
+
+class TargetPlatform(StrEnum):
+    ALL_SOCIAL = "all_social"
+    FACEBOOK = "facebook"
+    INSTAGRAM = "instagram"
+    LINKEDIN = "linkedin"
+    TIKTOK = "tiktok"
+    YOUTUBE = "youtube"
 
 
 class ProjectCreate(BaseModel):
@@ -39,6 +60,16 @@ class ProjectResponse(BaseModel):
 class JobCreate(BaseModel):
     id: UUID | None = None
     recipe: Recipe = Recipe.TALKING_HEAD
+    target_duration_seconds: Literal[20, 30, 45, 60] = 45
+    edit_style: EditStyle = EditStyle.ENERGETIC
+    music_mode: MusicMode = MusicMode.NONE
+    target_platform: TargetPlatform = TargetPlatform.ALL_SOCIAL
+    must_include: str = Field(default="", max_length=2000)
+
+    @field_validator("must_include")
+    @classmethod
+    def normalize_must_include(cls, value: str) -> str:
+        return " ".join(value.split())
 
 
 class JobResponse(BaseModel):
@@ -49,6 +80,11 @@ class JobResponse(BaseModel):
     recipe: Recipe
     status: str
     revision: int
+    target_duration_seconds: int | None = None
+    edit_style: EditStyle | None = None
+    music_mode: MusicMode | None = None
+    target_platform: TargetPlatform | None = None
+    must_include: str = ""
     created_at: datetime
     updated_at: datetime
 
@@ -99,6 +135,23 @@ class AssetAnalysisResponse(BaseModel):
     completed_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class MusicTrackResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    title: str
+    artist: str
+    duration_seconds: float
+    mood: str
+    energy: str
+    bpm: float | None = None
+    license_name: str
+    license_source_url: str
+    allowed_platforms: list[str] = Field(default_factory=list)
+    attribution: str
+    created_at: datetime
 
 
 class EditRunResponse(BaseModel):

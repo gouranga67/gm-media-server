@@ -9,25 +9,35 @@ const clip = z
     source_in: z.number().nonnegative(),
     source_out: z.number().positive(),
     crop: z.literal("center_fill"),
-    transition: z.literal("cut"),
+    transition: z.enum(["cut", "dip_to_black"]),
+    visual_preset: z.enum([
+      "standard",
+      "punch_in",
+      "strong_punch_in",
+      "slow_push_in",
+      "slow_pull_out",
+    ]),
   })
   .strict();
 
 const plan = z
   .object({
-    schema_version: z.literal("1.0"),
+    schema_version: z.literal("1.1"),
     recipe: z.literal("talking_head"),
     clips: z.array(clip).min(1).max(24),
     caption_style: z.literal("clean_blue_v1"),
     audio_preset: z.literal("spoken_voice_v1"),
     end_card: z.literal("none"),
     editorial_summary: z.string().min(1).max(600),
+    post_copy: z.string().max(2200),
+    music_track_id: z.string().uuid().nullable(),
+    music_mix: z.enum(["none", "subtle", "present"]),
   })
   .strict();
 
 export default defineTool({
   description:
-    "Submit exact source-only cuts for a job after inspecting it. The server independently rejects invented assets, invalid ranges, overlap, unsupported effects, and previews over 60 seconds.",
+    "Submit exact source-only cuts and bounded visual presets for a job after inspecting it. Music may reference only a rights-approved track returned by inspect_job. The server independently validates duration, assets, ranges, motion, transitions, music, and copy permissions.",
   inputSchema: z.object({ jobId: z.string().uuid(), plan }).strict(),
   async execute({ jobId, plan: document }) {
     return mediaApi(`/api/v1/jobs/${encodeURIComponent(jobId)}/edit-plans`, {

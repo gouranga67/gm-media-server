@@ -119,7 +119,7 @@ export function JobReviewControls({
           </p>
           <h2 className="mt-2 text-xl font-bold text-[#173F5F]">Download the finished reel</h2>
           <p className="mt-2 text-sm leading-relaxed text-[#666862]">
-            Version {finalExport.version} · 1080 × 1920 · source media only
+            Version {finalExport.version} · 1080 × 1920 · non-synthetic media only
           </p>
         </div>
         <Button asChild className="h-14 w-full bg-[#173F5F] text-white hover:bg-[#12344F]">

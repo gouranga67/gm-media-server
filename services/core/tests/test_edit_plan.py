@@ -84,6 +84,70 @@ class EditPlanValidationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "exceeds 60 seconds"):
             validate_edit_plan(self.document, self.assets)
 
+    def test_new_visual_fields_remain_backward_compatible(self) -> None:
+        plan = validate_edit_plan(self.document, self.assets)
+
+        self.assertEqual(plan.clips[0].visual_preset, "standard")
+        self.assertEqual(plan.music_mix, "none")
+
+    def test_enforces_requested_duration_when_footage_is_available(self) -> None:
+        self.assets[0]["duration_seconds"] = 60.0
+        with self.assertRaisesRegex(ValueError, "below the 36.000s floor"):
+            validate_edit_plan(
+                self.document,
+                self.assets,
+                creative_direction={"target_duration_seconds": 45},
+            )
+
+    def test_rejects_short_animated_zoom(self) -> None:
+        self.document["clips"][0].update(
+            source_in=1.0,
+            source_out=2.5,
+            visual_preset="slow_push_in",
+        )
+        with self.assertRaisesRegex(ValueError, "at least 2 seconds"):
+            validate_edit_plan(self.document, self.assets)
+
+    def test_calm_style_rejects_strong_punch_in(self) -> None:
+        self.document["clips"][0]["visual_preset"] = "strong_punch_in"
+        with self.assertRaisesRegex(ValueError, "calm style"):
+            validate_edit_plan(
+                self.document,
+                self.assets,
+                creative_direction={"edit_style": "calm"},
+            )
+
+    def test_energetic_style_requires_visual_emphasis(self) -> None:
+        self.document["clips"][0].update(source_in=0, source_out=10)
+        with self.assertRaisesRegex(ValueError, "requires at least one"):
+            validate_edit_plan(
+                self.document,
+                self.assets,
+                creative_direction={"edit_style": "energetic"},
+            )
+
+    def test_music_must_come_from_approved_library(self) -> None:
+        track_id = uuid4()
+        self.document.update(
+            music_track_id=str(track_id),
+            music_mix="subtle",
+        )
+        plan = validate_edit_plan(
+            self.document,
+            self.assets,
+            creative_direction={"music_mode": "subtle"},
+            music_tracks=[{"track_id": str(track_id)}],
+        )
+        self.assertEqual(plan.music_track_id, track_id)
+
+        with self.assertRaisesRegex(ValueError, "not in the approved library"):
+            validate_edit_plan(
+                self.document,
+                self.assets,
+                creative_direction={"music_mode": "subtle"},
+                music_tracks=[],
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

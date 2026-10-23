@@ -8,7 +8,7 @@ export const metadata: Metadata = {
     default: "GM Studio",
     template: "%s · GM Studio",
   },
-  description: "Private, source-only media editing on your GM server.",
+  description: "Private, source-led media editing on your GM server.",
   applicationName: "GM Studio",
   appleWebApp: {
     capable: true,

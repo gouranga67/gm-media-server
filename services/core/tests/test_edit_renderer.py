@@ -5,7 +5,13 @@ from pathlib import Path
 from uuid import uuid4
 
 from app.edit_plan import TalkingHeadEditPlan
-from app.edit_renderer import _create_delivery_package, caption_events, render_ass
+from app.edit_renderer import (
+    _clip_video_filter,
+    _create_delivery_package,
+    _ffmpeg_filter,
+    caption_events,
+    render_ass,
+)
 
 
 class CaptionMappingTests(unittest.TestCase):
@@ -103,6 +109,59 @@ class CaptionMappingTests(unittest.TestCase):
         self.assertIn("PlayResX: 1080", ass)
         self.assertIn("PlayResY: 1920", ass)
         self.assertIn("GMBlue,Arial,68", ass)
+
+    def test_builds_bounded_push_in_filter(self) -> None:
+        result = _clip_video_filter(
+            index=0,
+            duration=4.0,
+            visual_preset="slow_push_in",
+            fade_in=False,
+            fade_out=False,
+            width=540,
+            height=960,
+            frames_per_second=30,
+        )
+
+        self.assertIn("zoompan", result)
+        self.assertIn("min(1+0.12*on/119,1.12)", result)
+
+    def test_music_filter_ducks_approved_track_under_voice(self) -> None:
+        asset_id = uuid4()
+        plan = TalkingHeadEditPlan.model_validate(
+            {
+                "schema_version": "1.1",
+                "recipe": "talking_head",
+                "clips": [
+                    {
+                        "asset_id": str(asset_id),
+                        "source_in": 0,
+                        "source_out": 4,
+                        "crop": "center_fill",
+                        "transition": "cut",
+                        "visual_preset": "punch_in",
+                    }
+                ],
+                "caption_style": "clean_blue_v1",
+                "audio_preset": "spoken_voice_v1",
+                "end_card": "none",
+                "editorial_summary": "Music test.",
+                "post_copy": "",
+                "music_track_id": str(uuid4()),
+                "music_mix": "subtle",
+            }
+        )
+
+        result = _ffmpeg_filter(
+            plan,
+            Path("/tmp/captions.ass"),
+            width=540,
+            height=960,
+            frames_per_second=30,
+            music_input_index=1,
+        )
+
+        self.assertIn("sidechaincompress", result)
+        self.assertIn("volume=-30dB", result)
 
     def test_delivery_package_contains_only_named_outputs(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

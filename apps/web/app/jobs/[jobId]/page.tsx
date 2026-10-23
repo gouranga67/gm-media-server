@@ -4,7 +4,7 @@ import { JobPreview } from "@/app/_components/job-preview";
 
 export const metadata: Metadata = {
   title: "Edit preview",
-  description: "Review and download a source-only GM Studio edit.",
+  description: "Review and download a source-led GM Studio edit.",
 };
 
 export default async function JobPreviewPage({

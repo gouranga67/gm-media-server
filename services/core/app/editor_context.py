@@ -59,6 +59,13 @@ def build_editor_context(
             """,
             (job_id,),
         ).fetchall()
+        music_rows = database.execute(
+            """
+            SELECT * FROM music_tracks
+            WHERE active = true AND commercial_use = true
+            ORDER BY mood, energy, title
+            """
+        ).fetchall()
 
     assets: list[dict[str, Any]] = []
     for row in rows:
@@ -95,6 +102,31 @@ def build_editor_context(
         asset["asset_status"] == "ready" and asset["analysis_status"] == "ready"
         for asset in assets
     )
+    music_library: list[dict[str, Any]] = []
+    target_platform = job["target_platform"]
+    for row in music_rows:
+        allowed_platforms = row["allowed_platforms"]
+        if target_platform is None or not isinstance(allowed_platforms, list):
+            continue
+        if "all_social" not in allowed_platforms and target_platform not in allowed_platforms:
+            continue
+        track = {
+            "track_id": str(row["id"]),
+            "title": row["title"],
+            "artist": row["artist"],
+            "duration_seconds": row["duration_seconds"],
+            "mood": row["mood"],
+            "energy": row["energy"],
+            "bpm": float(row["bpm"]) if row["bpm"] is not None else None,
+            "license_name": row["license_name"],
+            "license_source_url": row["license_source_url"],
+            "license_proof_recorded": bool(row["license_proof"]),
+            "allowed_platforms": row["allowed_platforms"],
+            "attribution": row["attribution"],
+        }
+        if include_internal_paths:
+            track["_storage_key"] = row["storage_key"]
+        music_library.append(track)
     return {
         "job": {
             "id": str(job["id"]),
@@ -102,6 +134,11 @@ def build_editor_context(
             "recipe": job["recipe"],
             "status": job["status"],
             "revision": job["revision"],
+            "target_duration_seconds": job["target_duration_seconds"],
+            "edit_style": job["edit_style"],
+            "music_mode": job["music_mode"],
+            "target_platform": job["target_platform"],
+            "must_include": job["must_include"],
         },
         "project": {
             "name": job["project_name"],
@@ -111,6 +148,7 @@ def build_editor_context(
         },
         "ready_for_editing": ready,
         "assets": assets,
+        "music_library": music_library,
         "content_policy": {
             "source_derived_only": True,
             "synthetic_image": False,

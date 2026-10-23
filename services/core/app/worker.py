@@ -311,6 +311,8 @@ def process_one_edit(state: WorkerState) -> bool:
                 plan_row["document"],
                 context["assets"],
                 allow_post_copy=bool(context["project"]["ai_copy_allowed"]),
+                creative_direction=context["job"],
+                music_tracks=context["music_library"],
             )
             provider = str(plan_row["provider"])
             model = str(plan_row["model"])
@@ -339,6 +341,8 @@ def process_one_edit(state: WorkerState) -> bool:
                 proposed.model_dump(mode="json"),
                 context["assets"],
                 allow_post_copy=bool(context["project"]["ai_copy_allowed"]),
+                creative_direction=context["job"],
+                music_tracks=context["music_library"],
             )
             provider = provenance["provider"]
             model = provenance["model"]
@@ -474,6 +478,8 @@ def process_one_final_export(state: WorkerState) -> bool:
             plan_row["document"],
             context["assets"],
             allow_post_copy=bool(context["project"]["ai_copy_allowed"]),
+            creative_direction=context["job"],
+            music_tracks=context["music_library"],
         )
         approved_at = export.get("approved_at")
         if approved_at is None:

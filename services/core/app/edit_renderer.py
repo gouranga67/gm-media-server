@@ -14,6 +14,7 @@ from app.media_analysis import (
     generate_file,
     probe_media,
     render_webvtt,
+    resolve_source,
     run_command,
 )
 
@@ -139,37 +140,114 @@ def _atomic_text(path: Path, content: str) -> None:
         raise
 
 
+def _clip_video_filter(
+    *,
+    index: int,
+    duration: float,
+    visual_preset: str,
+    fade_in: bool,
+    fade_out: bool,
+    width: int,
+    height: int,
+    frames_per_second: int,
+) -> str:
+    chain = (
+        f"[{index}:v:0]scale={width}:{height}:force_original_aspect_ratio=increase,"
+        f"crop={width}:{height},setsar=1"
+    )
+    total_frames = max(1, round(duration * frames_per_second) - 1)
+    if visual_preset == "punch_in":
+        zoom = "1.12"
+    elif visual_preset == "strong_punch_in":
+        zoom = "1.18"
+    elif visual_preset == "slow_push_in":
+        zoom = f"min(1+0.12*on/{total_frames},1.12)"
+    elif visual_preset == "slow_pull_out":
+        zoom = f"max(1.12-0.12*on/{total_frames},1)"
+    else:
+        zoom = ""
+    if zoom:
+        chain += (
+            f",zoompan=z='{zoom}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
+            f":d=1:s={width}x{height}:fps={frames_per_second}"
+        )
+    else:
+        chain += f",fps={frames_per_second}"
+    transition_seconds = min(0.18, duration / 4)
+    if fade_in:
+        chain += f",fade=t=in:st=0:d={transition_seconds:.3f}"
+    if fade_out:
+        chain += f",fade=t=out:st={duration - transition_seconds:.3f}:d={transition_seconds:.3f}"
+    return chain + f"[v{index}]"
+
+
 def _ffmpeg_filter(
-    clip_count: int,
+    plan: TalkingHeadEditPlan,
     captions_path: Path,
     *,
     width: int,
     height: int,
     frames_per_second: int,
+    music_input_index: int | None = None,
 ) -> str:
     filters: list[str] = []
     concat_inputs: list[str] = []
-    for index in range(clip_count):
+    for index, clip in enumerate(plan.clips):
+        duration = float(clip.source_out - clip.source_in)
+        fade_in = index > 0 and clip.transition == "dip_to_black"
+        fade_out = index + 1 < len(plan.clips) and plan.clips[index + 1].transition == "dip_to_black"
         filters.append(
-            f"[{index}:v:0]scale={width}:{height}:"
-            "force_original_aspect_ratio=increase,"
-            f"crop={width}:{height},setsar=1,fps={frames_per_second}[v{index}]"
+            _clip_video_filter(
+                index=index,
+                duration=duration,
+                visual_preset=clip.visual_preset,
+                fade_in=fade_in,
+                fade_out=fade_out,
+                width=width,
+                height=height,
+                frames_per_second=frames_per_second,
+            )
         )
-        filters.append(
-            f"[{index}:a:0]aresample=48000,asetpts=PTS-STARTPTS[a{index}]"
-        )
+        audio = f"[{index}:a:0]aresample=48000,asetpts=PTS-STARTPTS"
+        transition_seconds = min(0.18, duration / 4)
+        if fade_in:
+            audio += f",afade=t=in:st=0:d={transition_seconds:.3f}"
+        if fade_out:
+            audio += (
+                f",afade=t=out:st={duration - transition_seconds:.3f}"
+                f":d={transition_seconds:.3f}"
+            )
+        filters.append(audio + f"[a{index}]")
         concat_inputs.extend((f"[v{index}]", f"[a{index}]"))
     filters.append(
-        "".join(concat_inputs) + f"concat=n={clip_count}:v=1:a=1[vcat][acat]"
+        "".join(concat_inputs) + f"concat=n={len(plan.clips)}:v=1:a=1[vcat][acat]"
     )
     safe_caption_path = str(captions_path).replace("\\", r"\\").replace(":", r"\:").replace("'", r"\'")
     filters.append(f"[vcat]subtitles=filename='{safe_caption_path}'[vout]")
-    filters.append("[acat]loudnorm=I=-16:LRA=11:TP=-1.5[aout]")
+    if music_input_index is None:
+        filters.append("[acat]loudnorm=I=-16:LRA=11:TP=-1.5[aout]")
+    else:
+        total_duration = sum(float(clip.source_out - clip.source_in) for clip in plan.clips)
+        fade_out_start = max(0.0, total_duration - 1.5)
+        volume = "-30dB" if plan.music_mix == "subtle" else "-24dB"
+        filters.append("[acat]loudnorm=I=-16:LRA=11:TP=-1.5,asplit=2[voice][key]")
+        filters.append(
+            f"[{music_input_index}:a:0]aresample=48000,atrim=0:{total_duration:.3f},"
+            f"asetpts=PTS-STARTPTS,afade=t=in:st=0:d=1.000,"
+            f"afade=t=out:st={fade_out_start:.3f}:d=1.500,volume={volume}[music]"
+        )
+        filters.append(
+            "[music][key]sidechaincompress=threshold=0.020:ratio=10:attack=15:release=350[ducked]"
+        )
+        filters.append(
+            "[voice][ducked]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]"
+        )
     return ";".join(filters)
 
 
 def _render_video(
     sources: list[tuple[Path, float, float]],
+    plan: TalkingHeadEditPlan,
     captions_path: Path,
     destination: Path,
     timeout: int,
@@ -178,21 +256,25 @@ def _render_video(
     height: int = PREVIEW_HEIGHT,
     frames_per_second: int = PREVIEW_FPS,
     final_quality: bool = False,
+    music_source: Path | None = None,
 ) -> str:
     common = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-y"]
     for source, source_in, source_out in sources:
         common.extend(
             ["-ss", f"{source_in:.3f}", "-t", f"{source_out - source_in:.3f}", "-i", str(source)]
         )
+    if music_source is not None:
+        common.extend(["-stream_loop", "-1", "-i", str(music_source)])
     common.extend(
         [
             "-filter_complex",
             _ffmpeg_filter(
-                len(sources),
+                plan,
                 captions_path,
                 width=width,
                 height=height,
                 frames_per_second=frames_per_second,
+                music_input_index=len(sources) if music_source is not None else None,
             ),
             "-map",
             "[vout]",
@@ -259,6 +341,29 @@ def _render_video(
         temporary.unlink(missing_ok=True)
 
 
+def _selected_music(
+    context: dict[str, Any],
+    plan: TalkingHeadEditPlan,
+    settings: Settings,
+) -> tuple[Path | None, dict[str, Any] | None]:
+    if plan.music_track_id is None:
+        return None, None
+    track_id = str(plan.music_track_id)
+    track = next(
+        (
+            candidate
+            for candidate in context.get("music_library", [])
+            if str(candidate.get("track_id")) == track_id
+        ),
+        None,
+    )
+    if track is None or not isinstance(track.get("_storage_key"), str):
+        raise RuntimeError("the approved music track is unavailable to the renderer")
+    public_track = {key: value for key, value in track.items() if not key.startswith("_")}
+    public_track["mix"] = plan.music_mix
+    return resolve_source(settings.media_root, track["_storage_key"]), public_track
+
+
 def render_edit_preview(
     context: dict[str, Any],
     plan: TalkingHeadEditPlan,
@@ -279,6 +384,7 @@ def render_edit_preview(
         )
         for clip in plan.clips
     ]
+    music_source, music_metadata = _selected_music(context, plan, settings)
     project_id = str(context["job"]["project_id"])
     job_id = str(context["job"]["id"])
     output_directory = settings.media_root / "exports" / project_id / job_id / f"v{version}"
@@ -288,7 +394,14 @@ def render_edit_preview(
 
     events = caption_events(plan, context["assets"], caption_corrections)
     _atomic_text(captions_path, render_ass(events))
-    encoder = _render_video(sources, captions_path, preview_path, settings.analysis_command_timeout_seconds)
+    encoder = _render_video(
+        sources,
+        plan,
+        captions_path,
+        preview_path,
+        settings.analysis_command_timeout_seconds,
+        music_source=music_source,
+    )
 
     document = plan.model_dump(mode="json")
     manifest = {
@@ -298,6 +411,14 @@ def render_edit_preview(
         "recipe": "talking_head",
         "edit_plan_sha256": document_sha256(document),
         "editor": {"provider": provider, "model": model},
+        "creative_direction": {
+            "target_duration_seconds": context["job"].get("target_duration_seconds"),
+            "edit_style": context["job"].get("edit_style"),
+            "music_mode": context["job"].get("music_mode"),
+            "target_platform": context["job"].get("target_platform"),
+            "must_include": context["job"].get("must_include"),
+        },
+        "music": music_metadata,
         "caption_corrections": caption_corrections or [],
         "render": {
             "width": PREVIEW_WIDTH,
@@ -313,6 +434,8 @@ def render_edit_preview(
                 "sha256": inventory[str(clip.asset_id)].get("sha256"),
                 "source_in": clip.source_in,
                 "source_out": clip.source_out,
+                "transition": clip.transition,
+                "visual_preset": clip.visual_preset,
             }
             for clip in plan.clips
         ],
@@ -322,7 +445,8 @@ def render_edit_preview(
         },
         "capacity_at_start": capacity,
         "content_policy": {
-            "source_derived_only": True,
+            "source_derived_only": music_metadata is None,
+            "approved_library_music": music_metadata is not None,
             "synthetic_image": False,
             "synthetic_video": False,
             "synthetic_voice": False,
@@ -400,6 +524,7 @@ def render_final_delivery(
         )
         for clip in plan.clips
     ]
+    music_source, music_metadata = _selected_music(context, plan, settings)
     project_id = str(context["job"]["project_id"])
     job_id = str(context["job"]["id"])
     output_directory = settings.media_root / "deliveries" / project_id / job_id / f"v{version}"
@@ -419,6 +544,7 @@ def render_final_delivery(
     _atomic_text(captions_vtt_path, render_webvtt(events))
     encoder = _render_video(
         sources,
+        plan,
         captions_ass_path,
         video_path,
         settings.analysis_command_timeout_seconds,
@@ -426,6 +552,7 @@ def render_final_delivery(
         height=FINAL_HEIGHT,
         frames_per_second=FINAL_FPS,
         final_quality=True,
+        music_source=music_source,
     )
     technical_probe = probe_media(video_path, settings.analysis_command_timeout_seconds)
     video_stream = next(
@@ -484,6 +611,14 @@ def render_final_delivery(
         "recipe": "talking_head",
         "edit_plan_sha256": document_sha256(document),
         "editor": {"provider": provider, "model": model},
+        "creative_direction": {
+            "target_duration_seconds": context["job"].get("target_duration_seconds"),
+            "edit_style": context["job"].get("edit_style"),
+            "music_mode": context["job"].get("music_mode"),
+            "target_platform": context["job"].get("target_platform"),
+            "must_include": context["job"].get("must_include"),
+        },
+        "music": music_metadata,
         "tools": {
             "gm_studio_core": "0.1.0",
             "ffmpeg": _ffmpeg_version(settings.analysis_command_timeout_seconds),
@@ -504,6 +639,8 @@ def render_final_delivery(
                 "sha256": inventory[str(clip.asset_id)].get("sha256"),
                 "source_in": clip.source_in,
                 "source_out": clip.source_out,
+                "transition": clip.transition,
+                "visual_preset": clip.visual_preset,
             }
             for clip in plan.clips
         ],
@@ -521,7 +658,8 @@ def render_final_delivery(
         },
         "capacity_at_start": capacity,
         "content_policy": {
-            "source_derived_only": True,
+            "source_derived_only": music_metadata is None,
+            "approved_library_music": music_metadata is not None,
             "synthetic_image": False,
             "synthetic_video": False,
             "synthetic_voice": False,

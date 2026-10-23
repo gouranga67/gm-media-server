@@ -1,4 +1,8 @@
 export type PrivacyMode = "hybrid" | "text_only" | "local_only";
+export type EditStyle = "clean" | "energetic" | "calm";
+export type MusicMode = "none" | "subtle" | "present";
+export type TargetDuration = 20 | 30 | 45 | 60;
+export type TargetPlatform = "all_social" | "facebook" | "instagram" | "linkedin" | "tiktok" | "youtube";
 
 export type Project = {
   readonly id: string;
@@ -16,6 +20,11 @@ export type MediaJob = {
   readonly recipe: "talking_head";
   readonly status: string;
   readonly revision: number;
+  readonly target_duration_seconds: TargetDuration | null;
+  readonly edit_style: EditStyle | null;
+  readonly music_mode: MusicMode | null;
+  readonly target_platform: TargetPlatform | null;
+  readonly must_include: string;
   readonly created_at: string;
   readonly updated_at: string;
 };
@@ -32,6 +41,21 @@ export type Asset = {
   readonly sha256: string | null;
   readonly created_at: string;
   readonly updated_at: string;
+};
+
+export type MusicTrack = {
+  readonly id: string;
+  readonly title: string;
+  readonly artist: string;
+  readonly duration_seconds: number;
+  readonly mood: string;
+  readonly energy: "low" | "medium" | "high";
+  readonly bpm: number | null;
+  readonly license_name: string;
+  readonly license_source_url: string;
+  readonly allowed_platforms: readonly TargetPlatform[];
+  readonly attribution: string;
+  readonly created_at: string;
 };
 
 export type EditRun = {
@@ -128,10 +152,28 @@ export function createProject(input: {
   });
 }
 
-export function createTalkingHeadJob(projectId: string, id?: string) {
+export function createTalkingHeadJob(
+  projectId: string,
+  input: {
+    readonly id?: string;
+    readonly targetDurationSeconds: TargetDuration;
+    readonly editStyle: EditStyle;
+    readonly musicMode: MusicMode;
+    readonly targetPlatform: TargetPlatform;
+    readonly mustInclude: string;
+  },
+) {
   return apiRequest<MediaJob>(`projects/${projectId}/jobs`, {
     method: "POST",
-    body: JSON.stringify({ id, recipe: "talking_head" }),
+    body: JSON.stringify({
+      id: input.id,
+      recipe: "talking_head",
+      target_duration_seconds: input.targetDurationSeconds,
+      edit_style: input.editStyle,
+      music_mode: input.musicMode,
+      target_platform: input.targetPlatform,
+      must_include: input.mustInclude,
+    }),
   });
 }
 
@@ -181,6 +223,10 @@ export function registerAsset(projectId: string, jobId: string, file: File, id?:
 
 export function getAsset(assetId: string) {
   return apiRequest<Asset>(`assets/${assetId}`, { cache: "no-store" });
+}
+
+export function getMusicTracks() {
+  return apiRequest<readonly MusicTrack[]>("music-tracks", { cache: "no-store" });
 }
 
 export function requestPreview(jobId: string) {

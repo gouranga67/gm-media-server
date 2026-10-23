@@ -111,6 +111,8 @@ def submit_edit_plan(job_id: UUID, payload: TalkingHeadEditPlan) -> dict[str, An
             document,
             context["assets"],
             allow_post_copy=bool(context["project"]["ai_copy_allowed"]),
+            creative_direction=context["job"],
+            music_tracks=context["music_library"],
         )
     except (ValueError, ValidationError) as error:
         raise HTTPException(status_code=422, detail=str(error)) from error

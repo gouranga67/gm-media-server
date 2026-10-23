@@ -15,6 +15,7 @@ This is the working plan for turning the Lenovo into a private media-editing app
 | 4 | Local ingest and media analysis | Complete |
 | 5 | Bounded editor agent and deterministic reel rendering | Complete |
 | 6 | Phone review, revisions, delivery, and provenance | In progress |
+| 6A | Creative duration, motion, transitions, and licensed music | In progress |
 | 7 | Appliance hardening, backup, and recovery | Not started |
 
 ## Phase 0 — inventory and guardrails
@@ -139,6 +140,22 @@ Current build checkpoint (2026-10-23): the source tree contains transcript-valid
 Acceptance helper after deployment: `python3 scripts/verify-phase6.py` selects a ready preview, requests one bounded revision, approves the new version, waits for the final GPU render, and verifies the MP4, captions, cover, package, provenance, and source-only policy.
 
 Exit check: from a phone, upload a clip, request a reel, approve or revise it, and download a technically valid final package.
+
+## Phase 6A — bounded creative editing grammar
+
+**Purpose:** make talking-head reels feel intentionally edited while keeping every model decision inside a small, auditable vocabulary.
+
+Build:
+
+- Phone controls for 20/30/45/60-second targets, must-include points, target platform, Clean/Energetic/Calm styles, and optional music level.
+- EDL 1.1 presets for standard framing, two bounded punch-ins, slow push/pull, hard cuts, and short dip-to-black transitions.
+- Trusted FFmpeg implementation of every preset; models cannot submit expressions, filters, paths, zoom factors, or mix levels.
+- A local music catalogue requiring an operator-supplied file, SHA-256, licence URL and proof record, commercial-use confirmation, attribution, and explicit platform scope.
+- Automatic speech normalization, music trimming/fades, and side-chain ducking. Music remains off by default and the agent cannot browse for or download tracks.
+
+Current build checkpoint (2026-10-23): implementation and static checks are in progress. Existing EDL 1.0 plans and jobs remain valid; creative constraints apply to newly directed jobs without rewriting historical versions.
+
+Exit check: from the phone, request a 45-second energetic reel from sufficiently long footage, observe bounded visual emphasis and at least one transition, and confirm a rights-approved test track ducks under speech only when music is explicitly enabled.
 
 ## Phase 7 — appliance hardening and recovery
 

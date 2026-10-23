@@ -12,12 +12,29 @@ from app.schemas import (
     AssetResponse,
     JobCreate,
     JobResponse,
+    MusicTrackResponse,
     ProjectCreate,
     ProjectResponse,
 )
 
 
 router = APIRouter(prefix="/api/v1", tags=["projects"])
+
+
+@router.get("/music-tracks", response_model=list[MusicTrackResponse])
+def list_music_tracks() -> list[dict[str, Any]]:
+    with connection() as database:
+        rows = database.execute(
+            """
+            SELECT id, title, artist, duration_seconds, mood, energy, bpm,
+                   license_name, license_source_url, allowed_platforms,
+                   attribution, created_at
+            FROM music_tracks
+            WHERE active = true AND commercial_use = true AND synthetic_media = false
+            ORDER BY mood, energy, title
+            """
+        ).fetchall()
+    return list(rows)
 
 
 @router.post("/projects", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
@@ -102,18 +119,38 @@ def create_job(project_id: UUID, payload: JobCreate) -> dict[str, Any]:
         with connection() as database:
             row = database.execute(
                 """
-                INSERT INTO jobs (id, project_id, recipe)
-                VALUES (%s, %s, %s)
+                INSERT INTO jobs (
+                    id, project_id, recipe, target_duration_seconds,
+                    edit_style, music_mode, target_platform, must_include
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING *
                 """,
-                (job_id, project_id, payload.recipe.value),
+                (
+                    job_id,
+                    project_id,
+                    payload.recipe.value,
+                    payload.target_duration_seconds,
+                    payload.edit_style.value,
+                    payload.music_mode.value,
+                    payload.target_platform.value,
+                    payload.must_include,
+                ),
             ).fetchone()
     except ForeignKeyViolation as error:
         raise HTTPException(status_code=404, detail="project not found") from error
     except UniqueViolation:
         with connection() as database:
             row = database.execute("SELECT * FROM jobs WHERE id = %s", (job_id,)).fetchone()
-        if row is None or row["project_id"] != project_id or row["recipe"] != payload.recipe.value:
+        if row is None or (
+            row["project_id"] != project_id
+            or row["recipe"] != payload.recipe.value
+            or row["target_duration_seconds"] != payload.target_duration_seconds
+            or row["edit_style"] != payload.edit_style.value
+            or row["music_mode"] != payload.music_mode.value
+            or row["target_platform"] != payload.target_platform.value
+            or row["must_include"] != payload.must_include
+        ):
             raise HTTPException(status_code=409, detail="job ID is already in use") from None
     assert row is not None
     return row

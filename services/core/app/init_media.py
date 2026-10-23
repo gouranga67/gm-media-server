@@ -12,6 +12,7 @@ MEDIA_DIRECTORIES = (
     "previews",
     "exports",
     "templates",
+    "music",
     "quarantine",
 )
 

@@ -54,23 +54,64 @@ def find_ready_job() -> tuple[str, dict]:
     raise RuntimeError("no job with fully analyzed video and audio is available")
 
 
-def plan_for(asset_id: str, duration: float) -> dict:
+def plan_for(context: dict, invented_asset_id: str | None = None) -> dict:
+    assets = [
+        asset
+        for asset in context["assets"]
+        if asset.get("has_video") and asset.get("has_audio")
+    ]
+    requested = float(context["job"].get("target_duration_seconds") or 10)
+    total_available = sum(float(asset.get("duration_seconds") or 0) for asset in assets)
+    desired = min(requested, total_available, 60.0)
+    style = context["job"].get("edit_style") or "clean"
+    clips: list[dict] = []
+    remaining = desired
+    for asset in assets:
+        duration = float(asset.get("duration_seconds") or 0)
+        take = min(duration, remaining)
+        if take < 0.25:
+            continue
+        if not clips and style == "energetic" and take >= 4:
+            split = round(take / 2, 3)
+            ranges = [(0.0, split), (split, round(take, 3))]
+        else:
+            ranges = [(0.0, round(take, 3))]
+        for source_in, source_out in ranges:
+            clips.append(
+                {
+                    "asset_id": asset["asset_id"],
+                    "source_in": source_in,
+                    "source_out": source_out,
+                    "crop": "center_fill",
+                    "transition": "cut",
+                    "visual_preset": "standard",
+                }
+            )
+        remaining -= take
+        if remaining <= 0.01:
+            break
+    if not clips:
+        raise RuntimeError("no usable source range is available")
+    if invented_asset_id is not None:
+        clips[0]["asset_id"] = invented_asset_id
+    if style == "energetic" and desired >= 8:
+        clips[-1]["visual_preset"] = "punch_in"
+    if style == "energetic" and desired >= 20 and len(clips) > 1:
+        clips[1]["transition"] = "dip_to_black"
+    music_library = context.get("music_library", [])
+    music_mode = context["job"].get("music_mode") or "none"
+    selected_music = music_library[0]["track_id"] if music_mode != "none" and music_library else None
     return {
-        "schema_version": "1.0",
+        "schema_version": "1.1",
         "recipe": "talking_head",
-        "clips": [
-            {
-                "asset_id": asset_id,
-                "source_in": 0,
-                "source_out": round(min(duration, 10.0), 3),
-                "crop": "center_fill",
-                "transition": "cut",
-            }
-        ],
+        "clips": clips,
         "caption_style": "clean_blue_v1",
         "audio_preset": "spoken_voice_v1",
         "end_card": "none",
         "editorial_summary": "Phase 5 deterministic source-only rendering check.",
+        "post_copy": "",
+        "music_track_id": selected_music,
+        "music_mix": music_mode if selected_music else "none",
     }
 
 
@@ -83,7 +124,7 @@ def main() -> int:
     if duration < 0.25:
         raise RuntimeError("the selected source is too short for a preview")
 
-    invented = plan_for(str(uuid4()), duration)
+    invented = plan_for(context, str(uuid4()))
     invalid_status, invalid_payload = request(
         f"jobs/{job_id}/edit-plans", method="POST", payload=invented
     )
@@ -95,7 +136,7 @@ def main() -> int:
     valid_status, run = request(
         f"jobs/{job_id}/edit-plans",
         method="POST",
-        payload=plan_for(asset["asset_id"], duration),
+        payload=plan_for(context),
     )
     if valid_status != 202:
         raise RuntimeError(f"valid edit plan returned {valid_status}: {run}")

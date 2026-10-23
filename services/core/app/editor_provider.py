@@ -164,6 +164,10 @@ def _public_context(context: dict[str, Any], max_characters: int) -> dict[str, A
                 }
             )
         asset["transcript_segments"] = simplified
+    for track in public.get("music_library", []):
+        for key in list(track):
+            if key.startswith("_"):
+                del track[key]
 
     encoded = json.dumps(public, ensure_ascii=False, separators=(",", ":"))
     if len(encoded) <= max_characters:
@@ -197,7 +201,7 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
     if isinstance(revision, dict):
         revision_instruction = (
             "This is a revision of the supplied previous_plan. Follow the user's revision instruction "
-            "while preserving requested strengths and all source-only constraints. Caption corrections "
+            "while preserving requested strengths and all source-led constraints. Caption corrections "
             "are applied deterministically after planning; do not alter spoken words to simulate them.\n\n"
         )
     content: list[dict[str, Any]] = [
@@ -208,7 +212,14 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
                 "invented asset IDs, out-of-range timecodes, overlapping ranges, unsupported effects, "
                 "and previews longer than 60 seconds. Prefer a coherent 15–60 second transcript-led "
                 "story, preserve the speaker's meaning, remove obvious dead air, and keep chronological "
-                "order unless the brief clearly requires otherwise.\n\n"
+                "order unless the brief clearly requires otherwise. Treat job.target_duration_seconds "
+                "as a real delivery target, job.must_include as required subject matter when supported "
+                "by the transcript, and job.edit_style as the visual pacing direction. Use only the "
+                "named visual and transition presets. For energetic edits, split around genuine emphasis "
+                "beats, alternate standard framing with restrained punch-ins, and include a transition "
+                "beat when the edit is at least 20 seconds. For clean edits, favor "
+                "stable framing. For calm edits, favor longer clips and slow moves. Select music only from "
+                "music_library and only when job.music_mode requests it; otherwise return no music.\n\n"
                 + revision_instruction
                 + json.dumps(public, ensure_ascii=False)
             ),
@@ -292,7 +303,8 @@ def _request_plan(
         "instructions": (
             "You are GM Studio's bounded talking-head editor. Make editorial selections only from "
             "the supplied source inventory and transcript. Do not invent media, words, asset IDs, "
-            "timecodes, transitions, effects, or paths. Return only the required structured edit plan. "
+            "timecodes, paths, or operations outside the schema's named presets. Return only the "
+            "required structured edit plan. "
             "Set post_copy to an empty string unless project.ai_copy_allowed is true. When it is true, "
             "post_copy may contain concise social caption text grounded only in the supplied transcript "
             "and brief; never invent factual claims."
@@ -302,7 +314,7 @@ def _request_plan(
             "format": {
                 "type": "json_schema",
                 "name": "talking_head_edit_plan",
-                "description": "A source-only edit decision list for one vertical talking-head preview.",
+                "description": "A source-led edit decision list for one vertical talking-head preview.",
                 "strict": True,
                 "schema": EDIT_PLAN_JSON_SCHEMA,
             }
@@ -355,7 +367,13 @@ def create_edit_plan(
                 "provider": "local_fixed_revision",
                 "model": "talking_head_v1",
             }
-        return deterministic_plan(assets), {
+        return deterministic_plan(
+            assets,
+            context.get("job", {}).get("target_duration_seconds"),
+            context.get("job", {}).get("edit_style") or "clean",
+            context.get("job", {}).get("music_mode") or "none",
+            context.get("music_library", []),
+        ), {
             "provider": "local_fixed_recipe",
             "model": "talking_head_v1",
         }
