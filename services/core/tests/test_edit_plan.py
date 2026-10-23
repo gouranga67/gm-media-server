@@ -54,6 +54,14 @@ class EditPlanValidationTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             validate_edit_plan(self.document, self.assets)
 
+    def test_post_copy_requires_explicit_project_permission(self) -> None:
+        self.document["post_copy"] = "A source-grounded social caption."
+        with self.assertRaisesRegex(ValueError, "not enabled"):
+            validate_edit_plan(self.document, self.assets)
+
+        plan = validate_edit_plan(self.document, self.assets, allow_post_copy=True)
+        self.assertEqual(plan.post_copy, "A source-grounded social caption.")
+
     def test_rejects_preview_over_sixty_seconds(self) -> None:
         second_id = uuid4()
         self.assets.append(

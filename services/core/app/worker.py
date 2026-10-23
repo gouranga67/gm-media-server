@@ -11,7 +11,7 @@ from redis import Redis
 from app.config import get_settings
 from app.database import connection
 from app.edit_plan import TalkingHeadEditPlan, document_sha256, validate_edit_plan
-from app.edit_renderer import render_edit_preview
+from app.edit_renderer import render_edit_preview, render_final_delivery
 from app.editor_context import build_editor_context
 from app.editor_provider import create_edit_plan
 from app.finalize_upload import finalize_original, upload_source_path
@@ -23,6 +23,7 @@ class WorkerState:
     stopping: bool = False
     active_ingest_id: str | None = None
     active_edit_run_id: str | None = None
+    active_final_export_id: str | None = None
 
 
 def claim_pending_upload() -> dict[str, Any] | None:
@@ -306,12 +307,39 @@ def process_one_edit(state: WorkerState) -> bool:
                 ).fetchone()
             if plan_row is None:
                 raise RuntimeError("persisted edit plan was not found")
-            plan = validate_edit_plan(plan_row["document"], context["assets"])
+            plan = validate_edit_plan(
+                plan_row["document"],
+                context["assets"],
+                allow_post_copy=bool(context["project"]["ai_copy_allowed"]),
+            )
             provider = str(plan_row["provider"])
             model = str(plan_row["model"])
         else:
+            if run.get("based_on_run_id"):
+                with connection() as database:
+                    previous = database.execute(
+                        """
+                        SELECT edit_runs.version, edit_plans.document
+                        FROM edit_runs
+                        JOIN edit_plans ON edit_plans.id = edit_runs.edit_plan_id
+                        WHERE edit_runs.id = %s AND edit_runs.job_id = %s
+                        """,
+                        (run["based_on_run_id"], run["job_id"]),
+                    ).fetchone()
+                if previous is None:
+                    raise RuntimeError("the revision's previous edit plan was not found")
+                context["revision"] = {
+                    "instruction": run.get("revision_note") or "",
+                    "based_on_version": previous["version"],
+                    "previous_plan": previous["document"],
+                    "caption_corrections": run.get("caption_corrections") or [],
+                }
             proposed, provenance = create_edit_plan(context)
-            plan = validate_edit_plan(proposed.model_dump(mode="json"), context["assets"])
+            plan = validate_edit_plan(
+                proposed.model_dump(mode="json"),
+                context["assets"],
+                allow_post_copy=bool(context["project"]["ai_copy_allowed"]),
+            )
             provider = provenance["provider"]
             model = provenance["model"]
             _persist_generated_plan(run, plan, provider, model)
@@ -322,6 +350,7 @@ def process_one_edit(state: WorkerState) -> bool:
             int(run["version"]),
             provider,
             model,
+            list(run.get("caption_corrections") or []),
         )
         with connection() as database:
             database.execute(
@@ -374,6 +403,157 @@ def process_one_edit(state: WorkerState) -> bool:
     return True
 
 
+def recover_interrupted_final_exports() -> int:
+    with connection() as database:
+        result = database.execute(
+            """
+            UPDATE final_exports
+            SET status = 'pending', lease_expires_at = NULL,
+                error = NULL, updated_at = now()
+            WHERE status = 'rendering'
+            """
+        )
+        return result.rowcount
+
+
+def claim_pending_final_export() -> dict[str, Any] | None:
+    settings = get_settings()
+    with connection() as database:
+        row = database.execute(
+            """
+            SELECT final_exports.*, edit_runs.version, edit_runs.edit_plan_id,
+                   edit_runs.provider, edit_runs.model, edit_runs.caption_corrections,
+                   edit_runs.approved_at
+            FROM final_exports
+            JOIN edit_runs ON edit_runs.id = final_exports.edit_run_id
+            WHERE final_exports.status = 'pending'
+               OR (final_exports.status = 'failed' AND final_exports.attempts < 3)
+               OR (final_exports.status = 'rendering' AND final_exports.lease_expires_at < now())
+            ORDER BY final_exports.updated_at, final_exports.created_at
+            LIMIT 1
+            FOR UPDATE OF final_exports SKIP LOCKED
+            """
+        ).fetchone()
+        if row is None:
+            return None
+        claimed = database.execute(
+            """
+            UPDATE final_exports
+            SET status = 'rendering', attempts = attempts + 1,
+                lease_expires_at = now() + (%s * interval '1 second'),
+                error = NULL, started_at = COALESCE(started_at, now()), updated_at = now()
+            WHERE id = %s
+            RETURNING *
+            """,
+            (settings.edit_lease_seconds, row["id"]),
+        ).fetchone()
+        database.execute(
+            "UPDATE jobs SET status = 'exporting', updated_at = now() WHERE id = %s",
+            (row["job_id"],),
+        )
+        return {**row, **claimed}
+
+
+def process_one_final_export(state: WorkerState) -> bool:
+    export = claim_pending_final_export()
+    if export is None:
+        return False
+
+    export_id = str(export["id"])
+    state.active_final_export_id = export_id
+    try:
+        with connection() as database:
+            plan_row = database.execute(
+                "SELECT document FROM edit_plans WHERE id = %s",
+                (export["edit_plan_id"],),
+            ).fetchone()
+        if plan_row is None:
+            raise RuntimeError("the approved edit plan was not found")
+        context = build_editor_context(export["job_id"], include_internal_paths=True)
+        plan = validate_edit_plan(
+            plan_row["document"],
+            context["assets"],
+            allow_post_copy=bool(context["project"]["ai_copy_allowed"]),
+        )
+        approved_at = export.get("approved_at")
+        if approved_at is None:
+            raise RuntimeError("the selected edit version is not approved")
+        manifest = render_final_delivery(
+            context,
+            plan,
+            int(export["version"]),
+            str(export["provider"]),
+            str(export["model"]),
+            list(export.get("caption_corrections") or []),
+            approved_at.isoformat(),
+        )
+        outputs = manifest["outputs"]
+        with connection() as database:
+            database.execute(
+                """
+                UPDATE final_exports
+                SET status = 'ready', video_path = %s, captions_path = %s,
+                    cover_path = %s, post_copy_path = %s, package_path = %s, manifest_path = %s,
+                    manifest = %s, lease_expires_at = NULL,
+                    completed_at = now(), updated_at = now()
+                WHERE id = %s
+                """,
+                (
+                    outputs["video"],
+                    outputs["captions"],
+                    outputs["cover"],
+                    outputs.get("post_copy"),
+                    outputs["package"],
+                    manifest["manifest_path"],
+                    Jsonb(manifest),
+                    export["id"],
+                ),
+            )
+            database.execute(
+                "UPDATE jobs SET status = 'delivered', revision = %s, updated_at = now() WHERE id = %s",
+                (export["version"], export["job_id"]),
+            )
+            database.execute(
+                """
+                INSERT INTO job_events (job_id, event_type, payload)
+                VALUES (%s, 'final_export_ready', %s)
+                """,
+                (
+                    export["job_id"],
+                    Jsonb({"version": export["version"], "export_id": export_id}),
+                ),
+            )
+        print(f"final export ready: {export_id}", flush=True)
+    except Exception as error:
+        with connection() as database:
+            database.execute(
+                """
+                UPDATE final_exports
+                SET status = 'failed', error = %s, lease_expires_at = NULL, updated_at = now()
+                WHERE id = %s
+                """,
+                (str(error)[:1000], export["id"]),
+            )
+            database.execute(
+                "UPDATE jobs SET status = 'failed', updated_at = now() WHERE id = %s",
+                (export["job_id"],),
+            )
+            database.execute(
+                """
+                INSERT INTO job_events (job_id, event_type, payload)
+                VALUES (%s, 'final_export_failed', %s)
+                """,
+                (
+                    export["job_id"],
+                    Jsonb({"version": export["version"], "error": str(error)[:500]}),
+                ),
+            )
+        print(f"final export failed: {export_id}: {error}", flush=True)
+    finally:
+        state.active_final_export_id = None
+    return True
+
+
 def heartbeat_loop(state: WorkerState, stop_event: threading.Event) -> None:
     settings = get_settings()
     client = Redis.from_url(settings.redis_url, decode_responses=True)
@@ -385,6 +565,8 @@ def heartbeat_loop(state: WorkerState, stop_event: threading.Event) -> None:
                 if state.active_ingest_id
                 else "editing"
                 if state.active_edit_run_id
+                else "exporting"
+                if state.active_final_export_id
                 else "idle"
             )
             client.set(
@@ -395,6 +577,7 @@ def heartbeat_loop(state: WorkerState, stop_event: threading.Event) -> None:
                         "status": status,
                         "asset_id": state.active_ingest_id,
                         "edit_run_id": state.active_edit_run_id,
+                        "final_export_id": state.active_final_export_id,
                     }
                 ),
                 ex=settings.worker_heartbeat_ttl_seconds,
@@ -427,6 +610,20 @@ def heartbeat_loop(state: WorkerState, stop_event: threading.Event) -> None:
                         )
                 except Exception as error:
                     print(f"edit lease heartbeat failed: {error}", flush=True)
+            if state.active_final_export_id:
+                try:
+                    with connection() as database:
+                        database.execute(
+                            """
+                            UPDATE final_exports
+                            SET lease_expires_at = now() + (%s * interval '1 second'),
+                                updated_at = now()
+                            WHERE id = %s AND status = 'rendering'
+                            """,
+                            (settings.edit_lease_seconds, state.active_final_export_id),
+                        )
+                except Exception as error:
+                    print(f"final export lease heartbeat failed: {error}", flush=True)
             stop_event.wait(interval)
     finally:
         client.delete(settings.worker_heartbeat_key)
@@ -459,6 +656,9 @@ def main() -> None:
     recovered_edits = recover_interrupted_edits()
     if recovered_edits:
         print(f"requeued interrupted edits: {recovered_edits}", flush=True)
+    recovered_exports = recover_interrupted_final_exports()
+    if recovered_exports:
+        print(f"requeued interrupted final exports: {recovered_exports}", flush=True)
     print("worker ready", flush=True)
     while not state.stopping:
         while finalize_one_upload():
@@ -468,6 +668,8 @@ def main() -> None:
         while not state.stopping and analyze_one_asset(state):
             seed_pending_ingests()
         while not state.stopping and process_one_edit(state):
+            pass
+        while not state.stopping and process_one_final_export(state):
             pass
         # Redis is a wake-up channel. PostgreSQL remains the durable source of
         # truth, so a lost queue notification cannot strand an uploaded asset.

@@ -192,6 +192,14 @@ def _public_context(context: dict[str, Any], max_characters: int) -> dict[str, A
 
 def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str, Any]]:
     public = _public_context(context, settings.editor_max_context_characters)
+    revision = public.get("revision")
+    revision_instruction = ""
+    if isinstance(revision, dict):
+        revision_instruction = (
+            "This is a revision of the supplied previous_plan. Follow the user's revision instruction "
+            "while preserving requested strengths and all source-only constraints. Caption corrections "
+            "are applied deterministically after planning; do not alter spoken words to simulate them.\n\n"
+        )
     content: list[dict[str, Any]] = [
         {
             "type": "input_text",
@@ -201,6 +209,7 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
                 "and previews longer than 60 seconds. Prefer a coherent 15–60 second transcript-led "
                 "story, preserve the speaker's meaning, remove obvious dead air, and keep chronological "
                 "order unless the brief clearly requires otherwise.\n\n"
+                + revision_instruction
                 + json.dumps(public, ensure_ascii=False)
             ),
         }
@@ -283,7 +292,10 @@ def _request_plan(
         "instructions": (
             "You are GM Studio's bounded talking-head editor. Make editorial selections only from "
             "the supplied source inventory and transcript. Do not invent media, words, asset IDs, "
-            "timecodes, transitions, effects, or paths. Return only the required structured edit plan."
+            "timecodes, transitions, effects, or paths. Return only the required structured edit plan. "
+            "Set post_copy to an empty string unless project.ai_copy_allowed is true. When it is true, "
+            "post_copy may contain concise social caption text grounded only in the supplied transcript "
+            "and brief; never invent factual claims."
         ),
         "input": [{"role": "user", "content": _model_content(context, settings)}],
         "text": {
@@ -337,6 +349,12 @@ def create_edit_plan(
     privacy_mode = context.get("project", {}).get("privacy_mode")
     assets = context.get("assets", [])
     if privacy_mode == "local_only":
+        revision = context.get("revision")
+        if isinstance(revision, dict) and isinstance(revision.get("previous_plan"), dict):
+            return TalkingHeadEditPlan.model_validate(revision["previous_plan"]), {
+                "provider": "local_fixed_revision",
+                "model": "talking_head_v1",
+            }
         return deterministic_plan(assets), {
             "provider": "local_fixed_recipe",
             "model": "talking_head_v1",

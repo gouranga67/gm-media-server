@@ -42,6 +42,10 @@ export type EditRun = {
   readonly attempts: number;
   readonly provider: string | null;
   readonly model: string | null;
+  readonly based_on_run_id: string | null;
+  readonly revision_note: string | null;
+  readonly caption_corrections: readonly CaptionCorrection[];
+  readonly approved_at: string | null;
   readonly preview_available: boolean;
   readonly manifest: Record<string, unknown>;
   readonly error: string | null;
@@ -49,6 +53,43 @@ export type EditRun = {
   readonly completed_at: string | null;
   readonly created_at: string;
   readonly updated_at: string;
+};
+
+export type CaptionCorrection = {
+  readonly original_text: string;
+  readonly replacement_text: string;
+};
+
+export type FinalExport = {
+  readonly id: string;
+  readonly job_id: string;
+  readonly edit_run_id: string;
+  readonly version: number;
+  readonly status: "pending" | "rendering" | "ready" | "failed";
+  readonly attempts: number;
+  readonly files_available: boolean;
+  readonly post_copy_available: boolean;
+  readonly manifest: Record<string, unknown>;
+  readonly error: string | null;
+  readonly started_at: string | null;
+  readonly completed_at: string | null;
+  readonly created_at: string;
+  readonly updated_at: string;
+};
+
+export type JobEvent = {
+  readonly id: number;
+  readonly event_type: string;
+  readonly payload: Record<string, unknown>;
+  readonly created_at: string;
+};
+
+export type JobReview = {
+  readonly job: MediaJob;
+  readonly versions: readonly EditRun[];
+  readonly latest_run: EditRun | null;
+  readonly final_export: FinalExport | null;
+  readonly events: readonly JobEvent[];
 };
 
 async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
@@ -151,6 +192,33 @@ export function requestPreview(jobId: string) {
 
 export function getPreview(jobId: string) {
   return apiRequest<EditRun>(`jobs/${jobId}/preview`, { cache: "no-store" });
+}
+
+export function getJobReview(jobId: string) {
+  return apiRequest<JobReview>(`jobs/${jobId}/review`, { cache: "no-store" });
+}
+
+export function requestRevision(
+  jobId: string,
+  input: {
+    readonly note: string;
+    readonly captionCorrections: readonly CaptionCorrection[];
+  },
+) {
+  return apiRequest<EditRun>(`jobs/${jobId}/revisions`, {
+    method: "POST",
+    body: JSON.stringify({
+      note: input.note,
+      caption_corrections: input.captionCorrections,
+    }),
+  });
+}
+
+export function approveEdit(jobId: string, version: number) {
+  return apiRequest<FinalExport>(`jobs/${jobId}/approval`, {
+    method: "POST",
+    body: JSON.stringify({ version, note: "Approved from the GM Studio phone review." }),
+  });
 }
 
 export function getSystemInformation() {

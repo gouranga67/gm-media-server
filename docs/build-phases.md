@@ -13,8 +13,8 @@ This is the working plan for turning the Lenovo into a private media-editing app
 | 2 | Reproducible local service stack | Complete |
 | 3 | Projects, jobs, and resumable phone uploads | In progress |
 | 4 | Local ingest and media analysis | Complete |
-| 5 | Bounded editor agent and deterministic reel rendering | In progress |
-| 6 | Phone review, revisions, delivery, and provenance | Not started |
+| 5 | Bounded editor agent and deterministic reel rendering | Complete |
+| 6 | Phone review, revisions, delivery, and provenance | In progress |
 | 7 | Appliance hardening, backup, and recovery | Not started |
 
 ## Phase 0 — inventory and guardrails
@@ -119,7 +119,7 @@ Current build checkpoint (2026-10-23): the source tree now contains a durable Po
 
 Deterministic acceptance evidence (2026-10-23): migration 005 deployed with every production service healthy. The live Phase 5 verifier used analyzed phone footage, proved an invented asset ID returns HTTP 422, rendered preview version 1 with `h264_nvenc`, and successfully downloaded a valid MP4 through the phone-facing web proxy.
 
-The deterministic production acceptance check has passed on real analyzed footage. This phase remains in progress until a live ChatGPT-planned preview is reviewed for editorial coherence.
+Completion evidence (2026-10-23): the deterministic production acceptance check passed on real analyzed footage, and a live ChatGPT-plan edit produced a valid, coherent preview that was positively reviewed from the phone interface. **Passed.**
 
 Exit check: the agent creates a valid plan from uploaded footage and the deterministic renderer produces a coherent preview. An invalid or invented asset reference is rejected.
 
@@ -133,6 +133,10 @@ Build:
 - Preview player, caption correction, approval, and bounded revision flow.
 - 1080 × 1920 H.264 export, cover image, captions, and optional approved post copy.
 - Provenance manifest containing hashes, source ranges, models, tool versions, template version, render settings, and QA results.
+
+Current build checkpoint (2026-10-23): the source tree contains transcript-validated caption corrections, versioned revision requests linked to the prior edit plan, explicit per-version approval, a durable crash-recoverable final-export queue, and a phone review interface. Approved versions render locally at 1080 × 1920 with WebVTT captions, a source-derived JPEG cover, a provenance and technical-QA manifest, individual downloads, and a combined ZIP package. The editor and Eve tools remain bounded to registered assets and approved API transitions. Static verification passes; production deployment and the live Phase 6 acceptance run remain.
+
+Acceptance helper after deployment: `python3 scripts/verify-phase6.py` selects a ready preview, requests one bounded revision, approves the new version, waits for the final GPU render, and verifies the MP4, captions, cover, package, provenance, and source-only policy.
 
 Exit check: from a phone, upload a clip, request a reel, approve or revise it, and download a technically valid final package.
 

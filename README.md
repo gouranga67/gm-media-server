@@ -109,9 +109,10 @@ Live acceptance checks require a configured and running stack:
 python3 scripts/verify-phase3.py
 python3 scripts/verify-phase4.py
 python3 scripts/verify-phase5.py
+python3 scripts/verify-phase6.py
 ```
 
-The Phase 3 check exercises interrupted/resumed tus uploads, Phase 4 verifies real-media analysis, and Phase 5 proves strict edit-plan validation plus a downloadable deterministic render.
+The Phase 3 check exercises interrupted/resumed tus uploads, Phase 4 verifies real-media analysis, Phase 5 proves strict edit-plan validation plus a downloadable deterministic preview, and Phase 6 exercises revision, approval, and full delivery packaging.
 
 ## Repository map
 

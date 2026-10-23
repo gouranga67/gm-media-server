@@ -38,6 +38,7 @@ class TalkingHeadEditPlan(BaseModel):
     audio_preset: Literal["spoken_voice_v1"]
     end_card: Literal["none"]
     editorial_summary: str = Field(min_length=1, max_length=600)
+    post_copy: str = Field(default="", max_length=2200)
 
 
 # This schema is intentionally small and contains only Structured Outputs
@@ -69,6 +70,7 @@ EDIT_PLAN_JSON_SCHEMA: dict[str, Any] = {
         "audio_preset": {"type": "string", "enum": ["spoken_voice_v1"]},
         "end_card": {"type": "string", "enum": ["none"]},
         "editorial_summary": {"type": "string", "minLength": 1, "maxLength": 600},
+        "post_copy": {"type": "string", "maxLength": 2200},
     },
     "required": [
         "schema_version",
@@ -78,6 +80,7 @@ EDIT_PLAN_JSON_SCHEMA: dict[str, Any] = {
         "audio_preset",
         "end_card",
         "editorial_summary",
+        "post_copy",
     ],
     "additionalProperties": False,
 }
@@ -91,8 +94,12 @@ def document_sha256(document: dict[str, Any]) -> str:
 def validate_edit_plan(
     document: dict[str, Any],
     assets: list[dict[str, Any]],
+    *,
+    allow_post_copy: bool = False,
 ) -> TalkingHeadEditPlan:
     plan = TalkingHeadEditPlan.model_validate(document)
+    if plan.post_copy and not allow_post_copy:
+        raise ValueError("AI-written post copy was not enabled for this project")
     inventory = {str(asset["asset_id"]): asset for asset in assets}
     ranges: dict[str, list[tuple[float, float]]] = defaultdict(list)
     total_duration = 0.0
@@ -154,5 +161,6 @@ def deterministic_plan(assets: list[dict[str, Any]]) -> TalkingHeadEditPlan:
         audio_preset="spoken_voice_v1",
         end_card="none",
         editorial_summary="Local-only fixed recipe using the first eligible source clip.",
+        post_copy="",
     )
     return validate_edit_plan(plan.model_dump(mode="json"), assets)

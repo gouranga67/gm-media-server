@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { CheckIcon, DownloadIcon, LoaderCircleIcon, RefreshCwIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { JobReviewControls } from "@/app/_components/job-review-controls";
 import {
   Dialog,
   DialogClose,
@@ -14,7 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { getPreview, requestPreview, type EditRun } from "@/lib/media-api";
+import { getJobReview, requestPreview, type JobReview } from "@/lib/media-api";
 
 const POLL_INTERVAL_MS = 2_000;
 const PLAN_NOTICE_KEY = "gm-studio:chatgpt-plan-notice-v1";
@@ -24,7 +25,7 @@ function errorMessage(error: unknown) {
 }
 
 export function JobPreview({ jobId }: { readonly jobId: string }) {
-  const [run, setRun] = useState<EditRun>();
+  const [review, setReview] = useState<JobReview>();
   const [error, setError] = useState<string>();
   const [retrying, setRetrying] = useState(false);
   const [pollGeneration, setPollGeneration] = useState(0);
@@ -36,11 +37,22 @@ export function JobPreview({ jobId }: { readonly jobId: string }) {
 
     const poll = async () => {
       try {
-        const latest = await getPreview(jobId);
+        const latest = await getJobReview(jobId);
         if (cancelled) return;
-        setRun(latest);
+        setReview(latest);
         setError(undefined);
-        if (latest.status !== "ready" && latest.status !== "failed") {
+        const latestRun = latest.latest_run;
+        const latestExport = latest.final_export;
+        const runStatus = latestRun?.status;
+        const exportStatus =
+          latestExport !== null && latestExport.version === latestRun?.version
+            ? latestExport.status
+            : undefined;
+        if (
+          (runStatus !== undefined && runStatus !== "ready" && runStatus !== "failed")
+          || exportStatus === "pending"
+          || exportStatus === "rendering"
+        ) {
           timer = setTimeout(poll, POLL_INTERVAL_MS);
         }
       } catch (pollError) {
@@ -61,7 +73,7 @@ export function JobPreview({ jobId }: { readonly jobId: string }) {
     setRetrying(true);
     setError(undefined);
     try {
-      setRun(await requestPreview(jobId));
+      await requestPreview(jobId);
       setPollGeneration((current) => current + 1);
     } catch (retryError) {
       setError(errorMessage(retryError));
@@ -70,7 +82,13 @@ export function JobPreview({ jobId }: { readonly jobId: string }) {
     }
   };
 
-  const fileUrl = `/api/media/jobs/${encodeURIComponent(jobId)}/preview/file`;
+  const run = review?.latest_run ?? undefined;
+  const finalExport = review?.final_export;
+  const currentFinalExport =
+    finalExport && finalExport.version === run?.version ? finalExport : null;
+  const fileRoot = `/api/media/jobs/${encodeURIComponent(jobId)}/preview/file`;
+  const fileUrl = `${fileRoot}${run ? `?version=${run.version}` : ""}`;
+  const downloadUrl = `${fileRoot}?download=true${run ? `&version=${run.version}` : ""}`;
   const status = run?.status ?? "pending";
   const usesChatGptPlan = run?.provider === "chatgpt_plan";
   const failureMessage = run?.error ?? error ?? "";
@@ -126,13 +144,21 @@ export function JobPreview({ jobId }: { readonly jobId: string }) {
                 Your browser cannot play this preview.
               </video>
               <Button asChild className="h-14 w-full bg-[#173F5F] text-white hover:bg-[#12344F]">
-                <a href={`${fileUrl}?download=true`}>
+                <a href={downloadUrl}>
                   <DownloadIcon aria-hidden="true" /> Download MP4
                 </a>
               </Button>
               <p className="text-center font-mono text-[10px] leading-relaxed text-[#666862]">
                 Version {run?.version} · edited from your uploaded source media only
               </p>
+              {run ? (
+                <JobReviewControls
+                  finalExport={currentFinalExport}
+                  jobId={jobId}
+                  onUpdated={() => setPollGeneration((current) => current + 1)}
+                  run={run}
+                />
+              ) : null}
             </div>
           ) : status === "failed" ? (
             <div className="rounded-md border border-[#E7C4BC] bg-white p-5">
@@ -186,6 +212,22 @@ export function JobPreview({ jobId }: { readonly jobId: string }) {
           ) : null}
           {error ? <p className="mt-4 text-center text-xs text-[#A23B2A]" role="alert">{error}</p> : null}
         </section>
+
+        {review && review.events.length > 0 ? (
+          <section className="mb-8 border-t border-[#D7D9D3] pt-6">
+            <h2 className="font-mono text-xs font-bold tracking-wide text-[#173F5F] uppercase">Job timeline</h2>
+            <ol className="mt-3 space-y-2">
+              {review.events.slice(0, 8).map((event) => (
+                <li className="flex items-center justify-between gap-4 text-xs" key={event.id}>
+                  <span className="font-bold text-[#20211F]">{event.event_type.replaceAll("_", " ")}</span>
+                  <time className="shrink-0 font-mono text-[10px] text-[#666862]" dateTime={event.created_at}>
+                    {new Date(event.created_at).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" })}
+                  </time>
+                </li>
+              ))}
+            </ol>
+          </section>
+        ) : null}
 
         <footer className="text-center">
           <Link className="text-sm font-bold text-[#173F5F] underline underline-offset-4" href="/jobs/new">
