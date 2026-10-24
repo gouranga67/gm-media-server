@@ -7,9 +7,28 @@ import os
 import sys
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 
-BASE_URL = os.environ.get("GM_MEDIA_URL", "http://127.0.0.1:3000/api/media").rstrip("/")
+def configured_base_url() -> str:
+    explicit = os.environ.get("GM_MEDIA_URL", "").strip()
+    if explicit:
+        return explicit.rstrip("/")
+    environment_file = Path(__file__).resolve().parents[1] / ".env"
+    if environment_file.is_file():
+        values: dict[str, str] = {}
+        for raw_line in environment_file.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = line.split("=", 1)
+            values[key.strip()] = value.strip().strip('"').strip("'")
+        if values.get("TAILSCALE_AUTH_REQUIRED", "").lower() == "true" and values.get("APP_ORIGIN"):
+            return f"{values['APP_ORIGIN'].rstrip('/')}/api/media"
+    return "http://127.0.0.1:3000/api/media"
+
+
+BASE_URL = configured_base_url()
 
 
 def request(path: str, *, method: str = "GET", payload: dict | None = None):
