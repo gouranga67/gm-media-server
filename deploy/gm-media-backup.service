@@ -1,0 +1,15 @@
+[Unit]
+Description=Encrypted GM Media Server backup
+Requires=docker.service
+After=docker.service gm-media-server.service
+ConditionPathIsMountPoint=/mnt/gm-backup
+
+[Service]
+Type=oneshot
+WorkingDirectory=@PROJECT_ROOT@
+UMask=0077
+Nice=10
+IOSchedulingClass=idle
+ExecStart=@PROJECT_ROOT@/scripts/run-local-backup.sh
+TimeoutStartSec=0
+

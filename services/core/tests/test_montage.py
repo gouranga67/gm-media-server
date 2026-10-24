@@ -7,7 +7,12 @@ from uuid import uuid4
 from pydantic import ValidationError
 
 from app.config import Settings
-from app.edit_plan import MontageEditPlan, deterministic_montage_plan, validate_edit_plan
+from app.edit_plan import (
+    MontageEditPlan,
+    deterministic_montage_plan,
+    repair_predictable_plan_defaults,
+    validate_edit_plan,
+)
 from app.editor_provider import _model_content, _parse_sse_response
 from app.montage_renderer import (
     _ffmpeg_failure_detail,
@@ -82,6 +87,51 @@ class MontagePlanTests(unittest.TestCase):
 
         self.assertIsInstance(plan, MontageEditPlan)
         self.assertEqual(sum(clip.duration for clip in plan.clips), 15)
+        self.assertEqual(plan.clips[0].source_audio_gain_db, 0)
+
+    def test_accepts_bounded_gain_for_an_audible_video_clip(self) -> None:
+        self.document["clips"][0]["source_audio_gain_db"] = 10
+
+        plan = validate_edit_plan(self.document, self.assets)
+
+        self.assertEqual(plan.clips[0].source_audio_gain_db, 10)
+
+    def test_rejects_gain_for_a_muted_clip(self) -> None:
+        self.document["clips"][0]["include_source_audio"] = False
+        self.document["clips"][0]["source_audio_gain_db"] = 6
+
+        with self.assertRaisesRegex(ValueError, "muted montage clips"):
+            validate_edit_plan(self.document, self.assets)
+
+    def test_predictable_music_omission_is_repaired_without_another_model_call(self) -> None:
+        track_id = uuid4()
+
+        repaired, repairs = repair_predictable_plan_defaults(
+            self.document,
+            creative_direction={"music_mode": "subtle"},
+            music_tracks=[{"track_id": str(track_id)}],
+        )
+
+        self.assertEqual(repaired["music_track_id"], str(track_id))
+        self.assertEqual(repaired["music_mix"], "subtle")
+        self.assertEqual(repairs, ["selected_first_approved_music_track"])
+
+    def test_music_repair_preserves_the_previous_approved_track(self) -> None:
+        first_track_id = uuid4()
+        previous_track_id = uuid4()
+
+        repaired, repairs = repair_predictable_plan_defaults(
+            self.document,
+            creative_direction={"music_mode": "subtle"},
+            music_tracks=[
+                {"track_id": str(first_track_id)},
+                {"track_id": str(previous_track_id)},
+            ],
+            previous_plan={"music_track_id": str(previous_track_id)},
+        )
+
+        self.assertEqual(repaired["music_track_id"], str(previous_track_id))
+        self.assertEqual(repairs, ["preserved_previous_approved_music_track"])
 
     def test_rejects_image_source_timecodes(self) -> None:
         self.document["clips"][1]["source_out"] = 1
@@ -262,6 +312,7 @@ class MontageFilterTests(unittest.TestCase):
                         "transition": "cut",
                         "visual_preset": "standard",
                         "include_source_audio": True,
+                        "source_audio_gain_db": 10,
                     },
                     {
                         "asset_id": str(image_id),
@@ -304,6 +355,23 @@ class MontageFilterTests(unittest.TestCase):
         self.assertIn("apad=pad_dur=2.000", graph)
         self.assertIn("trim=duration=4.000", graph)
         self.assertIn("afade=t=in:st=0:d=0.080", graph)
+        self.assertIn("volume=2.000dB", graph)
+
+        graph_with_music = _filter_graph(
+            plan,
+            {
+                str(video_id): {"has_audio": True},
+                str(image_id): {"has_audio": False},
+            },
+            width=540,
+            height=960,
+            fps=30,
+            music_input_index=2,
+        )
+        self.assertIn("sidechaincompress", graph_with_music)
+        self.assertIn("asplit=2[source][key]", graph_with_music)
+        self.assertGreaterEqual(graph_with_music.count("channel_layouts=stereo"), 4)
+        self.assertIn("[2:a:0]aresample=48000,atrim=0:4.000,aformat=", graph_with_music)
 
     def test_static_image_uses_one_decoded_frame(self) -> None:
         image_id = uuid4()

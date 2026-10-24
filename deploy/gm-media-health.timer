@@ -1,0 +1,13 @@
+[Unit]
+Description=Collect GM Media Server appliance health every five minutes
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=5min
+RandomizedDelaySec=30
+Persistent=true
+Unit=gm-media-health.service
+
+[Install]
+WantedBy=timers.target
+

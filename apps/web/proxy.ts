@@ -10,5 +10,28 @@ export function proxy(request: NextRequest) {
     target.host = routerHost;
     return NextResponse.redirect(target);
   }
+
+  if (request.nextUrl.pathname === "/api/health") {
+    return NextResponse.next();
+  }
+
+  if (process.env.TAILSCALE_AUTH_REQUIRED === "true") {
+    const expectedLogin = process.env.TAILSCALE_ALLOWED_LOGIN?.trim().toLowerCase();
+    const requestLogin = request.headers.get("tailscale-user-login")?.trim().toLowerCase();
+
+    if (!expectedLogin) {
+      return new NextResponse("GM Studio private access is not configured.", { status: 503 });
+    }
+    if (!requestLogin || requestLogin !== expectedLogin) {
+      return new NextResponse(
+        "GM Studio is available only through its private Tailscale Serve address.",
+        {
+          status: 401,
+          headers: { "cache-control": "no-store" },
+        },
+      );
+    }
+  }
+
   return NextResponse.next();
 }

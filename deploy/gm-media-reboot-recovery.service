@@ -1,0 +1,15 @@
+[Unit]
+Description=GM Media Server reboot recovery drill verifier
+Requires=gm-media-server.service
+After=gm-media-server.service network-online.target
+Wants=network-online.target
+ConditionPathExists=/var/lib/gm-media-server/reboot-recovery-pending.json
+
+[Service]
+Type=oneshot
+WorkingDirectory=@PROJECT_ROOT@
+ExecStart=@PROJECT_ROOT@/scripts/complete-reboot-recovery-drill.sh
+TimeoutStartSec=1800
+
+[Install]
+WantedBy=multi-user.target

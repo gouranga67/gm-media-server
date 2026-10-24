@@ -2,6 +2,7 @@ import hashlib
 import json
 import math
 from collections import defaultdict
+from copy import deepcopy
 from typing import Any, Literal, TypeAlias
 from uuid import UUID
 
@@ -76,12 +77,13 @@ class MontageClip(BaseModel):
         "slow_pull_out",
     ] = "standard"
     include_source_audio: bool = False
+    source_audio_gain_db: float = Field(default=0.0, ge=-12.0, le=12.0)
 
 
 class MontageEditPlan(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal["1.0"]
+    schema_version: Literal["1.0", "1.1"]
     recipe: Literal["montage"]
     clips: list[MontageClip] = Field(min_length=2, max_length=MAX_MONTAGE_CLIPS)
     audio_preset: Literal["montage_mix_v1"]
@@ -164,7 +166,7 @@ EDIT_PLAN_JSON_SCHEMA: dict[str, Any] = {
 MONTAGE_EDIT_PLAN_JSON_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
-        "schema_version": {"type": "string", "enum": ["1.0"]},
+        "schema_version": {"type": "string", "enum": ["1.1"]},
         "recipe": {"type": "string", "enum": ["montage"]},
         "clips": {
             "type": "array",
@@ -185,6 +187,11 @@ MONTAGE_EDIT_PLAN_JSON_SCHEMA: dict[str, Any] = {
                         "enum": ["standard", "punch_in", "slow_push_in", "slow_pull_out"],
                     },
                     "include_source_audio": {"type": "boolean"},
+                    "source_audio_gain_db": {
+                        "type": "number",
+                        "minimum": -12,
+                        "maximum": 12,
+                    },
                 },
                 "required": [
                     "asset_id",
@@ -196,6 +203,7 @@ MONTAGE_EDIT_PLAN_JSON_SCHEMA: dict[str, Any] = {
                     "transition",
                     "visual_preset",
                     "include_source_audio",
+                    "source_audio_gain_db",
                 ],
                 "additionalProperties": False,
             },
@@ -231,6 +239,43 @@ def schema_for_recipe(recipe: str) -> dict[str, Any]:
 def document_sha256(document: dict[str, Any]) -> str:
     canonical = json.dumps(document, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def repair_predictable_plan_defaults(
+    document: dict[str, Any],
+    *,
+    creative_direction: dict[str, Any] | None = None,
+    music_tracks: list[dict[str, Any]] | None = None,
+    previous_plan: dict[str, Any] | None = None,
+) -> tuple[dict[str, Any], list[str]]:
+    """Apply safe defaults that do not require another model decision."""
+
+    repaired = deepcopy(document)
+    repairs: list[str] = []
+    requested_music = (creative_direction or {}).get("music_mode") or "none"
+    tracks = music_tracks or []
+    if requested_music in {"subtle", "present"} and tracks:
+        approved_ids = {str(track["track_id"]) for track in tracks if track.get("track_id")}
+        selected_id = repaired.get("music_track_id")
+        if selected_id is None:
+            previous_track_id = (previous_plan or {}).get("music_track_id")
+            track_id = (
+                previous_track_id
+                if previous_track_id is not None and str(previous_track_id) in approved_ids
+                else tracks[0].get("track_id")
+            )
+            if track_id:
+                repaired["music_track_id"] = str(track_id)
+                repaired["music_mix"] = requested_music
+                repairs.append(
+                    "preserved_previous_approved_music_track"
+                    if previous_track_id is not None and str(previous_track_id) == str(track_id)
+                    else "selected_first_approved_music_track"
+                )
+        elif str(selected_id) in approved_ids and repaired.get("music_mix") == "none":
+            repaired["music_mix"] = requested_music
+            repairs.append("matched_requested_music_mix")
+    return repaired, repairs
 
 
 def validate_edit_plan(
@@ -371,6 +416,8 @@ def validate_montage_plan(
                 raise ValueError("image montage clips must use zero source timecodes")
             if clip.include_source_audio:
                 raise ValueError("image montage clips cannot include source audio")
+            if abs(clip.source_audio_gain_db) > 0.001:
+                raise ValueError("image montage clips cannot apply source audio gain")
         else:
             if is_image or not asset.get("has_video"):
                 raise ValueError(f"asset {asset_id} is not a video source")
@@ -387,6 +434,8 @@ def validate_montage_plan(
                 )
             if clip.include_source_audio and not asset.get("has_audio"):
                 raise ValueError(f"asset {asset_id} has no source audio")
+            if not clip.include_source_audio and abs(clip.source_audio_gain_db) > 0.001:
+                raise ValueError("muted montage clips cannot apply source audio gain")
             used_ranges[asset_id].append((clip.source_in, clip.source_out))
         if index == 0 and clip.transition != "cut":
             raise ValueError("the first montage clip must begin with a cut")
@@ -586,6 +635,7 @@ def deterministic_montage_plan(
                     else "standard"
                 ),
                 include_source_audio=bool(asset.get("has_audio")) and index % 5 == 0,
+                source_audio_gain_db=0.0,
             )
         )
         total_duration += duration
@@ -593,7 +643,7 @@ def deterministic_montage_plan(
         raise ValueError("the montage recipe needs enough source media for at least two shots")
     selected_track = (music_tracks or [None])[0] if music_mode != "none" else None
     plan = MontageEditPlan(
-        schema_version="1.0",
+        schema_version="1.1",
         recipe="montage",
         clips=clips,
         audio_preset="montage_mix_v1",

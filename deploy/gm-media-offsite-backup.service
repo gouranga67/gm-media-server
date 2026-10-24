@@ -1,0 +1,16 @@
+[Unit]
+Description=Encrypted GM Media Server off-site backup
+Requires=docker.service
+After=docker.service network-online.target gm-media-backup.service
+Wants=network-online.target
+ConditionPathIsMountPoint=/mnt/gm-backup
+ConditionPathExists=/etc/gm-media-server/rclone/rclone.conf
+
+[Service]
+Type=oneshot
+WorkingDirectory=@PROJECT_ROOT@
+UMask=0077
+Nice=12
+IOSchedulingClass=idle
+ExecStart=@PROJECT_ROOT@/scripts/run-offsite-backup.sh
+TimeoutStartSec=0

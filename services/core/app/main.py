@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import json
 from typing import Any
 
 import psycopg
@@ -7,6 +8,7 @@ from redis import Redis
 
 from app.config import get_settings
 from app.editing import router as editing_router
+from app.library import router as library_router
 from app.projects import router as projects_router
 from app.upload_hooks import router as upload_hooks_router
 
@@ -28,6 +30,7 @@ app = FastAPI(
 
 app.include_router(projects_router)
 app.include_router(editing_router)
+app.include_router(library_router)
 app.include_router(upload_hooks_router)
 
 
@@ -73,3 +76,23 @@ def system_information() -> dict[str, Any]:
             "synthetic_music": False,
         },
     }
+
+
+@app.get("/api/v1/system/health")
+def appliance_health() -> dict[str, Any]:
+    status_path = get_settings().appliance_status_path
+    try:
+        if status_path.stat().st_size > 65_536:
+            raise ValueError("health snapshot is unexpectedly large")
+        parsed = json.loads(status_path.read_text(encoding="utf-8"))
+        if not isinstance(parsed, dict):
+            raise ValueError("health snapshot must contain an object")
+        return parsed
+    except FileNotFoundError:
+        return {
+            "status": "pending",
+            "alerts": ["appliance health snapshot has not been collected yet"],
+            "generated_at": None,
+        }
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        raise HTTPException(status_code=503, detail="appliance health snapshot is invalid") from error

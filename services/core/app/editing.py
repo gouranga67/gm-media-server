@@ -1,3 +1,4 @@
+import re
 from typing import Any
 from uuid import UUID
 
@@ -22,6 +23,15 @@ from app.schemas import (
 
 
 router = APIRouter(prefix="/api/v1", tags=["editing"])
+
+VERIFICATION_PROJECT_PATTERN = re.compile(
+    r"^Phase\s+\d+[A-Z]*\s+(?:library\s+)?verification(?:\s|—|$)",
+    re.IGNORECASE,
+)
+
+
+def _job_history_kind(project_name: str) -> str:
+    return "verification" if VERIFICATION_PROJECT_PATTERN.search(project_name) else "editing"
 
 
 def _job_usage(database: Any, job_id: UUID) -> dict[str, Any]:
@@ -112,6 +122,8 @@ def usage_dashboard(days: int = Query(default=0, ge=0, le=3650)) -> dict[str, An
             """,
             (days, days),
         ).fetchall()
+        for job in job_history:
+            job["history_kind"] = _job_history_kind(str(job["project_name"]))
     assert total is not None
     assert job_count is not None
     return {
@@ -174,25 +186,22 @@ def request_preview(job_id: UUID) -> dict[str, Any]:
         raise HTTPException(status_code=409, detail="the job has no source media")
     with connection() as database:
         database.execute("SELECT id FROM jobs WHERE id = %s FOR UPDATE", (job_id,)).fetchone()
-        existing = database.execute(
+        latest = database.execute(
             """
             SELECT * FROM edit_runs
-            WHERE job_id = %s AND status IN ('pending', 'planning', 'rendering', 'ready')
+            WHERE job_id = %s
             ORDER BY version DESC LIMIT 1
             """,
             (job_id,),
         ).fetchone()
-        if existing is not None:
-            return _response(existing)
-        failed = database.execute(
-            """
-            SELECT * FROM edit_runs
-            WHERE job_id = %s AND status = 'failed'
-            ORDER BY version DESC LIMIT 1
-            """,
-            (job_id,),
-        ).fetchone()
-        if failed is not None:
+        if latest is not None and latest["status"] in {
+            "pending",
+            "planning",
+            "rendering",
+            "ready",
+        }:
+            return _response(latest)
+        if latest is not None and latest["status"] == "failed":
             row = database.execute(
                 """
                 UPDATE edit_runs
@@ -201,7 +210,7 @@ def request_preview(job_id: UUID) -> dict[str, Any]:
                 WHERE id = %s
                 RETURNING *
                 """,
-                (failed["id"],),
+                (latest["id"],),
             ).fetchone()
             database.execute(
                 "UPDATE jobs SET status = 'previewing', updated_at = now() WHERE id = %s",
@@ -216,8 +225,8 @@ def request_preview(job_id: UUID) -> dict[str, Any]:
                     job_id,
                     Jsonb(
                         {
-                            "version": failed["version"],
-                            "reused_plan": failed["edit_plan_id"] is not None,
+                            "version": latest["version"],
+                            "reused_plan": latest["edit_plan_id"] is not None,
                         }
                     ),
                 ),

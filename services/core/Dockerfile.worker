@@ -19,11 +19,16 @@ WORKDIR /app
 
 COPY requirements.txt requirements-worker.txt ./
 RUN python3 -m venv /opt/venv \
+    && pip install --no-cache-dir torch==2.5.1 --index-url https://download.pytorch.org/whl/cu121 \
     && pip install --no-cache-dir --requirement requirements.txt --requirement requirements-worker.txt
 
 ARG WHISPER_MODEL_REPOSITORY=Systran/faster-whisper-small
 ARG WHISPER_MODEL_REVISION=536b0662742c02347bc0e980a01041f333bce120
 RUN python -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='${WHISPER_MODEL_REPOSITORY}', revision='${WHISPER_MODEL_REVISION}', local_dir='/models/faster-whisper-small')"
+
+ARG VISUAL_MODEL_REPOSITORY=openai/clip-vit-base-patch32
+ARG VISUAL_MODEL_REVISION=c7244be81152024ce0e99ac8d2e373a8953d9f9a
+RUN python -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='${VISUAL_MODEL_REPOSITORY}', revision='${VISUAL_MODEL_REVISION}', local_dir='/models/clip-vit-base-patch32', allow_patterns=['config.json','preprocessor_config.json','tokenizer_config.json','special_tokens_map.json','tokenizer.json','vocab.json','merges.txt','pytorch_model.bin'])"
 
 RUN groupadd --gid 10001 gmmedia \
     && useradd --uid 10001 --gid gmmedia --create-home --shell /usr/sbin/nologin gmmedia \

@@ -4,7 +4,7 @@ GM Studio is a self-hosted, phone-first editing appliance. Upload your own foota
 
 The project is open source under [Apache-2.0](LICENSE). Your deployment remains private: source media, exports, database contents, `.env`, and ChatGPT credentials are runtime data and must never be committed.
 
-> **Security status:** GM Studio currently assumes a trusted, private Tailscale network. Authentication and recovery hardening are Phase 7 work. Do not expose it through Tailscale Funnel, public port forwarding, or a public reverse proxy.
+> **Security boundary:** GM Studio listens only on host loopback and is published through private Tailscale Serve, never Funnel. The deployed web layer requires Serve's stripped-and-injected Tailscale identity header to match the configured owner. Do not add public port forwarding or a public reverse proxy.
 
 ## How it works
 
@@ -27,7 +27,7 @@ Editor model ---> constrained JSON edit plan ---> validator ---> FFmpeg renderer
 - The model can reference only registered asset IDs, valid time ranges, and approved edit operations.
 - Trusted code validates the edit decision list and builds FFmpeg arguments. The agent receives no shell or Docker access.
 
-The detailed design is in [the architecture plan](docs/architecture-plan.md), and current progress and exit criteria are in [the build phases](docs/build-phases.md).
+The detailed design is in [the architecture plan](docs/architecture-plan.md), current progress and exit criteria are in [the build phases](docs/build-phases.md), and the layered acceptance process is in [the testing plan](docs/testing-plan.md).
 
 ## Requirements
 
@@ -114,21 +114,35 @@ Example metadata shape:
 
 Importing confirms only what you record; it does not independently grant or verify rights. Tracks remain unavailable to the agent unless they are active, marked for commercial use, non-synthetic, and compatible with the job's selected platform.
 
+## Recovery operations
+
+The production appliance uses two copies of the same encrypted Restic repository: the prepared USB at `/mnt/gm-backup` and a verified mirror in OneDrive. The OneDrive side contains encrypted repository objects, not directly playable media. Private web access is restricted to the configured Tailscale owner, and `/system` reports the USB snapshot, off-site mirror, queues, storage, GPU, and reboot-recovery state.
+
+The one-time and destructive acceptance steps are documented in [the testing plan](docs/testing-plan.md). In order, configure private access, enroll/import OneDrive, then run the deliberate reboot recovery drill. Never paste the Restic recovery key or the temporary rclone configuration into chat, email, logs, or the repository.
+
 ## Verify the build
 
-Host-only checks:
+Run the complete host-only source gate as the normal user:
 
 ```bash
-npm run typecheck:web
-npm run build:web
-docker compose config --quiet
-python3 -m py_compile services/core/app/*.py scripts/*.py
-./scripts/check-public-release.sh
+./scripts/verify-source-suite.sh
 ```
 
-Core unit tests use Python 3.13 and the dependencies in `services/core/requirements.txt`; the public CI workflow provisions that isolated environment automatically.
+The API and public CI use Python 3.13. The pinned CUDA worker base currently supplies Python 3.10, so shared service code is kept compatible with both runtimes. The live suite runs the backend and FFmpeg integration tests inside that production worker image.
 
-Live acceptance checks require a configured and running stack:
+After deployment, the live core suite verifies service health, migrations, containerized backend tests, existing media analysis, reusable library references, duplicate auditing, and source-evidence search:
+
+```bash
+sudo ./scripts/verify-live-suite.sh
+```
+
+The render and editor lane is deliberately opt-in because it creates edit versions, uses GPU time, and may consume connected ChatGPT plan allowance:
+
+```bash
+sudo ./scripts/verify-live-suite.sh --confirm-render-and-ai
+```
+
+Individual live acceptance helpers remain available:
 
 ```bash
 python3 scripts/verify-phase3.py
@@ -136,9 +150,13 @@ python3 scripts/verify-phase4.py
 python3 scripts/verify-phase5.py
 python3 scripts/verify-phase6.py
 python3 scripts/verify-phase6b.py
+python3 scripts/verify-phase6c.py
+python3 scripts/verify-phase6c2.py
+python3 scripts/verify-phase6d.py
+python3 scripts/verify-phase6e.py
 ```
 
-The Phase 3 check exercises interrupted/resumed tus uploads, Phase 4 verifies real-media analysis, Phase 5 proves strict edit-plan validation plus a downloadable deterministic preview, and Phase 6 exercises revision, approval, and full delivery packaging. Phase 6B verifies a deployed montage plus its model catalogue and usage ledger after a real montage has been created from the phone.
+The Phase 3 check exercises interrupted/resumed tus uploads, Phase 4 verifies real-media analysis, Phase 5 proves strict edit-plan validation plus a downloadable deterministic preview, and Phase 6 exercises revision, approval, and full delivery packaging. Phase 6B verifies a deployed montage plus its model catalogue and usage ledger. Phase 6C verifies zero-copy reuse and the non-destructive duplicate audit; Phase 6D verifies catalogue backfill and provenance-bearing text search; Phase 6E verifies local semantic visual search with source-frame evidence. Phase 9 verifies checksum-gated physical storage sharing while preserving every asset record and historical path.
 
 ## Repository map
 

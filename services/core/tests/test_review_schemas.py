@@ -2,11 +2,16 @@ import unittest
 
 from pydantic import ValidationError
 
-from app.editing import _needs_montage_delivery_refresh
-from app.schemas import JobCreate, RevisionCreate
+from app.editing import _job_history_kind, _needs_montage_delivery_refresh
+from app.schemas import JobAssetAttach, JobCreate, LibraryAssetUpdate, LibraryCollectionCreate, RevisionCreate
 
 
 class RevisionSchemaTests(unittest.TestCase):
+    def test_labels_only_reserved_verification_project_names_as_tests(self) -> None:
+        self.assertEqual(_job_history_kind("Phase 3 verification — 2026-10-24"), "verification")
+        self.assertEqual(_job_history_kind("Phase 6C library verification"), "verification")
+        self.assertEqual(_job_history_kind("Interesting montage"), "editing")
+
     def test_only_legacy_ready_montage_delivery_needs_refresh(self) -> None:
         legacy = {"status": "ready", "manifest": {"recipe": "montage"}}
         current = {
@@ -46,6 +51,44 @@ class RevisionSchemaTests(unittest.TestCase):
     def test_rejects_unsafe_model_slug(self) -> None:
         with self.assertRaisesRegex(ValidationError, "unsupported characters"):
             JobCreate(editor_model="model/name")
+
+    def test_library_attach_requires_unique_assets(self) -> None:
+        asset_id = "11111111-1111-4111-8111-111111111111"
+
+        with self.assertRaisesRegex(ValidationError, "cannot repeat"):
+            JobAssetAttach(asset_ids=[asset_id, asset_id])
+
+    def test_library_attach_accepts_multiple_assets(self) -> None:
+        attachment = JobAssetAttach(
+            asset_ids=[
+                "11111111-1111-4111-8111-111111111111",
+                "22222222-2222-4222-8222-222222222222",
+            ]
+        )
+
+        self.assertEqual(len(attachment.asset_ids), 2)
+
+    def test_library_metadata_normalizes_name_and_unique_tags(self) -> None:
+        metadata = LibraryAssetUpdate.model_validate(
+            {
+                "display_name": "  Fighter   jet flypast ",
+                "notes": "Useful source",
+                "favorite": True,
+                "tags": [" Aviation ", "travel", "AVIATION"],
+            }
+        )
+
+        self.assertEqual(metadata.display_name, "Fighter jet flypast")
+        self.assertEqual(metadata.tags, ["aviation", "travel"])
+
+    def test_library_metadata_rejects_oversized_tag(self) -> None:
+        with self.assertRaisesRegex(ValidationError, "between 1 and 40"):
+            LibraryAssetUpdate(tags=["x" * 41])
+
+    def test_collection_name_is_normalized(self) -> None:
+        collection = LibraryCollectionCreate(name="  Travel   B-roll ")
+
+        self.assertEqual(collection.name, "Travel B-roll")
 
     def test_requires_feedback_or_caption_correction(self) -> None:
         with self.assertRaises(ValidationError):

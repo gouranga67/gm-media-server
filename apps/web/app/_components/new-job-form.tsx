@@ -10,11 +10,13 @@ import {
   AudioLinesIcon,
   CheckIcon,
   CircleAlertIcon,
+  FolderIcon,
   ImageIcon,
   LoaderCircleIcon,
   PauseIcon,
   PlayIcon,
   RefreshCwIcon,
+  SearchIcon,
   Trash2Icon,
   UploadCloudIcon,
   VideoIcon,
@@ -25,26 +27,35 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  attachServerAssets,
   createProject,
   createMediaJob,
   getEditorModels,
   getAsset,
   getMusicTracks,
+  getServerLibraryAssets,
   getSystemInformation,
+  getVisualIndexStatus,
+  libraryAssetThumbnailUrl,
   mediaTypeForFile,
   registerAsset,
   requestPreview,
+  searchCatalog,
+  visualIndexFrameUrl,
   type Asset,
+  type CatalogSearchResult,
   type EditStyle,
   type EditorModel,
   type MusicMode,
   type MusicTrack,
+  type LibraryAsset,
   type PrivacyMode,
   type OutputAspect,
   type ReasoningEffort,
   type Recipe,
   type TargetDuration,
   type TargetPlatform,
+  type VisualIndexStatus,
 } from "@/lib/media-api";
 import { startResumableUpload } from "@/lib/resumable-upload";
 import { cn } from "@/lib/utils";
@@ -54,6 +65,8 @@ const READY_POLL_ATTEMPTS = 45;
 const READY_POLL_INTERVAL_MS = 1_000;
 
 type ServerStatus = "checking" | "online" | "offline";
+type SourcePanel = "upload" | "library";
+type LibraryKind = "all" | "video" | "image" | "audio";
 type UploadPhase =
   | "queued"
   | "registering"
@@ -260,6 +273,41 @@ function formatBytes(bytes: number): string {
 
 function fileIdentity(file: File): string {
   return [file.name, file.size, file.lastModified].join(":");
+}
+
+function formatDuration(seconds: number | null): string | undefined {
+  if (seconds === null || !Number.isFinite(seconds) || seconds <= 0) return undefined;
+  const rounded = Math.round(seconds);
+  const minutes = Math.floor(rounded / 60);
+  const remainder = rounded % 60;
+  return minutes > 0 ? `${minutes}:${remainder.toString().padStart(2, "0")}` : `${remainder}s`;
+}
+
+function formatLibraryDate(value: string): string {
+  return new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short", year: "numeric" }).format(
+    new Date(value),
+  );
+}
+
+function formatCatalogTime(seconds: number): string {
+  const rounded = Math.max(0, Math.floor(seconds));
+  const minutes = Math.floor(rounded / 60);
+  return `${minutes}:${(rounded % 60).toString().padStart(2, "0")}`;
+}
+
+function catalogResultAsAsset(result: CatalogSearchResult): LibraryAsset {
+  return {
+    id: result.asset_id,
+    project_id: result.project_id,
+    project_name: result.project_name,
+    source_name: result.source_name,
+    mime_type: result.mime_type,
+    byte_size: result.byte_size,
+    sha256: result.sha256,
+    duration_seconds: result.duration_seconds,
+    thumbnail_available: result.thumbnail_available,
+    created_at: result.created_at,
+  };
 }
 
 function phaseLabel(entry: UploadEntry): string {
@@ -540,6 +588,94 @@ function UploadRow({
   );
 }
 
+function LibraryAssetRow({
+  asset,
+  disabled,
+  match,
+  selected,
+  onChange,
+}: {
+  readonly asset: LibraryAsset;
+  readonly disabled: boolean;
+  readonly match?: CatalogSearchResult;
+  readonly selected: boolean;
+  readonly onChange: (asset: LibraryAsset) => void;
+}) {
+  const duration = formatDuration(asset.duration_seconds);
+  const visualMatch = match?.evidence_kinds.includes("visual") ?? false;
+  const spokenMatch = match?.evidence_kinds.includes("spoken_words") ?? false;
+  const thumbnailUrl = match?.visual_frame_id !== null && match?.visual_frame_id !== undefined
+    ? visualIndexFrameUrl(match.visual_frame_id)
+    : libraryAssetThumbnailUrl(asset.id);
+  return (
+    <label
+      className={cn(
+        "flex min-h-20 items-center gap-3 rounded-md bg-white p-3",
+        selected ? "border-2 border-[#173F5F]" : "border border-[#D7D9D3]",
+        disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer",
+      )}
+    >
+      <span className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-sm bg-[#E9EDF0] text-[#173F5F]">
+        {asset.thumbnail_available ? (
+          <img
+            alt=""
+            className="h-full w-full object-cover"
+            loading="lazy"
+            src={thumbnailUrl}
+          />
+        ) : (
+          <FileTypeIcon mediaType={asset.mime_type} />
+        )}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate font-mono text-xs font-bold text-[#20211F]">{asset.source_name}</span>
+        <span className="mt-1 block truncate font-mono text-[10px] text-[#666862]">
+          {[formatBytes(asset.byte_size), duration, asset.project_name].filter(Boolean).join(" · ")}
+        </span>
+        <span className="mt-1 block font-mono text-[10px] text-[#666862]">{formatLibraryDate(asset.created_at)}</span>
+        {match !== undefined ? (
+          <span className="mt-2 flex flex-wrap gap-1.5">
+            {visualMatch ? (
+              <span className="rounded-sm border border-[#BFD2DE] bg-[#EFF6FA] px-1.5 py-1 font-mono text-[9px] font-bold text-[#173F5F] uppercase">
+                Visual match
+              </span>
+            ) : null}
+            {spokenMatch ? (
+              <span className="rounded-sm border border-[#BFD2DE] bg-[#EFF6FA] px-1.5 py-1 font-mono text-[9px] font-bold text-[#173F5F] uppercase">
+                Spoken words
+              </span>
+            ) : null}
+          </span>
+        ) : null}
+        {match?.segment_kind === "transcript" ? (
+          <span className="mt-2 block rounded-sm border-l-2 border-[#173F5F] bg-[#EFF6FA] px-2 py-1.5 text-xs leading-relaxed text-[#314553]">
+            “{match.text}”
+            <span className="mt-1 block font-mono text-[9px] font-bold text-[#173F5F] uppercase">
+              Spoken at {formatCatalogTime(match.start_seconds)}–{formatCatalogTime(match.end_seconds)} · source transcript
+            </span>
+          </span>
+        ) : visualMatch && match !== undefined ? (
+          <span className="mt-2 block font-mono text-[9px] font-bold text-[#173F5F] uppercase">
+            Seen at {formatCatalogTime(match.start_seconds)}–{formatCatalogTime(match.end_seconds)} · source frame
+          </span>
+        ) : match !== undefined ? (
+          <span className="mt-2 block font-mono text-[9px] font-bold text-[#173F5F] uppercase">
+            Catalogue match · {match.segment_kind}
+          </span>
+        ) : null}
+      </span>
+      <input
+        aria-label={`Use ${asset.source_name}`}
+        checked={selected}
+        className="size-5 shrink-0 accent-[#173F5F]"
+        disabled={disabled}
+        onChange={() => onChange(asset)}
+        type="checkbox"
+      />
+    </label>
+  );
+}
+
 function NewJobFormContent() {
   const router = useRouter();
   const [name, setName] = useState("");
@@ -558,6 +694,18 @@ function NewJobFormContent() {
   const [outputAspect, setOutputAspect] = useState<OutputAspect>("vertical");
   const [musicTracks, setMusicTracks] = useState<readonly MusicTrack[]>([]);
   const [entries, setEntries] = useState<UploadEntry[]>([]);
+  const [sourcePanel, setSourcePanel] = useState<SourcePanel>("library");
+  const [libraryAssets, setLibraryAssets] = useState<readonly LibraryAsset[]>([]);
+  const [selectedLibraryAssetIds, setSelectedLibraryAssetIds] = useState<ReadonlySet<string>>(new Set());
+  const [libraryQuery, setLibraryQuery] = useState("");
+  const [libraryKind, setLibraryKind] = useState<LibraryKind>("all");
+  const [libraryProjectId, setLibraryProjectId] = useState("all");
+  const [libraryLoading, setLibraryLoading] = useState(true);
+  const [libraryError, setLibraryError] = useState<string>();
+  const [catalogMatches, setCatalogMatches] = useState<ReadonlyMap<string, CatalogSearchResult>>(new Map());
+  const [catalogSearching, setCatalogSearching] = useState(false);
+  const [catalogSearchError, setCatalogSearchError] = useState<string>();
+  const [visualIndexStatus, setVisualIndexStatus] = useState<VisualIndexStatus>();
   const [serverStatus, setServerStatus] = useState<ServerStatus>("checking");
   const [formError, setFormError] = useState<string>();
   const [fileError, setFileError] = useState<string>();
@@ -585,11 +733,94 @@ function NewJobFormContent() {
       .catch(() => {
         if (!cancelled) setServerStatus("offline");
       });
+    void getServerLibraryAssets()
+      .then((assets) => {
+        if (!cancelled) {
+          setLibraryAssets(assets);
+          setLibraryLoading(false);
+          setLibraryError(undefined);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setLibraryLoading(false);
+          setLibraryError(toErrorMessage(error));
+        }
+      });
     return () => {
       cancelled = true;
       mountedRef.current = false;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    let timer: number | undefined;
+
+    const refreshVisualIndexStatus = () => {
+      void getVisualIndexStatus()
+        .then((status) => {
+          if (cancelled) return;
+          setVisualIndexStatus(status);
+          if (status.assets_pending > 0) {
+            timer = window.setTimeout(refreshVisualIndexStatus, 5000);
+          }
+        })
+        .catch(() => {
+          if (!cancelled) timer = window.setTimeout(refreshVisualIndexStatus, 15000);
+        });
+    };
+
+    refreshVisualIndexStatus();
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, []);
+
+  useEffect(() => {
+    const query = libraryQuery.trim();
+    if (query.length < 2) {
+      setCatalogMatches(new Map());
+      setCatalogSearching(false);
+      setCatalogSearchError(undefined);
+      return;
+    }
+    let cancelled = false;
+    setCatalogSearching(true);
+    setCatalogSearchError(undefined);
+    const timer = window.setTimeout(() => {
+      void searchCatalog({
+        query,
+        mediaKind: libraryKind,
+        projectId: libraryProjectId,
+      }).then((search) => {
+        if (cancelled) return;
+        const matches = new Map<string, CatalogSearchResult>();
+        for (const result of search.results) {
+          if (!matches.has(result.asset_id)) matches.set(result.asset_id, result);
+        }
+        setCatalogMatches(matches);
+        setLibraryAssets((current) => {
+          const assets = new Map(current.map((asset) => [asset.id, asset]));
+          for (const result of matches.values()) {
+            if (!assets.has(result.asset_id)) assets.set(result.asset_id, catalogResultAsAsset(result));
+          }
+          return Array.from(assets.values());
+        });
+        setCatalogSearching(false);
+      }).catch((error: unknown) => {
+        if (cancelled) return;
+        setCatalogMatches(new Map());
+        setCatalogSearching(false);
+        setCatalogSearchError(toErrorMessage(error));
+      });
+    }, 250);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [libraryKind, libraryProjectId, libraryQuery]);
 
   useEffect(() => {
     settleRootScroll();
@@ -646,8 +877,11 @@ function NewJobFormContent() {
     };
   }, []);
 
-  const totalBytes = entries.reduce((total, entry) => total + entry.file.size, 0);
-  const allReady = entries.length > 0 && entries.every((entry) => entry.phase === "ready");
+  const selectedLibraryAssets = libraryAssets.filter((asset) => selectedLibraryAssetIds.has(asset.id));
+  const totalItems = entries.length + selectedLibraryAssets.length;
+  const totalBytes = entries.reduce((total, entry) => total + entry.file.size, 0)
+    + selectedLibraryAssets.reduce((total, asset) => total + asset.byte_size, 0);
+  const allReady = totalItems > 0 && entries.every((entry) => entry.phase === "ready");
   const formLocked = projectId !== undefined;
   const compatibleMusicCount = musicTracks.filter(
     (track) =>
@@ -655,6 +889,30 @@ function NewJobFormContent() {
       || track.allowed_platforms.includes(targetPlatform),
   ).length;
   const durationOptions: readonly TargetDuration[] = recipe === "montage" ? [15, 30, 45, 60] : [20, 30, 45, 60];
+  const libraryProjects = Array.from(
+    new Map(libraryAssets.map((asset) => [asset.project_id, asset.project_name])).entries(),
+  ).sort((left, right) => left[1].localeCompare(right[1]));
+  const normalizedLibraryQuery = libraryQuery.trim().toLocaleLowerCase();
+  const filteredLibraryAssets = libraryAssets
+    .filter((asset) => {
+      const matchesQuery = normalizedLibraryQuery.length === 0
+        || asset.source_name.toLocaleLowerCase().includes(normalizedLibraryQuery)
+        || asset.project_name.toLocaleLowerCase().includes(normalizedLibraryQuery)
+        || catalogMatches.has(asset.id);
+      const matchesKind = libraryKind === "all" || asset.mime_type.startsWith(`${libraryKind}/`);
+      const matchesProject = libraryProjectId === "all" || asset.project_id === libraryProjectId;
+      return matchesQuery && matchesKind && matchesProject;
+    })
+    .sort((left, right) => {
+      const leftMatch = catalogMatches.get(left.id);
+      const rightMatch = catalogMatches.get(right.id);
+      if (leftMatch !== undefined && rightMatch !== undefined) {
+        return rightMatch.rank - leftMatch.rank;
+      }
+      if (leftMatch !== undefined) return -1;
+      if (rightMatch !== undefined) return 1;
+      return new Date(right.created_at).getTime() - new Date(left.created_at).getTime();
+    });
 
   const selectRecipe = (selected: Recipe) => {
     setRecipe(selected);
@@ -820,6 +1078,20 @@ function NewJobFormContent() {
     }
   };
 
+  const toggleLibraryAsset = (asset: LibraryAsset) => {
+    if (formLocked) return;
+    setSelectedLibraryAssetIds((current) => {
+      const next = new Set(current);
+      if (next.has(asset.id)) {
+        next.delete(asset.id);
+      } else {
+        next.add(asset.id);
+      }
+      return next;
+    });
+    setFormError(undefined);
+  };
+
   const handleDrop = (event: DragEvent<HTMLLabelElement>) => {
     event.preventDefault();
     queueFiles(Array.from(event.dataTransfer.files));
@@ -833,8 +1105,8 @@ function NewJobFormContent() {
       setFormError("Enter a project name.");
       return;
     }
-    if (entries.length === 0) {
-      setFormError("Add at least one source media file.");
+    if (totalItems === 0) {
+      setFormError("Select server media or add at least one new file.");
       return;
     }
     if (recipe === "talking_head" && /\bmontage\b/i.test(cleanBrief)) {
@@ -876,8 +1148,12 @@ function NewJobFormContent() {
           outputAspect,
         });
         activeJobId = job.id;
-        setJobId(job.id);
       }
+
+      if (selectedLibraryAssetIds.size > 0) {
+        await attachServerAssets(activeJobId, Array.from(selectedLibraryAssetIds));
+      }
+      setJobId(activeJobId);
 
       const queuedEntries = entries.filter((entry) => entry.phase === "queued");
       await Promise.all(
@@ -961,6 +1237,15 @@ function NewJobFormContent() {
             <Link className="font-mono text-[10px] font-bold text-[#173F5F] underline underline-offset-4" href="/usage">
               AI usage
             </Link>
+            <Link className="font-mono text-[10px] font-bold text-[#173F5F] underline underline-offset-4" href="/library">
+              Library
+            </Link>
+            <Link className="hidden font-mono text-[10px] font-bold text-[#173F5F] underline underline-offset-4 md:inline" href="/system">
+              System
+            </Link>
+            <Link className="hidden font-mono text-[10px] font-bold text-[#173F5F] underline underline-offset-4 sm:inline" href="/library/duplicates">
+              Duplicate audit
+            </Link>
           </div>
           <Badge className="rounded-sm border-[#D7D9D3] bg-white px-2 py-1 font-mono text-[10px] font-bold text-[#173F5F] uppercase dark:bg-white" variant="outline">
             <span
@@ -984,7 +1269,7 @@ function NewJobFormContent() {
         <section className="space-y-3">
           <h1 className="text-2xl font-bold tracking-tight text-[#173F5F]">Start a new edit</h1>
           <p className="text-sm leading-relaxed text-[#666862]">
-            Agents plan the edit. Visuals and speech come only from your uploads; optional music comes from your approved local library.
+            Agents plan the edit. Visuals and speech come only from your selected media; optional music comes from your approved local library.
           </p>
         </section>
 
@@ -1251,7 +1536,7 @@ function NewJobFormContent() {
             <span className="space-y-1">
               <span className="block text-sm font-bold text-[#173F5F]">Allow AI-written caption copy</span>
               <span className="block text-xs leading-relaxed text-[#666862]">
-                This affects text only. Visuals and speech remain grounded in your uploads.
+                This affects text only. Visuals and speech remain grounded in your selected media.
               </span>
             </span>
             <span className="flex size-11 shrink-0 items-center justify-end">
@@ -1268,80 +1553,256 @@ function NewJobFormContent() {
           </label>
         </fieldset>
 
-        <section className="space-y-4 pb-8">
+        <section className="space-y-4 pb-8" id="server-library">
           <SectionHeading number="04">Source media</SectionHeading>
-          <label
-            className={cn(
-              "flex min-h-36 w-full cursor-pointer flex-col items-center justify-center rounded-md border-2 border-dashed border-[#C7CBD0] bg-white p-6 text-center transition-colors hover:border-[#173F5F] focus-within:border-[#173F5F] focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[#173F5F] dark:bg-white",
-              isSubmitting && "pointer-events-none cursor-wait opacity-60",
-            )}
-            onDragOver={(event) => event.preventDefault()}
-            onDrop={handleDrop}
-          >
-            <UploadCloudIcon aria-hidden="true" className="mb-2 size-6 text-[#173F5F]" />
-            <span className="text-sm font-bold text-[#173F5F]">Add source media</span>
-            <span className="mt-1 font-mono text-[10px] tracking-tight text-[#666862] uppercase">
-              Video, photo, audio · Up to 20 GB per file
-            </span>
-            <input
-              accept="video/*,image/*,audio/*,.heic,.heif"
-              className="sr-only"
-              disabled={isSubmitting}
-              multiple
-              onClick={() => {
-                settleRootScroll();
-                reportClientDiagnostic("file-picker-open");
-              }}
-              onChange={(event) => {
-                settleRootScroll();
-                const files = Array.from(event.currentTarget.files ?? []);
-                reportClientDiagnostic("file-picker-change", {
-                  fileCount: files.length,
-                  fileTypes: files.map((file) => file.type || "unknown"),
-                  fileSizes: files.map((file) => file.size),
-                });
-                try {
-                  queueFiles(files);
-                  reportClientDiagnostic("files-queued", { fileCount: files.length });
-                } catch (error) {
-                  const message = toErrorMessage(error);
-                  setFileError(message);
-                  reportClientDiagnostic("file-selection-error", {
-                    message,
-                    stack: error instanceof Error ? error.stack : undefined,
-                  });
-                } finally {
-                  event.currentTarget.value = "";
-                }
-              }}
-              type="file"
-            />
-          </label>
-          {fileError ? (
-            <p className="flex items-start gap-1.5 text-xs leading-relaxed text-[#A23B2A]" role="alert">
-              <CircleAlertIcon aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
-              {fileError}
-            </p>
-          ) : null}
-          {entries.length > 0 ? (
-            <ul aria-label="Selected source media" className="space-y-2">
-              {entries.map((entry) => (
-                <UploadRow
-                  entry={entry}
-                  key={entry.localId}
-                  onPause={(selected) => void pauseUpload(selected)}
-                  onRemove={removeUpload}
-                  onResume={resumeUpload}
-                  onRetry={retryUpload}
-                />
-              ))}
-            </ul>
-          ) : (
-            <p className="text-center font-mono text-[10px] text-[#666862]">No source files selected yet.</p>
-          )}
-          <p className="text-center font-mono text-[10px] leading-relaxed text-[#666862]">
-            Interrupted uploads continue when this phone reconnects. Keep the file on your phone until it shows Ready.
+          <div className="grid grid-cols-2 gap-2" role="tablist" aria-label="Source media options">
+            <button
+              aria-selected={sourcePanel === "upload"}
+              className={cn(
+                "min-h-11 rounded-md bg-white px-3 text-sm font-bold",
+                sourcePanel === "upload"
+                  ? "border-2 border-[#173F5F] text-[#173F5F]"
+                  : "border border-[#D7D9D3] text-[#666862]",
+              )}
+              onClick={() => setSourcePanel("upload")}
+              role="tab"
+              type="button"
+            >
+              Upload new
+            </button>
+            <button
+              aria-selected={sourcePanel === "library"}
+              className={cn(
+                "min-h-11 rounded-md bg-white px-3 text-sm font-bold",
+                sourcePanel === "library"
+                  ? "border-2 border-[#173F5F] text-[#173F5F]"
+                  : "border border-[#D7D9D3] text-[#666862]",
+              )}
+              onClick={() => setSourcePanel("library")}
+              role="tab"
+              type="button"
+            >
+              Server library
+            </button>
+          </div>
+          <p className="text-xs leading-relaxed text-[#666862]">
+            Selections persist when you switch sources. You can combine server media with new phone uploads.
           </p>
+
+          {sourcePanel === "upload" ? (
+            <div className="space-y-4" role="tabpanel">
+              <label
+                className={cn(
+                  "flex min-h-36 w-full cursor-pointer flex-col items-center justify-center rounded-md border-2 border-dashed border-[#C7CBD0] bg-white p-6 text-center transition-colors hover:border-[#173F5F] focus-within:border-[#173F5F] focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[#173F5F] dark:bg-white",
+                  isSubmitting && "pointer-events-none cursor-wait opacity-60",
+                )}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={handleDrop}
+              >
+                <UploadCloudIcon aria-hidden="true" className="mb-2 size-6 text-[#173F5F]" />
+                <span className="text-sm font-bold text-[#173F5F]">Add source media</span>
+                <span className="mt-1 font-mono text-[10px] tracking-tight text-[#666862] uppercase">
+                  Video, photo, audio · Up to 20 GB per file
+                </span>
+                <input
+                  accept="video/*,image/*,audio/*,.heic,.heif"
+                  className="sr-only"
+                  disabled={isSubmitting}
+                  multiple
+                  onClick={() => {
+                    settleRootScroll();
+                    reportClientDiagnostic("file-picker-open");
+                  }}
+                  onChange={(event) => {
+                    settleRootScroll();
+                    const files = Array.from(event.currentTarget.files ?? []);
+                    reportClientDiagnostic("file-picker-change", {
+                      fileCount: files.length,
+                      fileTypes: files.map((file) => file.type || "unknown"),
+                      fileSizes: files.map((file) => file.size),
+                    });
+                    try {
+                      queueFiles(files);
+                      reportClientDiagnostic("files-queued", { fileCount: files.length });
+                    } catch (error) {
+                      const message = toErrorMessage(error);
+                      setFileError(message);
+                      reportClientDiagnostic("file-selection-error", {
+                        message,
+                        stack: error instanceof Error ? error.stack : undefined,
+                      });
+                    } finally {
+                      event.currentTarget.value = "";
+                    }
+                  }}
+                  type="file"
+                />
+              </label>
+              {fileError ? (
+                <p className="flex items-start gap-1.5 text-xs leading-relaxed text-[#A23B2A]" role="alert">
+                  <CircleAlertIcon aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
+                  {fileError}
+                </p>
+              ) : null}
+              {entries.length > 0 ? (
+                <ul aria-label="New source media" className="space-y-2">
+                  {entries.map((entry) => (
+                    <UploadRow
+                      entry={entry}
+                      key={entry.localId}
+                      onPause={(selected) => void pauseUpload(selected)}
+                      onRemove={removeUpload}
+                      onResume={resumeUpload}
+                      onRetry={retryUpload}
+                    />
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-center font-mono text-[10px] text-[#666862]">No new files selected.</p>
+              )}
+              <p className="text-center font-mono text-[10px] leading-relaxed text-[#666862]">
+                Interrupted uploads continue when this phone reconnects. Keep the file on your phone until it shows Ready.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4" role="tabpanel">
+              <div className="flex items-center justify-between gap-4">
+                <p className="font-mono text-[10px] font-bold tracking-wide text-[#666862] uppercase">Analyzed originals</p>
+                <Link className="text-xs font-bold text-[#173F5F] underline underline-offset-4" href="/library/duplicates">
+                  Review exact duplicates
+                </Link>
+              </div>
+              <label className="relative block" htmlFor="library-search">
+                <span className="sr-only">Search server library</span>
+                <SearchIcon aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-[#666862]" />
+                <Input
+                  className="h-12 rounded-sm border-[#D7D9D3] bg-white pr-3 pl-10 text-[#20211F] shadow-none focus-visible:border-[#173F5F] focus-visible:ring-[#173F5F]/20 dark:bg-white dark:text-[#20211F]"
+                  id="library-search"
+                  onChange={(event) => setLibraryQuery(event.currentTarget.value)}
+                  placeholder="Search speech or what appears in scenes"
+                  type="search"
+                  value={libraryQuery}
+                />
+              </label>
+              {visualIndexStatus ? (
+                <div className="rounded-sm border border-[#D7D9D3] bg-white p-3" aria-live="polite">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-xs leading-relaxed text-[#4E5960]">
+                      {visualIndexStatus.assets_pending > 0
+                        ? `Visual indexing ${visualIndexStatus.assets_ready} canonical items; ${visualIndexStatus.assets_pending} remaining.`
+                        : visualIndexStatus.assets_failed > 0
+                          ? `${visualIndexStatus.assets_ready} canonical items searchable; ${visualIndexStatus.assets_failed} need attention.`
+                          : `Visual search ready · ${visualIndexStatus.frames_total} source frames indexed.`}
+                    </p>
+                    <span className="shrink-0 font-mono text-[9px] font-bold text-[#173F5F] uppercase">Local</span>
+                  </div>
+                  {visualIndexStatus.assets_pending > 0 && visualIndexStatus.assets_total > 0 ? (
+                    <div
+                      aria-label="Visual indexing progress"
+                      aria-valuemax={visualIndexStatus.assets_total - visualIndexStatus.assets_aliased}
+                      aria-valuemin={0}
+                      aria-valuenow={visualIndexStatus.assets_ready}
+                      className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#E9EDF0]"
+                      role="progressbar"
+                    >
+                      <div
+                        className="h-full bg-[#173F5F] transition-[width] motion-reduce:transition-none"
+                        style={{
+                          width: `${Math.min(100, Math.round((visualIndexStatus.assets_ready / Math.max(1, visualIndexStatus.assets_total - visualIndexStatus.assets_aliased)) * 100))}%`,
+                        }}
+                      />
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+              {normalizedLibraryQuery.length >= 2 ? (
+                <div aria-live="polite" className="flex items-start justify-between gap-3 rounded-sm border border-[#BFD2DE] bg-[#EFF6FA] p-3">
+                  <p className="text-xs leading-relaxed text-[#4E5960]">
+                    {catalogSearching
+                      ? "Searching speech and source frames…"
+                      : catalogSearchError
+                        ? "Indexed search is temporarily unavailable; filename and project search still work."
+                        : catalogMatches.size > 0
+                          ? `${catalogMatches.size} strongest source ${catalogMatches.size === 1 ? "match" : "matches"}, ordered by relevance. Results use exact words or visual frames with time ranges.`
+                          : "No speech or visual evidence matched. Filename and project matches are still shown."}
+                  </p>
+                  <span className="shrink-0 font-mono text-[9px] font-bold text-[#173F5F] uppercase">
+                    {catalogSearching ? "Searching" : "Local index"}
+                  </span>
+                </div>
+              ) : null}
+              <div className="flex gap-2 overflow-x-auto pb-1" aria-label="Library media filters">
+                {([
+                  { value: "all", label: "Recent" },
+                  { value: "video", label: "Video" },
+                  { value: "image", label: "Photos" },
+                  { value: "audio", label: "Audio" },
+                ] as const).map((option) => (
+                  <button
+                    aria-pressed={libraryKind === option.value}
+                    className={cn(
+                      "min-h-11 shrink-0 rounded-md bg-white px-4 text-xs font-bold",
+                      libraryKind === option.value
+                        ? "border-2 border-[#173F5F] text-[#173F5F]"
+                        : "border border-[#D7D9D3] text-[#666862]",
+                    )}
+                    key={option.value}
+                    onClick={() => setLibraryKind(option.value)}
+                    type="button"
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+              <label className="block space-y-2 text-xs font-bold text-[#173F5F]" htmlFor="library-project">
+                PROJECT
+                <select
+                  className="h-11 w-full rounded-md border border-[#D7D9D3] bg-white px-3 text-sm text-[#20211F] shadow-none focus:border-[#173F5F] focus:outline-none focus:ring-2 focus:ring-[#173F5F]/20"
+                  id="library-project"
+                  onChange={(event) => setLibraryProjectId(event.currentTarget.value)}
+                  value={libraryProjectId}
+                >
+                  <option value="all">All projects</option>
+                  {libraryProjects.map(([id, projectName]) => (
+                    <option key={id} value={id}>{projectName}</option>
+                  ))}
+                </select>
+              </label>
+              {libraryError ? (
+                <p className="flex items-start gap-1.5 text-xs leading-relaxed text-[#A23B2A]" role="alert">
+                  <CircleAlertIcon aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
+                  {libraryError}
+                </p>
+              ) : libraryLoading ? (
+                <p className="flex items-center justify-center gap-2 py-8 font-mono text-xs text-[#666862]">
+                  <LoaderCircleIcon aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" />
+                  Loading server media…
+                </p>
+              ) : filteredLibraryAssets.length > 0 ? (
+                <div className="max-h-96 space-y-2 overflow-y-auto overscroll-contain" aria-label="Server media library">
+                  {filteredLibraryAssets.map((asset) => (
+                    <LibraryAssetRow
+                      asset={asset}
+                      disabled={formLocked}
+                      key={asset.id}
+                      match={catalogMatches.get(asset.id)}
+                      onChange={toggleLibraryAsset}
+                      selected={selectedLibraryAssetIds.has(asset.id)}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-md border border-[#D7D9D3] bg-white p-6 text-center">
+                  <FolderIcon aria-hidden="true" className="mx-auto size-6 text-[#173F5F]" />
+                  <p className="mt-2 text-sm font-bold text-[#173F5F]">No matching server media</p>
+                  <p className="mt-1 text-xs text-[#666862]">Ready uploads will appear here automatically.</p>
+                </div>
+              )}
+              <p className="text-center font-mono text-[10px] leading-relaxed text-[#666862]">
+                Selecting an item attaches the existing original. It does not copy or re-upload the file.
+              </p>
+            </div>
+          )}
           {jobId ? (
             <p className="text-center font-mono text-[10px] text-[#666862]" aria-live="polite">
               Job {jobId.slice(0, 8)} created
@@ -1361,10 +1822,15 @@ function NewJobFormContent() {
           <div>
             <span className="block font-mono text-[10px] font-bold text-[#666862] uppercase">Total selected</span>
             <span className="text-sm font-bold text-[#173F5F]">
-              {entries.length === 0
-                ? "No files"
-                : `${entries.length} ${entries.length === 1 ? "file" : "files"} · ${formatBytes(totalBytes)}`}
+              {totalItems === 0
+                ? "No media"
+                : `${totalItems} ${totalItems === 1 ? "item" : "items"} · ${formatBytes(totalBytes)}`}
             </span>
+            {totalItems > 0 ? (
+              <span className="mt-0.5 block font-mono text-[10px] text-[#666862]">
+                {selectedLibraryAssets.length} from server · {entries.length} new
+              </span>
+            ) : null}
           </div>
           {allReady ? (
             <Badge className="rounded-sm border-[#BFE3FF] bg-[#E8F5FF] font-mono text-[10px] font-bold text-[#173F5F]" variant="outline">
@@ -1395,7 +1861,7 @@ function NewJobFormContent() {
             </>
           ) : (
             <>
-              Create job &amp; upload
+              {entries.length > 0 ? "Create job & upload" : "Create job"}
               <ArrowRightIcon aria-hidden="true" />
             </>
           )}

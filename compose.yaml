@@ -18,6 +18,7 @@ x-core-environment: &core-environment
   MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-21474836480}
   UPLOAD_HOOK_SECRET: ${UPLOAD_HOOK_SECRET:?Set UPLOAD_HOOK_SECRET in .env}
   CHATGPT_MODEL: ${CHATGPT_MODEL:-gpt-6.1-sol}
+  APPLIANCE_STATUS_PATH: /host-status/appliance-health.json
 
 services:
   postgres:
@@ -87,6 +88,7 @@ services:
     restart: "no"
     volumes:
       - media-data:/media
+      - /var/lib/gm-media-server:/host-status:ro
       - upload-data:/uploads
       - auth-data:/auth
     networks:
@@ -147,6 +149,7 @@ services:
       AI_GATEWAY_FALLBACK_ENABLED: ${AI_GATEWAY_FALLBACK_ENABLED:-false}
       AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:-}
       AI_GATEWAY_MODEL: ${AI_GATEWAY_MODEL:-openai/gpt-6.1-sol}
+      VISUAL_ENCODER_URL: http://visual-indexer:8010
     gpus: all
     stop_grace_period: 2m
     volumes:
@@ -162,6 +165,8 @@ services:
         condition: service_completed_successfully
       redis:
         condition: service_healthy
+      visual-indexer:
+        condition: service_healthy
     networks:
       - edge
       - backend
@@ -171,6 +176,44 @@ services:
       timeout: 5s
       retries: 5
       start_period: 15s
+
+  visual-indexer:
+    <<: *app-security
+    build:
+      context: ./services/core
+      dockerfile: Dockerfile.worker
+    command: ["uvicorn", "app.visual_service:app", "--host", "0.0.0.0", "--port", "8010"]
+    environment:
+      <<: *core-environment
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+      VISUAL_MODEL_PATH: /models/clip-vit-base-patch32
+    gpus: all
+    expose:
+      - "8010"
+    volumes:
+      - media-data:/media:ro
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+    depends_on:
+      media-init:
+        condition: service_completed_successfully
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - backend
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8010/health/ready', timeout=5)",
+        ]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 90s
 
   tusd:
     image: tusproject/tusd:v2.8.0
@@ -210,6 +253,8 @@ services:
       TUSD_BASE_URL: http://tusd:1080/files/
       AI_GATEWAY_MODEL: ${AI_GATEWAY_MODEL:-openai/gpt-6.1-sol}
       AI_GATEWAY_API_KEY: ${AI_GATEWAY_API_KEY:-}
+      TAILSCALE_AUTH_REQUIRED: ${TAILSCALE_AUTH_REQUIRED:-true}
+      TAILSCALE_ALLOWED_LOGIN: ${TAILSCALE_ALLOWED_LOGIN:-}
       NEXT_TELEMETRY_DISABLED: "1"
     ports:
       - "127.0.0.1:${WEB_PORT:-3000}:3000"
@@ -252,6 +297,79 @@ services:
     depends_on:
       media-init:
         condition: service_completed_successfully
+    networks:
+      - edge
+
+  backup:
+    image: restic/restic:0.19.1
+    profiles: ["tools"]
+    user: "0:0"
+    entrypoint: ["restic"]
+    environment:
+      RESTIC_REPOSITORY: /backup/gm-media-restic
+      RESTIC_PASSWORD_FILE: /run/secrets/gm-media-restic-password
+      RESTIC_HOST: gm-server
+      RESTIC_COMPRESSION: auto
+      RESTIC_CACHE_DIR: /tmp/restic-cache
+    volumes:
+      - media-data:/source/media:ro
+      - auth-data:/source/auth:ro
+      - .:/source/project:ro
+      - /mnt/gm-backup:/backup
+      - /etc/gm-media-server/restic-password:/run/secrets/gm-media-restic-password:ro
+    network_mode: none
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+    cap_drop:
+      - ALL
+    cap_add:
+      - DAC_READ_SEARCH
+    security_opt:
+      - no-new-privileges:true
+
+  restore:
+    image: restic/restic:0.19.1
+    profiles: ["tools"]
+    user: "0:0"
+    entrypoint: ["restic"]
+    environment:
+      RESTIC_REPOSITORY: /backup/gm-media-restic
+      RESTIC_PASSWORD_FILE: /run/secrets/gm-media-restic-password
+      RESTIC_HOST: gm-server
+      RESTIC_COMPRESSION: auto
+      RESTIC_CACHE_DIR: /tmp/restic-cache
+    volumes:
+      - /mnt/gm-backup:/backup:ro
+      - /etc/gm-media-server/restic-password:/run/secrets/gm-media-restic-password:ro
+    network_mode: none
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+    security_opt:
+      - no-new-privileges:true
+
+  offsite-sync:
+    image: rclone/rclone:1.75.2
+    profiles: ["tools"]
+    user: "0:0"
+    entrypoint: ["rclone"]
+    volumes:
+      - /mnt/gm-backup/gm-media-restic:/source:ro
+      - /etc/gm-media-server/rclone:/config/rclone
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     networks:
       - edge
 

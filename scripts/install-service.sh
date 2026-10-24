@@ -15,6 +15,8 @@ if [[ ! "$project_root" =~ ^/[A-Za-z0-9._/-]+$ ]]; then
   exit 1
 fi
 
+install -d -o root -g root -m 0755 /var/lib/gm-media-server
+
 docker compose --project-directory "$project_root" config --quiet
 unit_rendered_dir=$(mktemp --directory --tmpdir gm-media-server-systemd.XXXXXX)
 unit_rendered="$unit_rendered_dir/gm-media-server.service"

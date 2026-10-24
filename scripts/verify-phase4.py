@@ -3,26 +3,31 @@
 
 import argparse
 import json
+import os
 import time
 import urllib.error
 import urllib.request
 from typing import Any
 
 
-BASE_URL = "http://127.0.0.1:3000"
+BASE_URL = os.environ.get(
+    "GM_MEDIA_URL", "http://127.0.0.1:3000/api/media"
+).rstrip("/")
 
 
 def json_request(path: str) -> Any:
-    request = urllib.request.Request(f"{BASE_URL}{path}", headers={"Accept": "application/json"})
+    request = urllib.request.Request(
+        f"{BASE_URL}/{path.lstrip('/')}", headers={"Accept": "application/json"}
+    )
     with urllib.request.urlopen(request, timeout=15) as response:
         return json.load(response)
 
 
 def choose_asset() -> dict[str, Any]:
-    projects = json_request("/api/media/projects?limit=100")
+    projects = json_request("projects?limit=100")
     candidates: list[dict[str, Any]] = []
     for project in projects:
-        assets = json_request(f"/api/media/projects/{project['id']}/assets")
+        assets = json_request(f"projects/{project['id']}/assets")
         candidates.extend(
             asset
             for asset in assets
@@ -37,7 +42,7 @@ def choose_asset() -> dict[str, Any]:
 
 def get_analysis(asset_id: str) -> dict[str, Any] | None:
     try:
-        return json_request(f"/api/media/assets/{asset_id}/analysis")
+        return json_request(f"assets/{asset_id}/analysis")
     except urllib.error.HTTPError as error:
         if error.code == 404:
             try:
@@ -98,7 +103,7 @@ def main() -> None:
     arguments = parser.parse_args()
 
     asset = (
-        json_request(f"/api/media/assets/{arguments.asset_id}")
+        json_request(f"assets/{arguments.asset_id}")
         if arguments.asset_id
         else choose_asset()
     )

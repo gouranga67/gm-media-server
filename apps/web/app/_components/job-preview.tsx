@@ -77,7 +77,10 @@ export function JobPreview({ jobId }: { readonly jobId: string }) {
     setRetrying(true);
     setError(undefined);
     try {
-      await requestPreview(jobId);
+      const retriedRun = await requestPreview(jobId);
+      setReview((current) =>
+        current ? { ...current, latest_run: retriedRun } : current,
+      );
       setPollGeneration((current) => current + 1);
     } catch (retryError) {
       setError(errorMessage(retryError));

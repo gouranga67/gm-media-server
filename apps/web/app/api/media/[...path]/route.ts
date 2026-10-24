@@ -59,6 +59,10 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   return forward(request, (await context.params).path);
 }
 
+export async function PUT(request: NextRequest, context: RouteContext) {
+  return forward(request, (await context.params).path);
+}
+
 export async function DELETE(request: NextRequest, context: RouteContext) {
   return forward(request, (await context.params).path);
 }

@@ -11,14 +11,19 @@ This is the working plan for turning the Lenovo into a private media-editing app
 | 0 | Inventory, content rules, and architecture | Complete |
 | 1 | Repository foundation and repeatable diagnostics | Complete |
 | 2 | Reproducible local service stack | Complete |
-| 3 | Projects, jobs, and resumable phone uploads | In progress |
+| 3 | Projects, jobs, and resumable phone uploads | Complete |
 | 4 | Local ingest and media analysis | Complete |
 | 5 | Bounded editor agent and deterministic reel rendering | Complete |
 | 6 | Phone review, revisions, delivery, and provenance | Complete |
 | 6A | Creative duration, motion, transitions, and licensed music | Complete |
 | 6B | Montage recipe, model controls, and usage visibility | Complete |
-| 6C | Reusable on-server content library | Planned |
-| 7 | Appliance hardening, backup, and recovery | Not started |
+| 6C | Reusable on-server content library | Complete |
+| 6D | Searchable scene, phrase, and media catalogue | Complete |
+| 6E | Local semantic visual indexing and hybrid library search | Complete |
+| 6E.1 | Denser visual evidence sampling and relevance-ranked search | Complete |
+| 7 | Appliance hardening, backup, and recovery | Complete |
+| 8 | Managed media memory, collections, and reversible cleanup | Complete |
+| 9 | Safe exact-copy cleanup and automatic storage reuse | Source complete; live acceptance pending |
 
 ## Phase 0 — inventory and guardrails
 
@@ -167,6 +172,8 @@ Build:
 
 - Phone-selectable Montage recipe for uploaded video and photos, with 15/30/45/60-second targets and vertical or landscape delivery.
 - Strict montage EDL containing source asset IDs, bounded source ranges, fixed transition/motion presets, and optional approved-library music only.
+- Per-clip source-audio gain for exact dialogue emphasis, with automatic music ducking under audible montage clips and backward-compatible playback of older plans.
+- Deterministic selection of an approved music track when the model omits that predictable field, avoiding a second model request for that repair.
 - Deterministic local FFmpeg preview and full-resolution renderer with NVENC and CPU fallback; the model chooses the edit but never renders or generates media.
 - Account-specific model catalogue from the connected ChatGPT account, a per-job model selector, and Low/Medium/High reasoning control.
 - Durable per-request token ledger recording input, cached input, output, reasoning, total tokens, and latency.
@@ -187,15 +194,72 @@ Exit check: select at least two real videos/photos on the phone, request a monta
 
 **Purpose:** stop re-uploading footage that the Lenovo already holds, without copying or weakening ownership and deletion rules.
 
+Current build checkpoint (2026-10-24): the approved phone design has been implemented in the source tree. The New Job screen can switch between resumable uploads and a searchable server library, filter analyzed originals by media type or originating project, preserve mixed selections across tabs, and show thumbnails and selection totals. The API lists only active, fully analyzed originals and attaches selections to a draft job through the existing `job_assets` reference table; repeated attachment is idempotent and no media bytes or hashes are copied. Migration 010 changes the originating-project foreign keys from cascade deletion to restricted deletion, so a reusable original cannot disappear through an unrelated project cleanup.
+
+The approved exact-duplicate audit is also implemented in the source tree at `/library/duplicates`. It groups only active, fully analyzed originals with the same verified SHA-256, reports redundant copies and reclaimable bytes, exposes every filename/project/upload date/job-reference count, and recommends a canonical record using job references followed by original age. A review stores only that canonical preference; it never deletes, merges, moves, or rewrites media. Reviews automatically become stale when another identical original joins the group, forcing the changed group back through review. Migration 011 adds the small review ledger and a partial hash index; `scripts/verify-phase6c2.py` verifies the live audit, byte calculation, checksum validation, and non-destructive review round trip. TypeScript, the production Next.js build, Python compilation, Compose configuration, and source checks pass. Deployment and both live Phase 6C acceptance helpers remain outstanding.
+
 Planned build:
 
 - A searchable **Server library** beside the phone file picker, with thumbnails, source names, dates, media type, duration, project, and analysis readiness.
 - An explicit **Attach to this job** operation that adds a database reference to an existing original; it does not copy the media bytes.
-- SHA-256 duplicate detection so a repeated upload can offer the existing item rather than silently storing another full original.
+- SHA-256 exact-duplicate detection and read-only canonical review. A future upload-time shortcut can offer the existing item before retained-storage cleanup is enabled.
 - Clear **remove from job**, **archive**, and **delete original** semantics. Detaching a job never deletes the original; deleting the final retained library item requires confirmation and later backup coverage.
 - Filters for recent footage and prior projects, which directly addresses repeated testing with similar clips.
 
-This is deliberately after Phase 6B. The current schema makes an asset belong to one project, so a safe cross-project library needs a small ownership migration rather than a UI shortcut that could cascade-delete shared originals.
+Completion evidence (2026-10-24): migrations 010–011 deployed cleanly and the live suite found 76 analyzed originals. It attached an existing original to the stable verification job without copying its storage key or SHA-256, proved the repeated attachment was idempotent, and downloaded its valid JPEG thumbnail. The exact-hash audit found 13 duplicate groups containing 59 redundant records and calculated 1,172,262,842 potentially reclaimable bytes. It stored and reread a canonical preference while confirming that no media file changed. The production CUDA worker also passed all duplicate, schema, renderer, ingest, upload, and editing unit tests. **Passed.**
+
+An upload-time reuse shortcut plus explicit archive/delete controls remain Phase 7 retention work because they change retained storage, while the current workflow deliberately preserves every original.
+
+Acceptance helper after deployment: `python3 scripts/verify-phase6c.py` creates a local-only draft job, attaches one analyzed original twice, proves the second request is idempotent, confirms the new job still references the original storage key and SHA-256, and validates its library thumbnail when available.
+
+Exact-duplicate acceptance helper after deployment: `python3 scripts/verify-phase6c2.py` checks the audit summary, verifies every reported copy and reclaimable-byte calculation, records the recommended canonical item, confirms the review is visible on the next read, and proves an invalid checksum is rejected.
+
+## Phase 6D — searchable content intelligence
+
+**Purpose:** let future editing agents find a spoken phrase, subject, shot, or reusable moment without repeatedly inspecting whole files or inventing media descriptions.
+
+Current build checkpoint (2026-10-24): migration 012, the durable catalogue worker, local full-text API, phone-library phrase search, and two bounded Eve tools are implemented in the source tree. Existing analyzed assets are queued for a restart-safe backfill; new analyses queue indexing automatically. Catalogue rows contain immutable asset IDs, exact source ranges, transcript text, detected scene ranges, technical facts, and the tool/model that produced each fact. Reviewed exact duplicates collapse to their canonical asset during search, while stale or unreviewed groups remain visible. The agent can search this evidence and can attach selected originals to a draft job only through the existing validated API; attachment requires explicit Eve human approval. No generated description, arbitrary filesystem path, shell, or external search capability was added.
+
+Planned build:
+
+- A durable segment catalogue tied to immutable asset IDs and time ranges: transcript utterances, detected scenes, image facts, and later OCR text.
+- Local full-text search first, followed by source-derived semantic embeddings when their model, dimensions, and re-index procedure are pinned.
+- Search results that always return the original asset, exact time range, project, thumbnail, and the evidence that caused the match.
+- Bounded agent tools for searching and attaching catalogue results. The editor may select existing source segments but cannot alter catalogue facts or create synthetic footage.
+- Re-index and provenance records so a better transcription or vision model can improve the catalogue without changing the original media or hiding which model produced a tag.
+- A library review surface for correcting titles/tags and hiding weak suggestions while retaining the machine-derived evidence.
+
+This follows the exact-duplicate audit: duplicate groups need stable canonical records before multiple copies can otherwise create repeated search results and waste future indexing work.
+
+Completion evidence (2026-10-24): migration 012 deployed and the restart-safe worker catalogued all 76 analyzed originals into 379 source-evidence records: 173 timestamped transcript utterances, 109 FFmpeg scene intervals, plus asset/image facts. The live search returned the verified source asset, exact range, and evidence model, rejected a blank query, and recorded that no synthetic descriptions were produced. The pinned CUDA worker passed the catalogue tests as part of a 61-test backend suite. **Passed.**
+
+OCR and optional hosted visual descriptions remain later opt-in enrichments. Phase 6D by itself does not claim that filenames or FFmpeg scene boundaries are semantic visual understanding; Phase 6E adds that understanding locally without generated descriptions.
+
+The comprehensive acceptance sequence is documented in `docs/testing-plan.md`. Its source, live-core, and render/AI lanes passed on 2026-10-24: all 10 automated live gates and 61 backend tests passed. The physical-phone lane remains to exercise the complete Phase 3–6 user journey from the actual device.
+
+Acceptance helper after deployment: `python3 scripts/verify-phase6d.py` waits for the durable backfill, requires zero failed catalogue assets, searches for a real library item, validates its source/time/model evidence, and proves blank queries are rejected.
+
+## Phase 6E — local semantic visual indexing
+
+**Purpose:** make searches such as “fighter jet,” “person walking,” or “car in the woods” find what is visible in source footage, while keeping media private and retaining exact source evidence.
+
+Current build checkpoint (2026-10-24): the source implementation is complete and ready to deploy. A private `visual-indexer` container runs the pinned `openai/clip-vit-base-patch32` image/text encoder locally, with GPU acceleration and no host port. The durable worker samples one to three representative JPEGs from every detected scene, stores normalized 512-dimensional embeddings with the exact asset, scene, timestamp, model revision, and source-frame path, and resumes safely after restarts. It processes one asset per worker loop so indexing an existing library does not starve previews or final exports.
+
+Reviewed exact duplicates share one canonical visual index. The library and search API suppress confirmed redundant copies while automatically returning to separate records if a duplicate review becomes stale. Text and visual evidence are merged into one result per source item; visual-only matches display the actual indexed frame and time range, never an invented scene description. The browser polls local backfill progress and continues to provide filename/transcript search if the visual encoder is unavailable.
+
+The first implementation deliberately stores vectors as PostgreSQL `real[]` values and scores them in the API. That is simple and inspectable for this personal library size. A vector extension or approximate index is an upgrade path only if measured search latency becomes a problem at much larger scale.
+
+Source checks cover canonical assignment, keyframe sampling, cosine scoring, Python compilation, TypeScript, production web build, Compose configuration, and the bounded Eve tool contract. Live deployment must still prove that the pinned model loads on this RTX 3050, backfills the canonical library without failures, and returns the known fighter-jet scene with a valid source JPEG.
+
+Acceptance helper after deployment: `python3 scripts/verify-phase6e.py` waits for the restart-safe backfill, requires zero failures and local-only inference, searches for “fighter jet,” validates the returned source range and JPEG evidence, rejects duplicate hashes, and confirms that no synthetic visual description was stored.
+
+## Phase 6E.1 — visual search quality pass
+
+**Purpose:** improve recall and presentation quality before the media catalogue becomes the main way an editor finds reusable footage.
+
+Current source checkpoint (2026-10-24): each scene is sampled at roughly 1.5-second intervals with even temporal coverage, capped at 48 frames per scene and 120 per canonical original. Search now drops the weak long tail relative to the strongest match, caps results at eight, and presents actual similarity order in the browser. The visual index version is now 1.1, so the durable worker automatically refreshes older indexes after deployment. No hosted vision model or generated description was added.
+
+Exit check: after the 1.1 backfill completes, “fighter jet” returns the known plane source among the strongest results with a correct local JPEG and time range, while unrelated low-score originals are absent.
 
 ## Phase 7 — appliance hardening and recovery
 
@@ -209,4 +273,34 @@ Build:
 - Encrypted backup of originals, database, templates, and exports to a second device or storage provider.
 - Restore drill and written recovery procedure.
 
+Current checkpoint (2026-10-24): the prepared 64 GB USB is pinned by filesystem UUID and mounted at `/mnt/gm-backup`. The root-run, encrypted Restic 0.19.1 backup captures consistent PostgreSQL dumps, immutable media, protected ChatGPT credentials, and application source/configuration. It applies a 7-daily/5-weekly/12-monthly retention policy, samples stored data during every backup check, and records machine-readable status. The first repository check passed, and the isolated recovery drill restored and validated the database plus all 3.086 GiB in the full snapshot, including 78 original media files, without mounting or altering the live media volumes. The restore repository remains read-only and the drill shares a host lock with nightly backup/pruning. After the initial key was exposed, the repository password was rotated and the replacement recovery key was saved externally in the owner's password manager. A persistent nightly systemd timer and a five-minute appliance-health timer are installed. The health snapshot reports storage pressure, GPU temperature, core services, queue depth, recent render failures, SMART availability, and backup age through a read-only `/system` screen; the application still receives no Docker socket or device access.
+
+The remaining Phase 7 source is now implemented. `configure-private-access.sh` binds the web layer to the Tailscale owner identity supplied by private Serve while keeping the container port on host loopback. A pinned rclone tool container and root-only importer mirror only the encrypted Restic repository to OneDrive after the local backup, verify the remote file set, preserve displaced objects for 90 days, and publish separate USB/off-site status to `/system`. A boot-enabled recovery verifier can reuse a persisted verification edit plan, deliberately reboot during rendering, and require the worker to resume it into a readable preview without another model request.
+
+Completion evidence (2026-10-24): Tailscale owner enforcement accepted the configured owner and rejected direct unauthenticated requests. The encrypted OneDrive mirror completed with 70 matching repository files and zero differences, then passed its retention cleanup. The deliberate reboot drill interrupted an active render, changed the machine boot ID, recovered the durable run on the first attempt, and produced a readable preview after startup. **Passed.**
+
 Exit check: reboot during a render, restore service automatically, finish the job, and restore a deleted test project from backup.
+
+## Phase 8 — managed media memory
+
+**Purpose:** turn analyzed originals into a clean, durable content memory that can be searched and reused across future editing jobs.
+
+Current source checkpoint (2026-10-24): migration 014 adds user-owned display names, notes, favorites, normalized tags, and collections without altering original hashes or paths. The new `/library` UI combines metadata search with transcript and local CLIP-frame results, keeps strongest evidence ordering, previews the existing original/proxy, exposes timestamped speech/scene evidence and representative source frames, and supports collection membership. Archive/restore is reversible. Permanent deletion is deliberately absent and visibly locked until the encrypted backup passes its restore drill. `scripts/verify-phase8.py` round-trips metadata, a temporary collection, archive/restore, and preview download while restoring the original record and deleting no media.
+
+Live acceptance evidence (2026-10-24): migration 014 deployed successfully and the managed-library verifier preserved the selected original's SHA-256 while round-tripping metadata, collection membership, archive/restore, and preview download with zero deleted originals. The complete regression and render suite then passed 13/13 gates across container health, 61 backend tests, analysis, reusable media, exact duplicates, transcript and visual search, job history, deterministic GPU rendering, talking-head delivery, montage delivery, captions, measured model usage, and phone-download endpoints. **Automated gates passed.**
+
+Exit check: deploy migration 014, pass the live Phase 8 verifier, confirm search and editing on a phone, then unlock canonical duplicate cleanup only after the Phase 7 restore gate passes.
+
+## Phase 9 — safe exact-copy cleanup and automatic reuse
+
+**Purpose:** reclaim storage from confirmed byte-for-byte duplicates without breaking historical jobs, library records, project provenance, or download paths.
+
+Current source checkpoint (2026-10-24): migration 015 records every physical-storage optimization with the source asset, reviewed canonical asset, verified SHA-256, storage keys, filesystem identity, reason, and reclaimed byte count. The duplicate audit now separates canonical review from cleanup, shows already optimized copies, and requires an explicit confirmation before changing storage.
+
+Cleanup hashes the canonical and every redundant original immediately before acting. It then atomically replaces the redundant file with a hard link to the verified canonical bytes. Both original paths, all asset IDs, filenames, projects, job references, edit plans, metadata, previews, and search evidence remain valid. A mismatch, missing path, cross-filesystem copy, or stale group review stops safely before that copy is changed. No database record or unique original is deleted.
+
+New uploads receive the same storage optimization automatically after their completed bytes are hashed and matched to an existing ready original. Upload records and project provenance remain separate, while identical content occupies one set of physical blocks. Selecting an existing library item remains the way to avoid transferring the file again over mobile data.
+
+Source verification covers atomic replacement, checksum refusal, idempotent already-shared storage, audit calculations, Python compilation, TypeScript, and production web build.
+
+Exit check: deploy migration 015, run `python3 scripts/verify-phase9.py --confirm-storage-optimization`, confirm the reviewed group reports zero remaining reclaimable bytes, open an existing job and library preview that used a redundant asset, then run the complete live suite. No library record may be deleted.

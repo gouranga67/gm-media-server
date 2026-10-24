@@ -1,0 +1,14 @@
+[Unit]
+Description=GM Media Server appliance health snapshot
+Requires=docker.service
+After=docker.service gm-media-server.service
+ConditionPathExists=@PROJECT_ROOT@/compose.yaml
+
+[Service]
+Type=oneshot
+WorkingDirectory=@PROJECT_ROOT@
+ExecStart=@PROJECT_ROOT@/scripts/collect-appliance-health.sh
+UMask=0027
+Nice=10
+IOSchedulingClass=idle
+

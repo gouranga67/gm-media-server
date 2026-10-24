@@ -35,6 +35,10 @@ class Settings(BaseSettings):
     editor_max_context_characters: int = Field(default=120_000, ge=10_000, le=500_000)
     editor_model_refresh_seconds: int = Field(default=21_600, ge=300, le=86_400)
     edit_lease_seconds: int = Field(default=900, ge=60, le=7200)
+    visual_encoder_url: str = "http://visual-indexer:8010"
+    visual_encoder_timeout_seconds: int = Field(default=120, ge=10, le=600)
+    visual_model_path: Path = Path("/models/clip-vit-base-patch32")
+    appliance_status_path: Path = Path("/host-status/appliance-health.json")
 
 
 @lru_cache

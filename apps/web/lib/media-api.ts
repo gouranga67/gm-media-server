@@ -49,6 +49,157 @@ export type Asset = {
   readonly updated_at: string;
 };
 
+export type LibraryAsset = {
+  readonly id: string;
+  readonly project_id: string;
+  readonly project_name: string;
+  readonly source_name: string;
+  readonly mime_type: string;
+  readonly byte_size: number;
+  readonly sha256: string;
+  readonly duration_seconds: number | null;
+  readonly thumbnail_available: boolean;
+  readonly created_at: string;
+};
+
+export type DuplicateAssetCopy = {
+  readonly id: string;
+  readonly project_id: string;
+  readonly project_name: string;
+  readonly source_name: string;
+  readonly mime_type: string;
+  readonly byte_size: number;
+  readonly job_references: number;
+  readonly thumbnail_available: boolean;
+  readonly storage_optimized: boolean;
+  readonly created_at: string;
+};
+
+export type DuplicateGroup = {
+  readonly sha256: string;
+  readonly media_kind: "video" | "image" | "audio";
+  readonly mime_type: string;
+  readonly byte_size: number;
+  readonly copy_count: number;
+  readonly reclaimable_bytes: number;
+  readonly canonical_asset_id: string;
+  readonly canonical_reason: string;
+  readonly reviewed: boolean;
+  readonly reviewed_at: string | null;
+  readonly cleanup_ready: boolean;
+  readonly optimized_copies: number;
+  readonly copies: readonly DuplicateAssetCopy[];
+};
+
+export type DuplicateAudit = {
+  readonly summary: {
+    readonly originals_scanned: number;
+    readonly duplicate_groups: number;
+    readonly unreviewed_groups: number;
+    readonly redundant_copies: number;
+    readonly optimized_copies: number;
+    readonly reclaimable_bytes: number;
+  };
+  readonly groups: readonly DuplicateGroup[];
+};
+
+export type CatalogSearchResult = {
+  readonly segment_id: number;
+  readonly asset_id: string;
+  readonly project_id: string;
+  readonly project_name: string;
+  readonly source_name: string;
+  readonly mime_type: string;
+  readonly byte_size: number;
+  readonly sha256: string;
+  readonly duration_seconds: number | null;
+  readonly thumbnail_available: boolean;
+  readonly segment_kind: "asset" | "transcript" | "scene" | "image" | "visual";
+  readonly start_seconds: number;
+  readonly end_seconds: number;
+  readonly text: string;
+  readonly facts: Record<string, unknown>;
+  readonly source_model: string;
+  readonly rank: number;
+  readonly evidence_kinds: readonly ("metadata" | "spoken_words" | "visual")[];
+  readonly visual_frame_id: number | null;
+  readonly visual_frame_seconds: number | null;
+  readonly created_at: string;
+};
+
+export type CatalogSearch = {
+  readonly query: string;
+  readonly total: number;
+  readonly results: readonly CatalogSearchResult[];
+};
+
+export type VisualIndexStatus = {
+  readonly assets_total: number;
+  readonly assets_ready: number;
+  readonly assets_aliased: number;
+  readonly assets_pending: number;
+  readonly assets_failed: number;
+  readonly frames_total: number;
+  readonly model_id: string;
+  readonly model_revision: string;
+  readonly index_version: string;
+  readonly local_only: boolean;
+};
+
+export type ManagedLibraryAsset = {
+  readonly id: string;
+  readonly project_id: string;
+  readonly project_name: string;
+  readonly source_name: string;
+  readonly display_name: string;
+  readonly notes: string;
+  readonly favorite: boolean;
+  readonly tags: readonly string[];
+  readonly library_status: "active" | "archived";
+  readonly mime_type: string;
+  readonly byte_size: number;
+  readonly sha256: string;
+  readonly duration_seconds: number | null;
+  readonly thumbnail_available: boolean;
+  readonly job_references: number;
+  readonly collection_count: number;
+  readonly visual_status: string | null;
+  readonly created_at: string;
+  readonly updated_at: string;
+};
+
+export type LibraryEvidenceSegment = {
+  readonly id: number;
+  readonly segment_kind: "transcript" | "scene" | "image";
+  readonly start_seconds: number;
+  readonly end_seconds: number;
+  readonly text: string;
+  readonly source_model: string;
+};
+
+export type LibraryVisualFrame = {
+  readonly id: number;
+  readonly start_seconds: number;
+  readonly end_seconds: number;
+  readonly frame_seconds: number;
+};
+
+export type LibraryCollection = {
+  readonly id: string;
+  readonly name: string;
+  readonly description: string;
+  readonly asset_count: number;
+  readonly created_at: string;
+  readonly updated_at: string;
+};
+
+export type LibraryAssetDetail = {
+  readonly asset: ManagedLibraryAsset;
+  readonly evidence: readonly LibraryEvidenceSegment[];
+  readonly visual_frames: readonly LibraryVisualFrame[];
+  readonly collections: readonly LibraryCollection[];
+};
+
 export type MusicTrack = {
   readonly id: string;
   readonly title: string;
@@ -183,6 +334,40 @@ export type UsageJobSummary = {
   readonly model: string | null;
   readonly requests: number;
   readonly total_tokens: number;
+  readonly history_kind: "editing" | "verification";
+};
+
+export type ApplianceHealth = {
+  readonly generated_at: string | null;
+  readonly status: "healthy" | "attention" | "pending";
+  readonly alerts: readonly string[];
+  readonly disk?: { readonly total_bytes: number; readonly available_bytes: number; readonly used_percent: number };
+  readonly gpu?: { readonly temperature_celsius: number | null };
+  readonly services?: { readonly running: number; readonly expected: number };
+  readonly queues?: Readonly<Record<string, number>>;
+  readonly smart?: { readonly state: "passed" | "attention" | "unavailable" };
+  readonly backup?: {
+    readonly state: "ready" | "running" | "failed" | "stale" | "missing";
+    readonly message: string;
+    readonly started_at?: string | null;
+    readonly completed_at?: string | null;
+    readonly age_hours: number | null;
+  };
+  readonly offsite_backup?: {
+    readonly state: "ready" | "running" | "failed" | "stale" | "missing" | "not_configured";
+    readonly message: string;
+    readonly configured: boolean;
+    readonly started_at?: string | null;
+    readonly completed_at?: string | null;
+    readonly age_hours: number | null;
+  };
+  readonly reboot_recovery?: {
+    readonly status: "passed" | "failed" | "running" | "not_run";
+    readonly message: string;
+    readonly completed_at?: string | null;
+    readonly boot_id_changed?: boolean;
+    readonly attempts?: number;
+  };
 };
 
 async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
@@ -198,6 +383,8 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
     const detail = (await response.json().catch(() => null)) as { detail?: string } | null;
     throw new Error(detail?.detail ?? `Request failed with status ${response.status}`);
   }
+
+  if (response.status === 204) return undefined as T;
 
   return (await response.json()) as T;
 }
@@ -301,6 +488,160 @@ export function getAsset(assetId: string) {
   return apiRequest<Asset>(`assets/${assetId}`, { cache: "no-store" });
 }
 
+export function getServerLibraryAssets() {
+  return apiRequest<readonly LibraryAsset[]>("assets/library?limit=500", { cache: "no-store" });
+}
+
+export function attachServerAssets(jobId: string, assetIds: readonly string[]) {
+  return apiRequest<{ readonly job_id: string; readonly asset_ids: readonly string[]; readonly attached_count: number }>(
+    `jobs/${jobId}/assets`,
+    {
+      method: "POST",
+      body: JSON.stringify({ asset_ids: assetIds }),
+    },
+  );
+}
+
+export function libraryAssetThumbnailUrl(assetId: string) {
+  return `/api/media/assets/${encodeURIComponent(assetId)}/thumbnail`;
+}
+
+export function getDuplicateAudit(input: {
+  readonly query?: string;
+  readonly reviewState?: "all" | "unreviewed" | "reviewed";
+  readonly sort?: "most_storage" | "most_copies" | "newest";
+} = {}) {
+  const parameters = new URLSearchParams({
+    query: input.query ?? "",
+    review_state: input.reviewState ?? "all",
+    sort: input.sort ?? "most_storage",
+    limit: "250",
+  });
+  return apiRequest<DuplicateAudit>(`assets/duplicates?${parameters.toString()}`, { cache: "no-store" });
+}
+
+export function reviewDuplicateGroup(sha256: string, canonicalAssetId: string) {
+  return apiRequest<{
+    readonly sha256: string;
+    readonly canonical_asset_id: string;
+    readonly asset_count: number;
+    readonly reviewed_at: string;
+  }>(`assets/duplicates/${encodeURIComponent(sha256)}/review`, {
+    method: "POST",
+    body: JSON.stringify({ canonical_asset_id: canonicalAssetId }),
+  });
+}
+
+export function cleanupDuplicateGroup(sha256: string, canonicalAssetId: string) {
+  return apiRequest<{
+    readonly sha256: string;
+    readonly canonical_asset_id: string;
+    readonly optimized_asset_ids: readonly string[];
+    readonly optimized_copies: number;
+    readonly bytes_reclaimed: number;
+    readonly already_optimized: number;
+  }>(`assets/duplicates/${encodeURIComponent(sha256)}/cleanup`, {
+    method: "POST",
+    body: JSON.stringify({
+      canonical_asset_id: canonicalAssetId,
+      confirmation: "share_verified_storage",
+    }),
+  });
+}
+
+export function searchCatalog(input: {
+  readonly query: string;
+  readonly mediaKind?: "all" | "video" | "image" | "audio";
+  readonly projectId?: string;
+  readonly limit?: number;
+}) {
+  const parameters = new URLSearchParams({
+    query: input.query,
+    media_kind: input.mediaKind ?? "all",
+    limit: String(input.limit ?? 100),
+  });
+  if (input.projectId !== undefined && input.projectId !== "all") {
+    parameters.set("project_id", input.projectId);
+  }
+  return apiRequest<CatalogSearch>(`catalog/search?${parameters.toString()}`, { cache: "no-store" });
+}
+
+export function getVisualIndexStatus() {
+  return apiRequest<VisualIndexStatus>("catalog/visual/status", { cache: "no-store" });
+}
+
+export function visualIndexFrameUrl(frameId: number) {
+  return `/api/media/catalog/visual/frames/${encodeURIComponent(String(frameId))}`;
+}
+
+export function getManagedLibraryAssets(input: {
+  readonly query?: string;
+  readonly state?: "active" | "archived" | "all";
+  readonly mediaKind?: "all" | "video" | "image" | "audio";
+  readonly favorite?: boolean;
+  readonly tag?: string;
+} = {}) {
+  const parameters = new URLSearchParams({
+    query: input.query ?? "",
+    state: input.state ?? "active",
+    media_kind: input.mediaKind ?? "all",
+    limit: "500",
+  });
+  if (input.favorite !== undefined) parameters.set("favorite", String(input.favorite));
+  if (input.tag) parameters.set("tag", input.tag);
+  return apiRequest<readonly ManagedLibraryAsset[]>(`library/assets?${parameters.toString()}`, { cache: "no-store" });
+}
+
+export function getLibraryAssetDetail(assetId: string) {
+  return apiRequest<LibraryAssetDetail>(`library/assets/${encodeURIComponent(assetId)}`, { cache: "no-store" });
+}
+
+export function updateLibraryAsset(assetId: string, input: {
+  readonly displayName: string;
+  readonly notes: string;
+  readonly favorite: boolean;
+  readonly tags: readonly string[];
+}) {
+  return apiRequest<ManagedLibraryAsset>(`library/assets/${encodeURIComponent(assetId)}`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      display_name: input.displayName,
+      notes: input.notes,
+      favorite: input.favorite,
+      tags: input.tags,
+    }),
+  });
+}
+
+export function setLibraryAssetState(assetId: string, state: "active" | "archived") {
+  return apiRequest<{ readonly asset_id: string; readonly library_status: "active" | "archived" }>(
+    `library/assets/${encodeURIComponent(assetId)}/${state === "active" ? "restore" : "archive"}`,
+    { method: "POST", body: "{}" },
+  );
+}
+
+export function libraryAssetPreviewUrl(assetId: string) {
+  return `/api/media/library/assets/${encodeURIComponent(assetId)}/preview`;
+}
+
+export function getLibraryCollections() {
+  return apiRequest<readonly LibraryCollection[]>("library/collections", { cache: "no-store" });
+}
+
+export function createLibraryCollection(name: string, description = "") {
+  return apiRequest<LibraryCollection>("library/collections", {
+    method: "POST",
+    body: JSON.stringify({ name, description }),
+  });
+}
+
+export function setLibraryCollectionMembership(collectionId: string, assetId: string, selected: boolean) {
+  return apiRequest<undefined>(
+    `library/collections/${encodeURIComponent(collectionId)}/assets/${encodeURIComponent(assetId)}`,
+    { method: selected ? "PUT" : "DELETE", body: selected ? "{}" : undefined },
+  );
+}
+
 export function getMusicTracks() {
   return apiRequest<readonly MusicTrack[]>("music-tracks", { cache: "no-store" });
 }
@@ -355,4 +696,8 @@ export function getSystemInformation() {
   return apiRequest<{ readonly service: string; readonly version: string }>("system", {
     cache: "no-store",
   });
+}
+
+export function getApplianceHealth() {
+  return apiRequest<ApplianceHealth>("system/health", { cache: "no-store" });
 }

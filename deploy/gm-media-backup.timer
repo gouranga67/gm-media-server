@@ -1,0 +1,12 @@
+[Unit]
+Description=Nightly encrypted GM Media Server backup
+
+[Timer]
+OnCalendar=*-*-* 03:15:00
+RandomizedDelaySec=45m
+Persistent=true
+Unit=gm-media-backup.service
+
+[Install]
+WantedBy=timers.target
+

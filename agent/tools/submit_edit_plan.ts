@@ -46,12 +46,13 @@ const montageClip = z
     transition: z.enum(["cut", "dip_to_black"]),
     visual_preset: z.enum(["standard", "punch_in", "slow_push_in", "slow_pull_out"]),
     include_source_audio: z.boolean(),
+    source_audio_gain_db: z.number().min(-12).max(12),
   })
   .strict();
 
 const montagePlan = z
   .object({
-    schema_version: z.literal("1.0"),
+    schema_version: z.literal("1.1"),
     recipe: z.literal("montage"),
     clips: z.array(montageClip).min(2).max(48),
     audio_preset: z.literal("montage_mix_v1"),

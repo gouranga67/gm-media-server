@@ -10,8 +10,16 @@ from psycopg.types.json import Jsonb
 from redis import Redis
 
 from app.config import get_settings
+from app.content_catalog import CATALOG_VERSION, build_catalog_segments
 from app.database import connection
-from app.edit_plan import EditPlan, MontageEditPlan, document_sha256, validate_edit_plan
+from app.duplicate_storage import share_exact_duplicate_storage
+from app.edit_plan import (
+    EditPlan,
+    MontageEditPlan,
+    document_sha256,
+    repair_predictable_plan_defaults,
+    validate_edit_plan,
+)
 from app.edit_renderer import render_edit_preview, render_final_delivery
 from app.editor_context import build_editor_context
 from app.editor_provider import create_edit_plan, list_chatgpt_models
@@ -19,12 +27,23 @@ from app.finalize_upload import finalize_original, upload_source_path
 from app.media_analysis import analyze_asset, resolve_source
 from app.montage_renderer import render_montage_delivery, render_montage_preview
 from app.music_analysis import analyze_music_beats
+from app.visual_index import (
+    VISUAL_INDEX_VERSION,
+    VISUAL_MODEL_ID,
+    VISUAL_MODEL_REVISION,
+    VISUAL_VECTOR_DIMENSION,
+    build_visual_frames,
+    canonical_assignments,
+    embed_frame_paths,
+)
 
 
 @dataclass
 class WorkerState:
     stopping: bool = False
     active_ingest_id: str | None = None
+    active_catalog_id: str | None = None
+    active_visual_index_id: str | None = None
     active_edit_run_id: str | None = None
     active_final_export_id: str | None = None
 
@@ -76,6 +95,64 @@ def finalize_one_upload() -> bool:
                 """,
                 (digest, relative_path, asset_id),
             )
+            canonical = database.execute(
+                """
+                SELECT existing.id, existing.storage_key
+                FROM assets AS existing
+                LEFT JOIN asset_duplicate_reviews
+                  ON asset_duplicate_reviews.sha256 = existing.sha256
+                 AND asset_duplicate_reviews.canonical_asset_id = existing.id
+                WHERE existing.id <> %s
+                  AND existing.sha256 = %s
+                  AND existing.byte_size = %s
+                  AND existing.status = 'ready'
+                ORDER BY asset_duplicate_reviews.canonical_asset_id IS NOT NULL DESC,
+                         existing.created_at, existing.id
+                LIMIT 1
+                """,
+                (asset_id, digest, int(asset["byte_size"])),
+            ).fetchone()
+            if canonical is not None:
+                canonical_path = resolve_source(settings.media_root, str(canonical["storage_key"]))
+                try:
+                    shared = share_exact_duplicate_storage(
+                        canonical_path,
+                        destination,
+                        expected_sha256=digest,
+                        expected_size=int(asset["byte_size"]),
+                    )
+                    database.execute(
+                        """
+                        INSERT INTO asset_storage_optimizations (
+                            asset_id, canonical_asset_id, sha256, bytes_reclaimed,
+                            source_storage_key, canonical_storage_key,
+                            device, inode, reason
+                        )
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'upload_exact_match')
+                        ON CONFLICT (asset_id) DO NOTHING
+                        """,
+                        (
+                            asset_id,
+                            canonical["id"],
+                            digest,
+                            shared.bytes_reclaimed,
+                            relative_path,
+                            canonical["storage_key"],
+                            shared.device,
+                            shared.inode,
+                        ),
+                    )
+                    print(
+                        f"asset storage reused: {asset_id} shares verified bytes with {canonical['id']}",
+                        flush=True,
+                    )
+                except (OSError, ValueError) as optimization_error:
+                    # Storage reuse is an optimization. The new write-once
+                    # original remains valid when the filesystem cannot share it.
+                    print(
+                        f"asset storage reuse skipped: {asset_id}: {optimization_error}",
+                        flush=True,
+                    )
         print(f"asset ready: {asset_id} sha256={digest}", flush=True)
     except Exception as error:
         with connection() as database:
@@ -175,6 +252,16 @@ def analyze_one_asset(state: WorkerState) -> bool:
                 """,
                 (manifest["manifest_path"], Jsonb(manifest), asset["id"]),
             )
+            database.execute(
+                """
+                INSERT INTO asset_catalogs (asset_id, status, attempts, error, updated_at)
+                VALUES (%s, 'pending', 0, NULL, now())
+                ON CONFLICT (asset_id) DO UPDATE SET
+                    status = 'pending', attempts = 0, lease_expires_at = NULL,
+                    error = NULL, completed_at = NULL, updated_at = now()
+                """,
+                (asset["id"],),
+            )
         print(f"asset analysis ready: {asset_id}", flush=True)
     except Exception as error:
         with connection() as database:
@@ -189,6 +276,403 @@ def analyze_one_asset(state: WorkerState) -> bool:
         print(f"asset analysis failed: {asset_id}: {error}", flush=True)
     finally:
         state.active_ingest_id = None
+    return True
+
+
+def seed_pending_catalogs() -> int:
+    with connection() as database:
+        result = database.execute(
+            """
+            INSERT INTO asset_catalogs (asset_id, status)
+            SELECT asset_ingests.asset_id, 'pending'
+            FROM asset_ingests
+            JOIN assets ON assets.id = asset_ingests.asset_id
+            WHERE asset_ingests.status = 'ready'
+              AND assets.status = 'ready'
+            ON CONFLICT (asset_id) DO NOTHING
+            """
+        )
+        return result.rowcount
+
+
+def recover_interrupted_catalogs() -> int:
+    with connection() as database:
+        result = database.execute(
+            """
+            UPDATE asset_catalogs
+            SET status = 'pending', lease_expires_at = NULL,
+                error = NULL, updated_at = now()
+            WHERE status = 'running'
+            """
+        )
+        return result.rowcount
+
+
+def claim_pending_catalog() -> dict[str, Any] | None:
+    settings = get_settings()
+    with connection() as database:
+        row = database.execute(
+            """
+            SELECT assets.id, assets.project_id, assets.source_name,
+                   assets.mime_type, assets.byte_size, assets.sha256,
+                   asset_ingests.manifest
+            FROM asset_catalogs
+            JOIN assets ON assets.id = asset_catalogs.asset_id
+            JOIN asset_ingests ON asset_ingests.asset_id = assets.id
+            WHERE assets.status = 'ready'
+              AND asset_ingests.status = 'ready'
+              AND (
+                  asset_catalogs.status = 'pending'
+                  OR (asset_catalogs.status = 'failed' AND asset_catalogs.attempts < 3)
+                  OR (
+                      asset_catalogs.status = 'running'
+                      AND asset_catalogs.lease_expires_at < now()
+                  )
+              )
+            ORDER BY asset_catalogs.updated_at, asset_catalogs.created_at
+            LIMIT 1
+            FOR UPDATE OF asset_catalogs SKIP LOCKED
+            """
+        ).fetchone()
+        if row is None:
+            return None
+        database.execute(
+            """
+            UPDATE asset_catalogs
+            SET status = 'running', attempts = attempts + 1,
+                lease_expires_at = now() + (%s * interval '1 second'),
+                error = NULL, started_at = COALESCE(started_at, now()),
+                updated_at = now()
+            WHERE asset_id = %s
+            """,
+            (settings.ingest_lease_seconds, row["id"]),
+        )
+        return row
+
+
+def catalog_one_asset(state: WorkerState) -> bool:
+    asset = claim_pending_catalog()
+    if asset is None:
+        return False
+    asset_id = str(asset["id"])
+    state.active_catalog_id = asset_id
+    try:
+        manifest = asset.get("manifest") if isinstance(asset.get("manifest"), dict) else {}
+        segments = build_catalog_segments(asset, manifest)
+        transcript_count = sum(segment["segment_kind"] == "transcript" for segment in segments)
+        scene_count = sum(segment["segment_kind"] == "scene" for segment in segments)
+        with connection() as database:
+            database.execute(
+                "DELETE FROM asset_catalog_segments WHERE asset_id = %s",
+                (asset["id"],),
+            )
+            for segment in segments:
+                database.execute(
+                    """
+                    INSERT INTO asset_catalog_segments (
+                        asset_id, project_id, segment_kind, segment_index,
+                        start_seconds, end_seconds, text, facts,
+                        source_model, catalog_version
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        asset["id"],
+                        asset["project_id"],
+                        segment["segment_kind"],
+                        segment["segment_index"],
+                        segment["start_seconds"],
+                        segment["end_seconds"],
+                        segment["text"],
+                        Jsonb(segment["facts"]),
+                        segment["source_model"],
+                        CATALOG_VERSION,
+                    ),
+                )
+            database.execute(
+                """
+                UPDATE asset_catalogs
+                SET status = 'ready', catalog_version = %s,
+                    segment_count = %s, transcript_segment_count = %s,
+                    scene_segment_count = %s, lease_expires_at = NULL,
+                    error = NULL, completed_at = now(), updated_at = now()
+                WHERE asset_id = %s
+                """,
+                (
+                    CATALOG_VERSION,
+                    len(segments),
+                    transcript_count,
+                    scene_count,
+                    asset["id"],
+                ),
+            )
+        print(f"asset catalogue ready: {asset_id} segments={len(segments)}", flush=True)
+    except Exception as error:
+        with connection() as database:
+            database.execute(
+                """
+                UPDATE asset_catalogs
+                SET status = 'failed', error = %s, lease_expires_at = NULL,
+                    updated_at = now()
+                WHERE asset_id = %s
+                """,
+                (str(error)[:1000], asset["id"]),
+            )
+        print(f"asset catalogue failed: {asset_id}: {error}", flush=True)
+    finally:
+        state.active_catalog_id = None
+    return True
+
+
+def seed_pending_visual_indexes() -> int:
+    """Reconcile canonical duplicate choices and queue missing/current-model indexes."""
+
+    changed = 0
+    with connection() as database:
+        eligible = database.execute(
+            """
+            SELECT assets.id, assets.sha256
+            FROM assets
+            JOIN asset_ingests ON asset_ingests.asset_id = assets.id
+            JOIN asset_catalogs ON asset_catalogs.asset_id = assets.id
+            WHERE assets.status = 'ready'
+              AND assets.library_status = 'active'
+              AND asset_ingests.status = 'ready'
+              AND asset_catalogs.status = 'ready'
+              AND (assets.mime_type LIKE 'video/%' OR assets.mime_type LIKE 'image/%')
+            ORDER BY assets.created_at, assets.id
+            """
+        ).fetchall()
+        reviews = database.execute(
+            """
+            SELECT sha256, canonical_asset_id, asset_count
+            FROM asset_duplicate_reviews
+            """
+        ).fetchall()
+        current_rows = database.execute(
+            """
+            SELECT asset_id, canonical_asset_id, status, model_id,
+                   model_revision, index_version
+            FROM asset_visual_indexes
+            """
+        ).fetchall()
+        current = {row["asset_id"]: row for row in current_rows}
+        assignments = canonical_assignments(list(eligible), list(reviews))
+
+        for row in eligible:
+            asset_id = row["id"]
+            canonical_id = assignments[asset_id]
+            existing = current.get(asset_id)
+            is_alias = asset_id != canonical_id
+            needs_refresh = bool(
+                existing is None
+                or existing["canonical_asset_id"] != canonical_id
+                or existing["model_id"] != VISUAL_MODEL_ID
+                or existing["model_revision"] != VISUAL_MODEL_REVISION
+                or existing["index_version"] != VISUAL_INDEX_VERSION
+                or (not is_alias and existing["status"] == "aliased")
+            )
+            if existing is None:
+                database.execute(
+                    """
+                    INSERT INTO asset_visual_indexes (
+                        asset_id, canonical_asset_id, status, model_id,
+                        model_revision, index_version, vector_dimension
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        asset_id,
+                        canonical_id,
+                        "aliased" if is_alias else "pending",
+                        VISUAL_MODEL_ID,
+                        VISUAL_MODEL_REVISION,
+                        VISUAL_INDEX_VERSION,
+                        VISUAL_VECTOR_DIMENSION,
+                    ),
+                )
+                changed += 1
+            elif needs_refresh or (is_alias and existing["status"] != "aliased"):
+                next_status = "aliased" if is_alias else "pending"
+                database.execute(
+                    """
+                    UPDATE asset_visual_indexes
+                    SET canonical_asset_id = %s, status = %s, attempts = 0,
+                        lease_expires_at = NULL, model_id = %s,
+                        model_revision = %s, index_version = %s,
+                        vector_dimension = %s, frame_count = 0, error = NULL,
+                        completed_at = NULL, updated_at = now()
+                    WHERE asset_id = %s
+                    """,
+                    (
+                        canonical_id,
+                        next_status,
+                        VISUAL_MODEL_ID,
+                        VISUAL_MODEL_REVISION,
+                        VISUAL_INDEX_VERSION,
+                        VISUAL_VECTOR_DIMENSION,
+                        asset_id,
+                    ),
+                )
+                database.execute(
+                    "DELETE FROM asset_visual_embeddings WHERE asset_id = %s",
+                    (asset_id,),
+                )
+                changed += 1
+    return changed
+
+
+def recover_interrupted_visual_indexes() -> int:
+    with connection() as database:
+        result = database.execute(
+            """
+            UPDATE asset_visual_indexes
+            SET status = 'pending', lease_expires_at = NULL,
+                error = NULL, updated_at = now()
+            WHERE status = 'running'
+            """
+        )
+        return result.rowcount
+
+
+def claim_pending_visual_index() -> dict[str, Any] | None:
+    settings = get_settings()
+    with connection() as database:
+        row = database.execute(
+            """
+            SELECT assets.id, assets.project_id, assets.storage_key,
+                   assets.source_name, assets.mime_type
+            FROM asset_visual_indexes
+            JOIN assets ON assets.id = asset_visual_indexes.asset_id
+            WHERE asset_visual_indexes.canonical_asset_id = assets.id
+              AND (
+                  asset_visual_indexes.status = 'pending'
+                  OR (
+                      asset_visual_indexes.status = 'failed'
+                      AND asset_visual_indexes.attempts < 3
+                  )
+                  OR (
+                      asset_visual_indexes.status = 'running'
+                      AND asset_visual_indexes.lease_expires_at < now()
+                  )
+              )
+            ORDER BY asset_visual_indexes.updated_at, asset_visual_indexes.created_at
+            LIMIT 1
+            FOR UPDATE OF asset_visual_indexes SKIP LOCKED
+            """
+        ).fetchone()
+        if row is None:
+            return None
+        database.execute(
+            """
+            UPDATE asset_visual_indexes
+            SET status = 'running', attempts = attempts + 1,
+                lease_expires_at = now() + (%s * interval '1 second'),
+                error = NULL, started_at = COALESCE(started_at, now()),
+                updated_at = now()
+            WHERE asset_id = %s
+            """,
+            (settings.ingest_lease_seconds, row["id"]),
+        )
+        return row
+
+
+def index_one_asset_visually(state: WorkerState) -> bool:
+    asset = claim_pending_visual_index()
+    if asset is None:
+        return False
+    asset_id = str(asset["id"])
+    state.active_visual_index_id = asset_id
+    try:
+        with connection() as database:
+            segments = database.execute(
+                """
+                SELECT segment_kind, segment_index, start_seconds, end_seconds
+                FROM asset_catalog_segments
+                WHERE asset_id = %s AND segment_kind IN ('scene', 'image')
+                ORDER BY segment_kind, segment_index
+                """,
+                (asset["id"],),
+            ).fetchall()
+        if not segments:
+            raise RuntimeError("the asset has no visual catalogue segments")
+        frames = build_visual_frames(asset, list(segments))
+        embeddings: list[list[float]] = []
+        for offset in range(0, len(frames), 16):
+            batch = frames[offset:offset + 16]
+            embeddings.extend(embed_frame_paths([frame["frame_path"] for frame in batch]))
+        if len(embeddings) != len(frames):
+            raise RuntimeError("visual encoder returned the wrong number of embeddings")
+
+        with connection() as database:
+            database.execute(
+                "DELETE FROM asset_visual_embeddings WHERE asset_id = %s",
+                (asset["id"],),
+            )
+            for frame, embedding in zip(frames, embeddings):
+                database.execute(
+                    """
+                    INSERT INTO asset_visual_embeddings (
+                        asset_id, project_id, segment_kind, segment_index,
+                        frame_index, start_seconds, end_seconds, frame_seconds,
+                        frame_path, embedding, source_model, model_revision,
+                        index_version
+                    )
+                    VALUES (
+                        %s, %s, %s, %s, %s, %s, %s, %s,
+                        %s, %s::real[], %s, %s, %s
+                    )
+                    """,
+                    (
+                        asset["id"],
+                        asset["project_id"],
+                        frame["segment_kind"],
+                        frame["segment_index"],
+                        frame["frame_index"],
+                        frame["start_seconds"],
+                        frame["end_seconds"],
+                        frame["frame_seconds"],
+                        frame["frame_path"],
+                        embedding,
+                        VISUAL_MODEL_ID,
+                        VISUAL_MODEL_REVISION,
+                        VISUAL_INDEX_VERSION,
+                    ),
+                )
+            database.execute(
+                """
+                UPDATE asset_visual_indexes
+                SET status = 'ready', canonical_asset_id = asset_id,
+                    model_id = %s, model_revision = %s, index_version = %s,
+                    vector_dimension = %s, frame_count = %s,
+                    lease_expires_at = NULL, error = NULL,
+                    completed_at = now(), updated_at = now()
+                WHERE asset_id = %s
+                """,
+                (
+                    VISUAL_MODEL_ID,
+                    VISUAL_MODEL_REVISION,
+                    VISUAL_INDEX_VERSION,
+                    VISUAL_VECTOR_DIMENSION,
+                    len(frames),
+                    asset["id"],
+                ),
+            )
+        print(f"visual index ready: {asset_id} frames={len(frames)}", flush=True)
+    except Exception as error:
+        with connection() as database:
+            database.execute(
+                """
+                UPDATE asset_visual_indexes
+                SET status = 'failed', error = %s, lease_expires_at = NULL,
+                    updated_at = now()
+                WHERE asset_id = %s
+                """,
+                (str(error)[:1000], asset["id"]),
+            )
+        print(f"visual index failed: {asset_id}: {error}", flush=True)
+    finally:
+        state.active_visual_index_id = None
     return True
 
 
@@ -391,35 +875,69 @@ def process_one_edit(state: WorkerState) -> bool:
             except (ValueError, ValidationError) as validation_error:
                 if context["project"]["privacy_mode"] == "local_only":
                     raise
-                with connection() as database:
-                    database.execute(
-                        """
-                        INSERT INTO job_events (job_id, event_type, payload)
-                        VALUES (%s, 'edit_plan_repair_requested', %s)
-                        """,
-                        (
-                            run["job_id"],
-                            Jsonb(
-                                {
-                                    "version": run["version"],
-                                    "validation_error": str(validation_error)[:500],
-                                }
-                            ),
-                        ),
-                    )
-                context["validation_correction"] = {
-                    "error": str(validation_error)[:1000],
-                    "rejected_plan": proposed.model_dump(mode="json"),
-                }
-                proposed, provenance = create_edit_plan(context)
-                _record_plan_usage(run, provenance, "repair")
-                plan = validate_edit_plan(
+                repaired_document, deterministic_repairs = repair_predictable_plan_defaults(
                     proposed.model_dump(mode="json"),
-                    context["assets"],
-                    allow_post_copy=bool(context["project"]["ai_copy_allowed"]),
                     creative_direction=context["job"],
                     music_tracks=context["music_library"],
+                    previous_plan=(context.get("revision") or {}).get("previous_plan"),
                 )
+                try:
+                    if not deterministic_repairs:
+                        raise validation_error
+                    plan = validate_edit_plan(
+                        repaired_document,
+                        context["assets"],
+                        allow_post_copy=bool(context["project"]["ai_copy_allowed"]),
+                        creative_direction=context["job"],
+                        music_tracks=context["music_library"],
+                    )
+                except (ValueError, ValidationError):
+                    with connection() as database:
+                        database.execute(
+                            """
+                            INSERT INTO job_events (job_id, event_type, payload)
+                            VALUES (%s, 'edit_plan_repair_requested', %s)
+                            """,
+                            (
+                                run["job_id"],
+                                Jsonb(
+                                    {
+                                        "version": run["version"],
+                                        "validation_error": str(validation_error)[:500],
+                                    }
+                                ),
+                            ),
+                        )
+                    context["validation_correction"] = {
+                        "error": str(validation_error)[:1000],
+                        "rejected_plan": proposed.model_dump(mode="json"),
+                    }
+                    proposed, provenance = create_edit_plan(context)
+                    _record_plan_usage(run, provenance, "repair")
+                    plan = validate_edit_plan(
+                        proposed.model_dump(mode="json"),
+                        context["assets"],
+                        allow_post_copy=bool(context["project"]["ai_copy_allowed"]),
+                        creative_direction=context["job"],
+                        music_tracks=context["music_library"],
+                    )
+                else:
+                    with connection() as database:
+                        database.execute(
+                            """
+                            INSERT INTO job_events (job_id, event_type, payload)
+                            VALUES (%s, 'edit_plan_repaired_deterministically', %s)
+                            """,
+                            (
+                                run["job_id"],
+                                Jsonb(
+                                    {
+                                        "version": run["version"],
+                                        "repairs": deterministic_repairs,
+                                    }
+                                ),
+                            ),
+                        )
             provider = provenance["provider"]
             model = provenance["model"]
             reasoning_effort = provenance.get("reasoning_effort")
@@ -727,6 +1245,10 @@ def heartbeat_loop(state: WorkerState, stop_event: threading.Event) -> None:
             status = (
                 "analyzing"
                 if state.active_ingest_id
+                else "cataloging"
+                if state.active_catalog_id
+                else "visual-indexing"
+                if state.active_visual_index_id
                 else "editing"
                 if state.active_edit_run_id
                 else "exporting"
@@ -740,6 +1262,8 @@ def heartbeat_loop(state: WorkerState, stop_event: threading.Event) -> None:
                         "unix_time": time.time(),
                         "status": status,
                         "asset_id": state.active_ingest_id,
+                        "catalog_asset_id": state.active_catalog_id,
+                        "visual_index_asset_id": state.active_visual_index_id,
                         "edit_run_id": state.active_edit_run_id,
                         "final_export_id": state.active_final_export_id,
                     }
@@ -760,6 +1284,34 @@ def heartbeat_loop(state: WorkerState, stop_event: threading.Event) -> None:
                         )
                 except Exception as error:
                     print(f"ingest lease heartbeat failed: {error}", flush=True)
+            if state.active_catalog_id:
+                try:
+                    with connection() as database:
+                        database.execute(
+                            """
+                            UPDATE asset_catalogs
+                            SET lease_expires_at = now() + (%s * interval '1 second'),
+                                updated_at = now()
+                            WHERE asset_id = %s AND status = 'running'
+                            """,
+                            (settings.ingest_lease_seconds, state.active_catalog_id),
+                        )
+                except Exception as error:
+                    print(f"catalogue lease heartbeat failed: {error}", flush=True)
+            if state.active_visual_index_id:
+                try:
+                    with connection() as database:
+                        database.execute(
+                            """
+                            UPDATE asset_visual_indexes
+                            SET lease_expires_at = now() + (%s * interval '1 second'),
+                                updated_at = now()
+                            WHERE asset_id = %s AND status = 'running'
+                            """,
+                            (settings.ingest_lease_seconds, state.active_visual_index_id),
+                        )
+                except Exception as error:
+                    print(f"visual index lease heartbeat failed: {error}", flush=True)
             if state.active_edit_run_id:
                 try:
                     with connection() as database:
@@ -817,6 +1369,12 @@ def main() -> None:
     recovered = recover_interrupted_ingests()
     if recovered:
         print(f"requeued interrupted analyses: {recovered}", flush=True)
+    recovered_catalogs = recover_interrupted_catalogs()
+    if recovered_catalogs:
+        print(f"requeued interrupted catalogues: {recovered_catalogs}", flush=True)
+    recovered_visual_indexes = recover_interrupted_visual_indexes()
+    if recovered_visual_indexes:
+        print(f"requeued interrupted visual indexes: {recovered_visual_indexes}", flush=True)
     recovered_edits = recover_interrupted_edits()
     if recovered_edits:
         print(f"requeued interrupted edits: {recovered_edits}", flush=True)
@@ -847,10 +1405,18 @@ def main() -> None:
         seed_pending_ingests()
         while not state.stopping and analyze_one_asset(state):
             seed_pending_ingests()
+        seed_pending_catalogs()
+        while not state.stopping and catalog_one_asset(state):
+            seed_pending_catalogs()
         while not state.stopping and process_one_edit(state):
             pass
         while not state.stopping and process_one_final_export(state):
             pass
+        # Visual backfill is deliberately one asset per loop so an existing
+        # library cannot starve user-requested previews or final exports.
+        seed_pending_visual_indexes()
+        if not state.stopping:
+            index_one_asset_visually(state)
         # Redis is a wake-up channel. PostgreSQL remains the durable source of
         # truth, so a lost queue notification cannot strand an uploaded asset.
         item = client.blpop(settings.worker_queue, timeout=5)

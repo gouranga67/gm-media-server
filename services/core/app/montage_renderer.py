@@ -172,11 +172,12 @@ def _filter_graph(
         asset = assets[str(clip.asset_id)]
         if clip.media_kind == "video" and clip.include_source_audio and asset.get("has_audio"):
             edge_fade = min(0.08, duration / 8)
+            source_volume_db = -8.0 + float(clip.source_audio_gain_db)
             audio = (
                 f"[{index}:a:0]aresample=48000,atrim=0:{duration:.3f},"
                 f"apad=pad_dur={duration:.3f},atrim=0:{duration:.3f},"
                 "asetpts=PTS-STARTPTS,aformat=sample_fmts=fltp:"
-                "sample_rates=48000:channel_layouts=stereo,volume=-8dB,"
+                f"sample_rates=48000:channel_layouts=stereo,volume={source_volume_db:.3f}dB,"
                 f"afade=t=in:st=0:d={edge_fade:.3f},"
                 f"afade=t=out:st={duration - edge_fade:.3f}:d={edge_fade:.3f}"
             )
@@ -213,12 +214,22 @@ def _filter_graph(
         fade_out_start = max(0.0, total_duration - 1.5)
         volume = "-24dB" if plan.music_mix == "subtle" else "-15dB"
         filters.append(
+            f"[acat]apad=pad_dur={total_duration:.3f},"
+            f"atrim=0:{total_duration:.3f},asetpts=PTS-STARTPTS,"
+            "aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo,"
+            "asplit=2[source][key]"
+        )
+        filters.append(
             f"[{music_input_index}:a:0]aresample=48000,atrim=0:{total_duration:.3f},"
+            "aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo,"
             f"asetpts=PTS-STARTPTS,afade=t=in:st=0:d=0.750,"
             f"afade=t=out:st={fade_out_start:.3f}:d=1.500,volume={volume}[music]"
         )
         filters.append(
-            "[acat][music]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,"
+            "[music][key]sidechaincompress=threshold=0.020:ratio=10:attack=15:release=350[ducked]"
+        )
+        filters.append(
+            "[source][ducked]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,"
             "loudnorm=I=-14:LRA=11:TP=-1.0,"
             f"apad=pad_dur={total_duration:.3f},atrim=0:{total_duration:.3f}[aout]"
         )
@@ -428,6 +439,7 @@ def _manifest(
                 "transition": clip.transition,
                 "visual_preset": clip.visual_preset,
                 "include_source_audio": clip.include_source_audio,
+                "source_audio_gain_db": clip.source_audio_gain_db,
                 "render_basis": (
                     "normalized_image_preview"
                     if clip.media_kind == "image" and inventory[str(clip.asset_id)].get("_preview_key")

@@ -1,35 +1,42 @@
 from datetime import datetime
-from enum import StrEnum
+from enum import Enum
 from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
-class PrivacyMode(StrEnum):
+class StringEnum(str, Enum):
+    """String-valued enum compatible with both API and CUDA worker Python."""
+
+    def __str__(self) -> str:
+        return str(self.value)
+
+
+class PrivacyMode(StringEnum):
     HYBRID = "hybrid"
     TEXT_ONLY = "text_only"
     LOCAL_ONLY = "local_only"
 
 
-class Recipe(StrEnum):
+class Recipe(StringEnum):
     TALKING_HEAD = "talking_head"
     MONTAGE = "montage"
 
 
-class EditStyle(StrEnum):
+class EditStyle(StringEnum):
     CLEAN = "clean"
     ENERGETIC = "energetic"
     CALM = "calm"
 
 
-class MusicMode(StrEnum):
+class MusicMode(StringEnum):
     NONE = "none"
     SUBTLE = "subtle"
     PRESENT = "present"
 
 
-class TargetPlatform(StrEnum):
+class TargetPlatform(StringEnum):
     ALL_SOCIAL = "all_social"
     FACEBOOK = "facebook"
     INSTAGRAM = "instagram"
@@ -38,13 +45,13 @@ class TargetPlatform(StrEnum):
     YOUTUBE = "youtube"
 
 
-class ReasoningEffort(StrEnum):
+class ReasoningEffort(StringEnum):
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
 
 
-class OutputAspect(StrEnum):
+class OutputAspect(StringEnum):
     VERTICAL = "vertical"
     LANDSCAPE = "landscape"
 
@@ -148,6 +155,283 @@ class AssetResponse(BaseModel):
     sha256: str | None = None
     created_at: datetime
     updated_at: datetime
+
+
+class LibraryAssetResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    project_id: UUID
+    project_name: str
+    source_name: str
+    mime_type: str
+    byte_size: int
+    sha256: str
+    duration_seconds: float | None = None
+    thumbnail_available: bool = False
+    created_at: datetime
+
+
+class CatalogSearchResult(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    segment_id: int
+    asset_id: UUID
+    project_id: UUID
+    project_name: str
+    source_name: str
+    mime_type: str
+    byte_size: int
+    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    duration_seconds: float | None = None
+    thumbnail_available: bool = False
+    segment_kind: Literal["asset", "transcript", "scene", "image", "visual"]
+    start_seconds: float = Field(ge=0)
+    end_seconds: float = Field(ge=0)
+    text: str
+    facts: dict[str, Any] = Field(default_factory=dict)
+    source_model: str
+    rank: float = Field(ge=0)
+    evidence_kinds: list[Literal["metadata", "spoken_words", "visual"]] = Field(default_factory=list)
+    visual_frame_id: int | None = None
+    visual_frame_seconds: float | None = Field(default=None, ge=0)
+    created_at: datetime
+
+
+class CatalogSearchResponse(BaseModel):
+    query: str
+    total: int = Field(ge=0)
+    results: list[CatalogSearchResult] = Field(default_factory=list)
+
+
+class CatalogStatusResponse(BaseModel):
+    assets_total: int = Field(ge=0)
+    assets_ready: int = Field(ge=0)
+    assets_pending: int = Field(ge=0)
+    assets_failed: int = Field(ge=0)
+    segments_total: int = Field(ge=0)
+    transcript_segments: int = Field(ge=0)
+    scene_segments: int = Field(ge=0)
+    catalog_version: str
+
+
+class VisualIndexStatusResponse(BaseModel):
+    assets_total: int = Field(ge=0)
+    assets_ready: int = Field(ge=0)
+    assets_aliased: int = Field(ge=0)
+    assets_pending: int = Field(ge=0)
+    assets_failed: int = Field(ge=0)
+    frames_total: int = Field(ge=0)
+    model_id: str
+    model_revision: str
+    index_version: str
+    local_only: bool = True
+
+
+class VisualReindexResponse(BaseModel):
+    queued_assets: int = Field(ge=0)
+
+
+class ManagedLibraryAssetResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    project_id: UUID
+    project_name: str
+    source_name: str
+    display_name: str
+    notes: str = ""
+    favorite: bool = False
+    tags: list[str] = Field(default_factory=list)
+    library_status: Literal["active", "archived"]
+    mime_type: str
+    byte_size: int
+    sha256: str
+    duration_seconds: float | None = None
+    thumbnail_available: bool = False
+    job_references: int = Field(ge=0)
+    collection_count: int = Field(ge=0)
+    visual_status: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class LibraryAssetUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    display_name: str | None = Field(default=None, min_length=1, max_length=255)
+    notes: str = Field(default="", max_length=4000)
+    favorite: bool = False
+    tags: list[str] = Field(default_factory=list, max_length=25)
+
+    @field_validator("display_name")
+    @classmethod
+    def normalize_display_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = " ".join(value.split())
+        if not normalized:
+            raise ValueError("display name cannot be blank")
+        return normalized
+
+    @field_validator("tags")
+    @classmethod
+    def normalize_tags(cls, value: list[str]) -> list[str]:
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for raw in value:
+            tag = " ".join(raw.split()).lower()
+            if not tag or len(tag) > 40:
+                raise ValueError("tags must contain between 1 and 40 characters")
+            if tag not in seen:
+                normalized.append(tag)
+                seen.add(tag)
+        return normalized
+
+
+class LibraryEvidenceSegment(BaseModel):
+    id: int
+    segment_kind: Literal["transcript", "scene", "image"]
+    start_seconds: float = Field(ge=0)
+    end_seconds: float = Field(ge=0)
+    text: str
+    source_model: str
+
+
+class LibraryVisualFrame(BaseModel):
+    id: int
+    start_seconds: float = Field(ge=0)
+    end_seconds: float = Field(ge=0)
+    frame_seconds: float = Field(ge=0)
+
+
+class LibraryCollectionResponse(BaseModel):
+    id: UUID
+    name: str
+    description: str
+    asset_count: int = Field(ge=0)
+    created_at: datetime
+    updated_at: datetime
+
+
+class LibraryCollectionCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=120)
+    description: str = Field(default="", max_length=1000)
+
+    @field_validator("name")
+    @classmethod
+    def normalize_name(cls, value: str) -> str:
+        normalized = " ".join(value.split())
+        if not normalized:
+            raise ValueError("collection name cannot be blank")
+        return normalized
+
+
+class LibraryAssetDetailResponse(BaseModel):
+    asset: ManagedLibraryAssetResponse
+    evidence: list[LibraryEvidenceSegment] = Field(default_factory=list)
+    visual_frames: list[LibraryVisualFrame] = Field(default_factory=list)
+    collections: list[LibraryCollectionResponse] = Field(default_factory=list)
+
+
+class LibraryAssetStateResponse(BaseModel):
+    asset_id: UUID
+    library_status: Literal["active", "archived"]
+
+
+class JobAssetAttach(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    asset_ids: list[UUID] = Field(min_length=1, max_length=100)
+
+    @field_validator("asset_ids")
+    @classmethod
+    def asset_ids_are_unique(cls, value: list[UUID]) -> list[UUID]:
+        if len(set(value)) != len(value):
+            raise ValueError("asset IDs cannot repeat")
+        return value
+
+
+class JobAssetAttachResponse(BaseModel):
+    job_id: UUID
+    asset_ids: list[UUID]
+    attached_count: int
+
+
+class DuplicateAssetCopyResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    project_id: UUID
+    project_name: str
+    source_name: str
+    mime_type: str
+    byte_size: int
+    job_references: int = 0
+    thumbnail_available: bool = False
+    storage_optimized: bool = False
+    created_at: datetime
+
+
+class DuplicateGroupResponse(BaseModel):
+    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    media_kind: Literal["video", "image", "audio"]
+    mime_type: str
+    byte_size: int
+    copy_count: int = Field(ge=2)
+    reclaimable_bytes: int = Field(ge=0)
+    canonical_asset_id: UUID
+    canonical_reason: str
+    reviewed: bool = False
+    reviewed_at: datetime | None = None
+    cleanup_ready: bool = False
+    optimized_copies: int = Field(default=0, ge=0)
+    copies: list[DuplicateAssetCopyResponse] = Field(min_length=2)
+
+
+class DuplicateAuditSummary(BaseModel):
+    originals_scanned: int = Field(ge=0)
+    duplicate_groups: int = Field(ge=0)
+    unreviewed_groups: int = Field(ge=0)
+    redundant_copies: int = Field(ge=0)
+    optimized_copies: int = Field(default=0, ge=0)
+    reclaimable_bytes: int = Field(ge=0)
+
+
+class DuplicateAuditResponse(BaseModel):
+    summary: DuplicateAuditSummary
+    groups: list[DuplicateGroupResponse] = Field(default_factory=list)
+
+
+class DuplicateReviewCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    canonical_asset_id: UUID
+
+
+class DuplicateReviewResponse(BaseModel):
+    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    canonical_asset_id: UUID
+    asset_count: int = Field(ge=2)
+    reviewed_at: datetime
+
+
+class DuplicateCleanupCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    canonical_asset_id: UUID
+    confirmation: Literal["share_verified_storage"]
+
+
+class DuplicateCleanupResponse(BaseModel):
+    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    canonical_asset_id: UUID
+    optimized_asset_ids: list[UUID]
+    optimized_copies: int = Field(ge=0)
+    bytes_reclaimed: int = Field(ge=0)
+    already_optimized: int = Field(ge=0)
 
 
 class AssetAnalysisResponse(BaseModel):
@@ -340,6 +624,7 @@ class UsageJobSummary(BaseModel):
     model: str | None = None
     requests: int = 0
     total_tokens: int = 0
+    history_kind: Literal["editing", "verification"] = "editing"
 
 
 class UsageDashboardResponse(BaseModel):
