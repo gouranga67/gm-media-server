@@ -50,34 +50,35 @@ def main() -> int:
     if not isinstance(audit, dict) or not isinstance(audit.get("groups"), list):
         raise RuntimeError("duplicate audit response is invalid")
     groups = audit["groups"]
-    candidate = next((group for group in groups if group.get("cleanup_ready")), None)
-    cleanup = None
-    if candidate is not None:
+    candidates = [group for group in groups if group.get("cleanup_ready")]
+    cleanups: list[dict] = []
+    if candidates:
         if not arguments.confirm_storage_optimization:
             raise RuntimeError(
                 "reviewed duplicates are ready; rerun with --confirm-storage-optimization"
             )
-        cleanup = require(
-            f"assets/duplicates/{candidate['sha256']}/cleanup",
-            200,
-            method="POST",
-            payload={
-                "canonical_asset_id": candidate["canonical_asset_id"],
-                "confirmation": "share_verified_storage",
-            },
-        )
-        if not isinstance(cleanup, dict) or cleanup.get("optimized_copies", 0) < 1:
-            raise RuntimeError("cleanup did not report an optimized exact copy")
+        for candidate in candidates:
+            cleanup = require(
+                f"assets/duplicates/{candidate['sha256']}/cleanup",
+                200,
+                method="POST",
+                payload={
+                    "canonical_asset_id": candidate["canonical_asset_id"],
+                    "confirmation": "share_verified_storage",
+                },
+            )
+            if not isinstance(cleanup, dict) or cleanup.get("optimized_copies", 0) < 1:
+                raise RuntimeError("cleanup did not report an optimized exact copy")
+            cleanups.append(cleanup)
 
     refreshed = require("assets/duplicates?review_state=reviewed&limit=250", 200)
     if not isinstance(refreshed, dict) or not isinstance(refreshed.get("groups"), list):
         raise RuntimeError("refreshed duplicate audit response is invalid")
-    if candidate is not None:
-        group = next(
-            (item for item in refreshed["groups"] if item.get("sha256") == candidate["sha256"]),
-            None,
-        )
-        if group is None or group.get("cleanup_ready") or group.get("reclaimable_bytes") != 0:
+    cleaned_hashes = {candidate["sha256"] for candidate in candidates}
+    for group in refreshed["groups"]:
+        if group.get("sha256") not in cleaned_hashes:
+            continue
+        if group.get("cleanup_ready") or group.get("reclaimable_bytes") != 0:
             raise RuntimeError("cleaned duplicate group still reports reclaimable storage")
         if any(
             not copy.get("storage_optimized")
@@ -102,8 +103,10 @@ def main() -> int:
         json.dumps(
             {
                 "status": "passed",
-                "optimized_group": candidate.get("sha256") if candidate else None,
-                "bytes_reclaimed_this_run": cleanup.get("bytes_reclaimed", 0) if cleanup else 0,
+                "optimized_groups_this_run": len(cleanups),
+                "bytes_reclaimed_this_run": sum(
+                    int(cleanup.get("bytes_reclaimed", 0)) for cleanup in cleanups
+                ),
                 "optimized_copies_total": summary.get("optimized_copies", 0),
                 "library_records_deleted": 0,
                 "paths_preserved": True,
