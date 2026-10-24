@@ -4,7 +4,7 @@ GM Studio is a self-hosted, phone-first editing appliance. Upload your own foota
 
 The project is open source under [Apache-2.0](LICENSE). Your deployment remains private: source media, exports, database contents, `.env`, and ChatGPT credentials are runtime data and must never be committed.
 
-> **Security boundary:** GM Studio listens only on host loopback and is published through private Tailscale Serve, never Funnel. The deployed web layer requires Serve's stripped-and-injected Tailscale identity header to match the configured owner. Do not add public port forwarding or a public reverse proxy.
+> **Security boundary:** GM Studio listens only on host loopback and is published through private Tailscale Serve, never Funnel. The deployed web layer requires Serve's stripped-and-injected Tailscale identity header to match the configured owner or an active member invited by that owner. Do not add public port forwarding or a public reverse proxy.
 
 ## How it works
 
@@ -156,9 +156,12 @@ python3 scripts/verify-phase6d.py
 python3 scripts/verify-phase6e.py
 python3 scripts/verify-phase10.py
 python3 scripts/verify-phase11.py
+python3 scripts/verify-phase12.py
 ```
 
-The Phase 3 check exercises interrupted/resumed tus uploads, Phase 4 verifies real-media analysis, Phase 5 proves strict edit-plan validation plus a downloadable deterministic preview, and Phase 6 exercises revision, approval, and full delivery packaging. Phase 6B verifies a deployed montage plus its model catalogue and usage ledger. Phase 6C verifies zero-copy reuse and the non-destructive duplicate audit; Phase 6D verifies catalogue backfill and provenance-bearing text search; Phase 6E verifies local semantic visual search with source-frame evidence. Phase 9 verifies checksum-gated physical storage sharing while preserving every asset record and historical path. Phase 10 verifies reusable Creative Profiles and locally rendered square/vertical/landscape variants without another model call. Phase 11 verifies the clip-level editorial timeline, managed brand kits, publishing presets, and profile management without consuming model tokens.
+The Phase 3 check exercises interrupted/resumed tus uploads, Phase 4 verifies real-media analysis, Phase 5 proves strict edit-plan validation plus a downloadable deterministic preview, and Phase 6 exercises revision, approval, and full delivery packaging. Phase 6B verifies a deployed montage plus its model catalogue and usage ledger. Phase 6C verifies zero-copy reuse and the non-destructive duplicate audit; Phase 6D verifies catalogue backfill and provenance-bearing text search; Phase 6E verifies local semantic visual search with source-frame evidence. Phase 9 verifies checksum-gated physical storage sharing while preserving every asset record and historical path. Phase 10 verifies reusable Creative Profiles and locally rendered square/vertical/landscape variants without another model call. Phase 11 verifies the clip-level editorial timeline, managed brand kits, publishing presets, and profile management without consuming model tokens. Phase 12 verifies the product dashboard, Tailscale-backed roles, job archive/restore, AI budgets, operator audit, and derived-file retention with a database-enforced zero-original guarantee.
+
+The root URL is the studio dashboard. `/welcome` explains initial setup, `/jobs` manages active and archived work, `/operations` controls workload and retention, and `/access` manages invited Tailscale identities. Owner/editor/viewer permissions reuse Tailscale authentication; GM Studio does not store passwords.
 
 ## Repository map
 

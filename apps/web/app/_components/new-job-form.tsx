@@ -1248,7 +1248,10 @@ function NewJobFormContent() {
       <header className="z-40 shrink-0 border-b border-[#D7D9D3] bg-[#F7F7F5] px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-3">
         <div className="mb-1 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <p className="text-sm font-bold tracking-tight text-[#173F5F]">GM Studio</p>
+            <Link className="text-sm font-bold tracking-tight text-[#173F5F]" href="/">GM Studio</Link>
+            <Link className="font-mono text-[10px] font-bold text-[#173F5F] underline underline-offset-4" href="/jobs">
+              Jobs
+            </Link>
             <Link className="font-mono text-[10px] font-bold text-[#173F5F] underline underline-offset-4" href="/usage">
               AI usage
             </Link>

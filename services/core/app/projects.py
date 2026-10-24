@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Any, Literal, cast
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Header, HTTPException, Query, status
 from fastapi.responses import FileResponse
 from psycopg.errors import ForeignKeyViolation, UniqueViolation
 from psycopg.types.json import Jsonb
@@ -36,6 +36,7 @@ from app.schemas import (
     VisualReindexResponse,
 )
 from app.media_analysis import resolve_source
+from app.productization import actor_login
 from app.visual_index import (
     VISUAL_INDEX_VERSION,
     VISUAL_MODEL_ID,
@@ -946,7 +947,11 @@ def cleanup_exact_duplicate(
     response_model=JobResponse,
     status_code=status.HTTP_201_CREATED,
 )
-def create_job(project_id: UUID, payload: JobCreate) -> dict[str, Any]:
+def create_job(
+    project_id: UUID,
+    payload: JobCreate,
+    x_gm_user_login: str | None = Header(default=None),
+) -> dict[str, Any]:
     job_id = payload.id or uuid4()
     try:
         with connection() as database:
@@ -969,9 +974,9 @@ def create_job(project_id: UUID, payload: JobCreate) -> dict[str, Any]:
                     id, project_id, recipe, target_duration_seconds,
                     edit_style, music_mode, target_platform, must_include,
                     editor_model, reasoning_effort, output_aspect, creative_profile_id,
-                    brand_kit_id, publishing_preset
+                    brand_kit_id, publishing_preset, created_by_login
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING *
                 """,
                 (
@@ -989,6 +994,7 @@ def create_job(project_id: UUID, payload: JobCreate) -> dict[str, Any]:
                     payload.creative_profile_id,
                     payload.brand_kit_id,
                     payload.publishing_preset.value,
+                    actor_login(x_gm_user_login),
                 ),
             ).fetchone()
     except ForeignKeyViolation as error:

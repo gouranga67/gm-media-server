@@ -39,6 +39,8 @@ class Settings(BaseSettings):
     visual_encoder_timeout_seconds: int = Field(default=120, ge=10, le=600)
     visual_model_path: Path = Path("/models/clip-vit-base-patch32")
     appliance_status_path: Path = Path("/host-status/appliance-health.json")
+    tailscale_owner_login: str = ""
+    access_internal_secret: str = Field(default="development-access-secret-change-me", min_length=16)
 
 
 @lru_cache

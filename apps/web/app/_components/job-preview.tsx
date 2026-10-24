@@ -97,15 +97,16 @@ export function JobPreview({ jobId }: { readonly jobId: string }) {
   const finalExport = review?.final_export;
   const currentFinalExport =
     finalExport && finalExport.version === run?.version ? finalExport : null;
-  const fileRoot = `/api/media/jobs/${encodeURIComponent(jobId)}/preview/file`;
-  const fileUrl = `${fileRoot}${run ? `?version=${run.version}` : ""}`;
-  const downloadUrl = `${fileRoot}?download=true${run ? `&version=${run.version}` : ""}`;
-  const status = run?.status ?? "pending";
+  const previewRoot = `/api/media/jobs/${encodeURIComponent(jobId)}/preview/file`;
+  const retainedFinalAvailable = Boolean(run?.status === "ready" && !run.preview_available && currentFinalExport?.status === "ready" && currentFinalExport.files_available);
+  const fileUrl = retainedFinalAvailable ? `/api/media/jobs/${encodeURIComponent(jobId)}/final/video` : `${previewRoot}${run ? `?version=${run.version}` : ""}`;
+  const downloadUrl = retainedFinalAvailable ? `/api/media/jobs/${encodeURIComponent(jobId)}/final/video` : `${previewRoot}?download=true${run ? `&version=${run.version}` : ""}`;
+  const status = run?.status === "ready" && !run.preview_available && !retainedFinalAvailable ? "failed" : run?.status ?? "pending";
   const usesChatGptPlan = run?.provider === "chatgpt_plan";
   const isMontage = review?.job.recipe === "montage";
   const isLandscape = review?.job.output_aspect === "landscape";
   const isSquare = review?.job.output_aspect === "square";
-  const failureMessage = run?.error ?? error ?? "";
+  const failureMessage = run?.status === "ready" && !run.preview_available ? "This preview reached its retention date. Choose Try again to rebuild it from the saved edit plan." : run?.error ?? error ?? "";
   const hasPlanUsageIssue = /subscription_sharing_usage_|chatgpt plan usage is unavailable/i.test(failureMessage);
 
   useEffect(() => {
@@ -165,7 +166,7 @@ export function JobPreview({ jobId }: { readonly jobId: string }) {
                 </a>
               </Button>
               <p className="text-center font-mono text-[10px] leading-relaxed text-[#666862]">
-                Version {run?.version} · {review?.job.target_duration_seconds ?? 60}s target · {review?.job.edit_style ?? "legacy"} style
+                Version {run?.version} · {review?.job.target_duration_seconds ?? 60}s target · {review?.job.edit_style ?? "legacy"} style{retainedFinalAvailable ? " · final delivery playback" : ""}
               </p>
               {run ? (
                 <JobReviewControls

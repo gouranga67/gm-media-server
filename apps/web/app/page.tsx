@@ -1,5 +1,5 @@
-import { NewJobForm } from "@/app/_components/new-job-form";
+import { StudioDashboard } from "@/app/_components/studio-dashboard";
 
 export default function Page() {
-  return <NewJobForm />;
+  return <StudioDashboard />;
 }

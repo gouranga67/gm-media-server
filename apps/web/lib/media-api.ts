@@ -441,6 +441,86 @@ export type ApplianceHealth = {
   };
 };
 
+export type StudioMember = {
+  readonly login: string;
+  readonly display_name: string;
+  readonly role: "owner" | "editor" | "viewer";
+  readonly active: boolean;
+  readonly created_at: string;
+  readonly updated_at: string;
+};
+
+export type AiBudget = {
+  readonly allowed: boolean;
+  readonly today_tokens: number;
+  readonly month_tokens: number;
+  readonly daily_limit: number;
+  readonly monthly_limit: number;
+};
+
+export type StudioSettings = {
+  readonly studio_name: string;
+  readonly onboarding_completed: boolean;
+  readonly daily_ai_token_limit: number;
+  readonly monthly_ai_token_limit: number;
+  readonly max_active_jobs: number;
+  readonly preview_retention_days: number;
+  readonly delivery_retention_days: number;
+  readonly updated_at: string;
+  readonly budget: AiBudget;
+};
+
+export type StudioOverview = {
+  readonly settings: Omit<StudioSettings, "budget">;
+  readonly counts: {
+    readonly projects: number;
+    readonly jobs: number;
+    readonly assets: number;
+    readonly deliveries: number;
+    readonly brand_kits: number;
+    readonly music_tracks: number;
+    readonly editor_models: number;
+    readonly members: number;
+    readonly active_jobs: number;
+  };
+  readonly budget: AiBudget;
+  readonly storage: {
+    readonly original_logical_bytes: number;
+    readonly original_physical_estimate_bytes: number;
+    readonly preview_estimate_bytes: number;
+    readonly delivery_estimate_bytes: number;
+  };
+  readonly retention: { readonly preview_records: number; readonly delivery_records: number; readonly originals_eligible: 0 };
+  readonly readiness: Readonly<Record<"private_access" | "editor_connected" | "backup_monitoring" | "brand_ready" | "library_ready" | "first_delivery", boolean>>;
+};
+
+export type ManagedJob = {
+  readonly id: string;
+  readonly project_name: string;
+  readonly brief: string;
+  readonly recipe: Recipe;
+  readonly status: string;
+  readonly revision: number;
+  readonly output_aspect: OutputAspect;
+  readonly target_duration_seconds: number;
+  readonly requests: number;
+  readonly total_tokens: number;
+  readonly delivered: boolean;
+  readonly archived_at: string | null;
+  readonly created_at: string;
+  readonly updated_at: string;
+};
+
+export type StudioAuditEvent = {
+  readonly id: number;
+  readonly actor_login: string;
+  readonly action: string;
+  readonly target_type: string;
+  readonly target_id: string;
+  readonly details: Readonly<Record<string, unknown>>;
+  readonly created_at: string;
+};
+
 async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`/api/media/${path}`, {
     ...init,
@@ -847,4 +927,53 @@ export function getSystemInformation() {
 
 export function getApplianceHealth() {
   return apiRequest<ApplianceHealth>("system/health", { cache: "no-store" });
+}
+
+export function getStudioOverview() {
+  return apiRequest<StudioOverview>("studio/overview", { cache: "no-store" });
+}
+
+export function getStudioSettings() {
+  return apiRequest<StudioSettings>("studio/settings", { cache: "no-store" });
+}
+
+export function saveStudioSettings(input: Omit<StudioSettings, "updated_at" | "budget">) {
+  return apiRequest<StudioSettings>("studio/settings", { method: "PUT", body: JSON.stringify(input) });
+}
+
+export function getCurrentMember() {
+  return apiRequest<StudioMember>("members/me", { cache: "no-store" });
+}
+
+export function getStudioMembers() {
+  return apiRequest<readonly StudioMember[]>("members", { cache: "no-store" });
+}
+
+export function createStudioMember(input: { readonly login: string; readonly display_name: string; readonly role: "editor" | "viewer" }) {
+  return apiRequest<StudioMember>("members", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function updateStudioMember(login: string, input: { readonly display_name: string; readonly role: "editor" | "viewer"; readonly active: boolean }) {
+  return apiRequest<StudioMember>(`members/${encodeURIComponent(login)}`, { method: "PUT", body: JSON.stringify(input) });
+}
+
+export function deleteStudioMember(login: string) {
+  return apiRequest<void>(`members/${encodeURIComponent(login)}`, { method: "DELETE" });
+}
+
+export function getManagedJobs(state: "active" | "archived" | "all" = "active", query = "") {
+  const parameters = new URLSearchParams({ state, query });
+  return apiRequest<readonly ManagedJob[]>(`jobs/manage?${parameters.toString()}`, { cache: "no-store" });
+}
+
+export function setJobArchived(jobId: string, archived: boolean) {
+  return apiRequest<{ readonly id: string; readonly archived_at: string | null }>(`jobs/${jobId}/${archived ? "archive" : "restore"}`, { method: "POST", body: "{}" });
+}
+
+export function applyRetention() {
+  return apiRequest<{ readonly id: string; readonly preview_files_removed: number; readonly delivery_files_removed: number; readonly bytes_reclaimed: number; readonly originals_removed: 0 }>("studio/retention/apply", { method: "POST", body: JSON.stringify({ confirmation: "remove_reproducible_derived_files" }) });
+}
+
+export function getStudioAudit() {
+  return apiRequest<readonly StudioAuditEvent[]>("studio/audit?limit=100", { cache: "no-store" });
 }

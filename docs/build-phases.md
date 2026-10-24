@@ -23,7 +23,10 @@ This is the working plan for turning the Lenovo into a private media-editing app
 | 6E.1 | Denser visual evidence sampling and relevance-ranked search | Complete |
 | 7 | Appliance hardening, backup, and recovery | Complete |
 | 8 | Managed media memory, collections, and reversible cleanup | Complete |
-| 9 | Safe exact-copy cleanup and automatic storage reuse | Source complete; live acceptance pending |
+| 9 | Safe exact-copy cleanup and automatic storage reuse | Complete |
+| 10 | Creative profiles and local delivery variants | Complete |
+| 11 | Editorial workspace and brand system | Complete |
+| 12 | Product dashboard, access, budgets, and retention | Source complete; live acceptance pending |
 
 ## Phase 0 — inventory and guardrails
 
@@ -330,3 +333,17 @@ The new Brand & Presets screen creates and edits caption colours, weight, and a 
 Acceptance helper after deployment: `python3 scripts/verify-phase11.py` round-trips a temporary brand kit, creates and renames a profile carrying brand/publishing provenance, and confirms an existing real job exposes a source-backed editorial timeline. It cleans up its temporary records and makes no model request.
 
 Exit check: deploy migration 017, pass the Phase 11 helper and complete live suite, create one branded montage, make a clip-level local adjustment, confirm the token count is unchanged, approve it with a selected cover frame, and compare one delivery variant in the browser.
+
+## Phase 12 — productization and safe collaboration
+
+**Purpose:** turn the private appliance into a coherent product that is understandable on first use, manageable over time, and safe to share with a small trusted team.
+
+Current source checkpoint (2026-10-24): migration 018 adds a single-owner Tailscale membership directory with editor and viewer roles, appliance settings, an operator audit, job archiving, and retention-run provenance. The existing Tailscale owner is bootstrapped automatically and remains immutable through the application. Invited identities must already belong to the tailnet. Viewers are read-only at the web boundary; editors can create and revise work; access, budgets, and cleanup remain owner-only.
+
+The root screen is now a concise studio dashboard. Guided onboarding reports private access, editor connection, backup monitoring, brand readiness, library readiness, and first delivery. A dedicated job workspace searches all work, explains its current status, and archives or restores records without deleting history. Operations exposes measured daily/monthly tokens, optional hard model-call budgets, active-job concurrency, storage categories, preview/export retention, and recent administrative actions.
+
+Retention deliberately excludes originals. It can remove only reproducible preview and delivery files after configured age thresholds, preserves plans, provenance, usage, metadata, and job history, and records a run whose `originals_removed` value is constrained to zero by PostgreSQL. Missing previews can be rebuilt from their saved plan, and an expired final can be regenerated after its preview is restored. Default retention is 30 days for previews and 90 days for deliveries; token limits default to unlimited.
+
+Acceptance helper after deployment: `python3 scripts/verify-phase12.py` bootstraps the configured owner, round-trips a temporary viewer/editor, raises and restores token thresholds, archives and restores an idle real job, runs retention with 10-year thresholds, confirms the operator audit, and requires zero removed originals and zero additional model tokens.
+
+Exit check: deploy migration 018, pass the Phase 12 helper and full core suite, complete the onboarding screen, archive and restore one job from a phone, and review Operations before inviting another tailnet user.

@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 const API_BASE_URL = process.env.API_BASE_URL ?? "http://api:8000";
-const FORWARDED_HEADERS = ["accept", "content-type", "range"] as const;
+const FORWARDED_HEADERS = ["accept", "content-type", "range", "x-gm-user-login", "x-gm-user-role"] as const;
 const RESPONSE_HEADERS = [
   "accept-ranges",
   "content-disposition",

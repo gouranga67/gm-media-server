@@ -12,6 +12,7 @@ from app.brand_kits import router as brand_kits_router
 from app.editing import router as editing_router
 from app.library import router as library_router
 from app.projects import router as projects_router
+from app.productization import router as productization_router
 from app.upload_hooks import router as upload_hooks_router
 
 
@@ -30,6 +31,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.include_router(productization_router)
 app.include_router(projects_router)
 app.include_router(editing_router)
 app.include_router(library_router)

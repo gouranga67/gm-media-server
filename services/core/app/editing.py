@@ -12,6 +12,7 @@ from app.database import connection
 from app.edit_plan import MontageEditPlan, TalkingHeadEditPlan, document_sha256, validate_edit_plan
 from app.editor_context import build_editor_context
 from app.media_analysis import resolve_source
+from app.productization import assert_job_capacity
 from app.schemas import (
     ApprovalCreate,
     CoverFrameUpdate,
@@ -261,6 +262,22 @@ def request_preview(job_id: UUID) -> dict[str, Any]:
             """,
             (job_id,),
         ).fetchone()
+        if latest is not None and latest["status"] == "ready" and not latest.get("preview_path"):
+            assert_job_capacity(database, job_id)
+            row = database.execute(
+                """
+                UPDATE edit_runs SET status='pending', error=NULL, lease_expires_at=NULL,
+                    completed_at=NULL, updated_at=now() WHERE id=%s RETURNING *
+                """,
+                (latest["id"],),
+            ).fetchone()
+            database.execute("UPDATE jobs SET status='previewing', updated_at=now() WHERE id=%s", (job_id,))
+            database.execute(
+                "INSERT INTO job_events (job_id,event_type,payload) VALUES (%s,'retained_preview_rebuild_requested',%s)",
+                (job_id, Jsonb({"version": latest["version"], "reused_plan": True})),
+            )
+            assert row is not None
+            return _response(row)
         if latest is not None and latest["status"] in {
             "pending",
             "planning",
@@ -269,6 +286,7 @@ def request_preview(job_id: UUID) -> dict[str, Any]:
         }:
             return _response(latest)
         if latest is not None and latest["status"] == "failed":
+            assert_job_capacity(database, job_id)
             row = database.execute(
                 """
                 UPDATE edit_runs
@@ -304,6 +322,7 @@ def request_preview(job_id: UUID) -> dict[str, Any]:
             "SELECT COALESCE(max(version), 0) + 1 AS version FROM edit_runs WHERE job_id = %s",
             (job_id,),
         ).fetchone()["version"]
+        assert_job_capacity(database, job_id)
         row = database.execute(
             """
             INSERT INTO edit_runs (job_id, version)
@@ -349,6 +368,7 @@ def submit_edit_plan(
 
     with connection() as database:
         database.execute("SELECT id FROM jobs WHERE id = %s FOR UPDATE", (job_id,)).fetchone()
+        assert_job_capacity(database, job_id)
         version = database.execute(
             "SELECT COALESCE(max(version), 0) + 1 AS version FROM edit_runs WHERE job_id = %s",
             (job_id,),
@@ -477,6 +497,7 @@ def request_revision(job_id: UUID, payload: RevisionCreate) -> dict[str, Any]:
         ).fetchone()
         if job is None:
             raise HTTPException(status_code=404, detail="job not found")
+        assert_job_capacity(database, job_id)
         active = database.execute(
             """
             SELECT 1 FROM edit_runs
@@ -580,6 +601,7 @@ def approve_edit(job_id: UUID, payload: ApprovalCreate) -> dict[str, Any]:
         ).fetchone()
         if job is None:
             raise HTTPException(status_code=404, detail="job not found")
+        assert_job_capacity(database, job_id)
         run = database.execute(
             """
             SELECT * FROM edit_runs
@@ -635,6 +657,16 @@ def approve_edit(job_id: UUID, payload: ApprovalCreate) -> dict[str, Any]:
             (job_id, Jsonb({"version": payload.version}), job_id, payload.version),
         )
         row = _select_final_export(database, job_id, run["id"])
+        if row is not None and row["status"] == "ready" and not row.get("package_path"):
+            database.execute(
+                """
+                UPDATE final_exports SET status='pending', attempts=0, error=NULL,
+                    lease_expires_at=NULL, started_at=NULL, completed_at=NULL, updated_at=now()
+                WHERE id=%s
+                """,
+                (row["id"],),
+            )
+            row = _select_final_export(database, job_id, run["id"])
         if row is not None and _needs_montage_delivery_refresh(job, row):
             database.execute(
                 """
@@ -735,6 +767,7 @@ def job_review(job_id: UUID) -> dict[str, Any]:
 )
 def request_delivery_variant(job_id: UUID, payload: DeliveryVariantCreate) -> dict[str, Any]:
     with connection() as database:
+        assert_job_capacity(database, job_id)
         selected = database.execute(
             """
             SELECT final_exports.edit_run_id, edit_runs.version

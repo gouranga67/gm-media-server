@@ -27,6 +27,7 @@ from app.editor_context import build_editor_context
 from app.editor_provider import create_edit_plan, list_chatgpt_models
 from app.finalize_upload import finalize_original, upload_source_path
 from app.media_analysis import analyze_asset, resolve_source
+from app.productization import assert_ai_budget
 from app.montage_renderer import render_montage_delivery, render_montage_preview
 from app.music_analysis import analyze_music_beats
 from app.visual_index import (
@@ -880,6 +881,7 @@ def process_one_edit(state: WorkerState) -> bool:
                     "reasoning_effort": None,
                 }
             else:
+                assert_ai_budget()
                 proposed, provenance = create_edit_plan(context)
             request_kind = "revision" if run.get("based_on_run_id") else "initial_plan"
             _record_plan_usage(run, provenance, request_kind)
@@ -931,6 +933,7 @@ def process_one_edit(state: WorkerState) -> bool:
                         "error": str(validation_error)[:1000],
                         "rejected_plan": proposed.model_dump(mode="json"),
                     }
+                    assert_ai_budget()
                     proposed, provenance = create_edit_plan(context)
                     _record_plan_usage(run, provenance, "repair")
                     plan = validate_edit_plan(
