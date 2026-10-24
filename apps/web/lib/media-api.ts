@@ -4,7 +4,7 @@ export type MusicMode = "none" | "subtle" | "present";
 export type TargetDuration = 15 | 20 | 30 | 45 | 60;
 export type Recipe = "talking_head" | "montage";
 export type ReasoningEffort = "low" | "medium" | "high";
-export type OutputAspect = "vertical" | "landscape";
+export type OutputAspect = "vertical" | "landscape" | "square";
 export type TargetPlatform = "all_social" | "facebook" | "instagram" | "linkedin" | "tiktok" | "youtube";
 
 export type Project = {
@@ -31,6 +31,7 @@ export type MediaJob = {
   readonly editor_model: string | null;
   readonly reasoning_effort: ReasoningEffort;
   readonly output_aspect: OutputAspect;
+  readonly creative_profile_id: string | null;
   readonly created_at: string;
   readonly updated_at: string;
 };
@@ -260,6 +261,41 @@ export type FinalExport = {
   readonly updated_at: string;
 };
 
+export type CreativeProfile = {
+  readonly id: string;
+  readonly name: string;
+  readonly description: string;
+  readonly recipe: Recipe;
+  readonly target_duration_seconds: TargetDuration;
+  readonly edit_style: EditStyle;
+  readonly music_mode: MusicMode;
+  readonly target_platform: TargetPlatform;
+  readonly output_aspect: OutputAspect;
+  readonly reasoning_effort: ReasoningEffort;
+  readonly source_job_id: string | null;
+  readonly created_at: string;
+  readonly updated_at: string;
+};
+
+export type DeliveryVariant = {
+  readonly id: string;
+  readonly job_id: string;
+  readonly edit_run_id: string;
+  readonly version: number;
+  readonly output_aspect: OutputAspect;
+  readonly target_duration_seconds: TargetDuration;
+  readonly status: "pending" | "rendering" | "ready" | "failed";
+  readonly attempts: number;
+  readonly files_available: boolean;
+  readonly post_copy_available: boolean;
+  readonly manifest: Record<string, unknown>;
+  readonly error: string | null;
+  readonly started_at: string | null;
+  readonly completed_at: string | null;
+  readonly created_at: string;
+  readonly updated_at: string;
+};
+
 export type JobEvent = {
   readonly id: number;
   readonly event_type: string;
@@ -272,6 +308,7 @@ export type JobReview = {
   readonly versions: readonly EditRun[];
   readonly latest_run: EditRun | null;
   readonly final_export: FinalExport | null;
+  readonly delivery_variants: readonly DeliveryVariant[];
   readonly events: readonly JobEvent[];
   readonly usage: JobUsage;
 };
@@ -421,6 +458,7 @@ export function createMediaJob(
     readonly editorModel: string | null;
     readonly reasoningEffort: ReasoningEffort;
     readonly outputAspect: OutputAspect;
+    readonly creativeProfileId?: string | null;
   },
 ) {
   return apiRequest<MediaJob>(`projects/${projectId}/jobs`, {
@@ -436,6 +474,7 @@ export function createMediaJob(
       editor_model: input.editorModel,
       reasoning_effort: input.reasoningEffort,
       output_aspect: input.outputAspect,
+      creative_profile_id: input.creativeProfileId ?? null,
     }),
   });
 }
@@ -648,6 +687,30 @@ export function getMusicTracks() {
 
 export function getEditorModels() {
   return apiRequest<readonly EditorModel[]>("editor/models", { cache: "no-store" });
+}
+
+export function getCreativeProfiles() {
+  return apiRequest<readonly CreativeProfile[]>("creative-profiles", { cache: "no-store" });
+}
+
+export function saveCreativeProfileFromJob(jobId: string, name: string, description = "") {
+  return apiRequest<CreativeProfile>(`jobs/${jobId}/creative-profile`, {
+    method: "POST",
+    body: JSON.stringify({ name, description }),
+  });
+}
+
+export function requestDeliveryVariant(
+  jobId: string,
+  input: { readonly outputAspect: OutputAspect; readonly targetDurationSeconds: TargetDuration },
+) {
+  return apiRequest<DeliveryVariant>(`jobs/${jobId}/variants`, {
+    method: "POST",
+    body: JSON.stringify({
+      output_aspect: input.outputAspect,
+      target_duration_seconds: input.targetDurationSeconds,
+    }),
+  });
 }
 
 export function getUsageDashboard(days = 0) {

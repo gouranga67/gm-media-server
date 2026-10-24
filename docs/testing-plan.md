@@ -27,7 +27,7 @@ sudo ./scripts/install-service.sh
 sudo ./scripts/verify-live-suite.sh
 ```
 
-This checks service health, migrations 010–015, backend unit/integration tests inside the pinned CUDA worker image, an existing real analysis manifest, reusable-library references, exact-duplicate calculations, the content catalogue backfill/search API, local semantic visual indexing, reversible managed-library operations, and complete non-destructive job-history classification. The test location matters: it catches compatibility differences between the Python 3.13 API image and the CUDA image's Python runtime.
+This checks service health, migrations 010–016, backend unit/integration tests inside the pinned CUDA worker image, an existing real analysis manifest, reusable-library references, exact-duplicate calculations, the content catalogue backfill/search API, local semantic visual indexing, reversible managed-library operations, and complete non-destructive job-history classification. The test location matters: it catches compatibility differences between the Python 3.13 API image and the CUDA image's Python runtime.
 
 The library verifier uses one stable verification project and job on every run. The duplicate verifier may store a canonical preference, but neither helper deletes, moves, merges, or rewrites an original media file. The catalogue and visual-search tests are read-only after their background backfills; the visual test reads a generated source-frame derivative but never modifies an original.
 
@@ -44,6 +44,8 @@ sudo ./scripts/verify-live-suite.sh --confirm-render-and-ai
 ```
 
 This repeats the live core and then exercises deterministic preview rendering, a talking-head revision/final package, and the montage/caption/model/usage path. It can create edit-plan versions, use GPU time, and consume connected ChatGPT plan allowance. It never creates synthetic media.
+
+The same lane runs `verify-phase10.py` against an existing delivered job. That check performs a local square render but makes no new editor-model request and verifies the recorded token total remains unchanged.
 
 ## Gate 4 — physical phone acceptance
 

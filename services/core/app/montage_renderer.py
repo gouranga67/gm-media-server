@@ -78,6 +78,8 @@ def _subtitle_filter_path(path: Path) -> str:
 def _dimensions(aspect: str, *, final: bool) -> tuple[int, int]:
     if aspect == "landscape":
         return (1920, 1080) if final else (960, 540)
+    if aspect == "square":
+        return (1080, 1080) if final else (540, 540)
     return (1080, 1920) if final else (540, 960)
 
 
@@ -524,11 +526,15 @@ def render_montage_delivery(
     caption_corrections: list[dict[str, str]] | None,
     approved_at: str,
     settings: Settings | None = None,
+    delivery_slug: str | None = None,
+    variant_metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     settings = settings or get_settings()
     capacity = ensure_capacity(settings)
     width, height = _dimensions(str(context["job"].get("output_aspect") or "vertical"), final=True)
     directory = settings.media_root / "deliveries" / str(context["job"]["project_id"]) / str(context["job"]["id"]) / f"v{version}"
+    if delivery_slug:
+        directory = directory / "variants" / delivery_slug
     video = directory / "final.mp4"
     captions = directory / "captions.vtt"
     captions_ass = directory / "captions.ass"
@@ -631,6 +637,8 @@ def render_montage_delivery(
     )
     if plan.post_copy:
         manifest["output_sha256"]["post_copy"] = _file_sha256(post_copy)
+    if variant_metadata is not None:
+        manifest["delivery_variant"] = variant_metadata
     manifest["manifest_path"] = manifest_path.relative_to(settings.media_root).as_posix()
     _atomic_text(manifest_path, json.dumps(manifest, indent=2, ensure_ascii=False) + "\n")
     _create_delivery_package(

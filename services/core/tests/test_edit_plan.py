@@ -3,7 +3,7 @@ from uuid import uuid4
 
 from pydantic import ValidationError
 
-from app.edit_plan import validate_edit_plan
+from app.edit_plan import derive_duration_variant, edit_plan_duration, validate_edit_plan
 
 
 class EditPlanValidationTests(unittest.TestCase):
@@ -147,6 +147,26 @@ class EditPlanValidationTests(unittest.TestCase):
                 creative_direction={"music_mode": "subtle"},
                 music_tracks=[],
             )
+
+    def test_duration_variant_trims_without_changing_source_order(self) -> None:
+        self.document["clips"] = [
+            {**self.document["clips"][0], "source_in": 0, "source_out": 8},
+            {**self.document["clips"][0], "source_in": 10, "source_out": 20},
+        ]
+        plan = validate_edit_plan(self.document, self.assets)
+
+        variant = derive_duration_variant(plan, 15)
+
+        self.assertAlmostEqual(edit_plan_duration(variant), 15)
+        self.assertEqual(variant.clips[0].source_in, 0)
+        self.assertEqual(variant.clips[1].source_out, 17)
+
+    def test_duration_variant_keeps_shorter_approved_edit(self) -> None:
+        plan = validate_edit_plan(self.document, self.assets)
+
+        variant = derive_duration_variant(plan, 15)
+
+        self.assertAlmostEqual(edit_plan_duration(variant), 7.5)
 
 
 if __name__ == "__main__":

@@ -61,12 +61,12 @@ run_check() {
 check_library_migrations() {
   local count
   count=$(docker compose exec -T postgres \
-    sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "SELECT COUNT(*) FROM schema_migrations WHERE version IN ('"'"'010_asset_library.sql'"'"','"'"'011_exact_duplicate_audit.sql'"'"','"'"'012_content_catalog.sql'"'"','"'"'013_visual_index.sql'"'"','"'"'014_library_management.sql'"'"','"'"'015_safe_duplicate_storage.sql'"'"');"') || return 1
-  [[ "$count" == "6" ]]
+    sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "SELECT COUNT(*) FROM schema_migrations WHERE version IN ('"'"'010_asset_library.sql'"'"','"'"'011_exact_duplicate_audit.sql'"'"','"'"'012_content_catalog.sql'"'"','"'"'013_visual_index.sql'"'"','"'"'014_library_management.sql'"'"','"'"'015_safe_duplicate_storage.sql'"'"','"'"'016_creative_profiles_and_variants.sql'"'"');"') || return 1
+  [[ "$count" == "7" ]]
 }
 
 run_check "Service and container health" ./scripts/verify-phase2.sh
-run_check "Database migrations 010-015" check_library_migrations
+run_check "Database migrations 010-016" check_library_migrations
 run_check "Backend unit and local render tests" docker compose run --rm --no-deps \
   -v "$project_root/services/core/tests:/app/tests:ro" \
   worker python -m unittest discover -s /app/tests -p 'test_*.py' -v
@@ -83,6 +83,7 @@ if $include_render; then
   run_check "Deterministic preview renderer" python3 scripts/verify-phase5.py
   run_check "Talking-head revision and final delivery" python3 scripts/verify-phase6.py
   run_check "Montage delivery, captions, models, and usage" python3 scripts/verify-phase6b.py
+  run_check "Creative profiles and zero-AI delivery variants" python3 scripts/verify-phase10.py
 else
   printf '\nSKIP  Render/AI lane (rerun with --confirm-render-and-ai after the core suite passes)\n'
 fi

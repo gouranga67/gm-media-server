@@ -97,6 +97,48 @@ class MontageEditPlan(BaseModel):
 EditPlan: TypeAlias = TalkingHeadEditPlan | MontageEditPlan
 
 
+def edit_plan_duration(plan: EditPlan) -> float:
+    if isinstance(plan, MontageEditPlan):
+        return sum(float(clip.duration) for clip in plan.clips)
+    return sum(float(clip.source_out - clip.source_in) for clip in plan.clips)
+
+
+def derive_duration_variant(plan: EditPlan, target_seconds: int) -> EditPlan:
+    """Return a deterministic prefix cut without asking an editor model again."""
+
+    available = edit_plan_duration(plan)
+    remaining = min(float(target_seconds), available)
+    clips: list[Any] = []
+    for source_clip in plan.clips:
+        clip = source_clip.model_copy(deep=True)
+        duration = (
+            float(clip.duration)
+            if isinstance(plan, MontageEditPlan)
+            else float(clip.source_out - clip.source_in)
+        )
+        minimum = 0.5 if isinstance(plan, MontageEditPlan) else 0.25
+        if remaining < minimum:
+            break
+        used = min(duration, remaining)
+        if isinstance(plan, MontageEditPlan):
+            clip.duration = used
+            if clip.media_kind == "video":
+                clip.source_out = clip.source_in + used
+        else:
+            clip.source_out = clip.source_in + used
+        if not clips:
+            clip.transition = "cut"
+        clips.append(clip)
+        remaining -= used
+        if remaining < minimum:
+            break
+    if isinstance(plan, MontageEditPlan) and len(clips) < 2:
+        raise ValueError("a montage duration variant requires at least two source clips")
+    if not clips:
+        raise ValueError("the approved edit does not contain enough material for this duration")
+    return plan.model_copy(update={"clips": clips}, deep=True)
+
+
 # This schema is intentionally small and contains only Structured Outputs
 # features supported by the Responses API. Every property is required and all
 # objects reject unknown keys.

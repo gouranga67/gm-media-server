@@ -27,6 +27,19 @@ FINAL_HEIGHT = 1920
 FINAL_FPS = 30
 
 
+def _delivery_dimensions(aspect: str) -> tuple[int, int]:
+    if aspect == "landscape":
+        return 1920, 1080
+    if aspect == "square":
+        return 1080, 1080
+    return FINAL_WIDTH, FINAL_HEIGHT
+
+
+def _preview_dimensions(aspect: str) -> tuple[int, int]:
+    width, height = _delivery_dimensions(aspect)
+    return width // 2, height // 2
+
+
 def _ass_timestamp(seconds: float) -> str:
     centiseconds = max(0, round(seconds * 100))
     hours, remainder = divmod(centiseconds, 360_000)
@@ -435,15 +448,18 @@ def render_edit_preview(
     captions_path = output_directory / "captions.ass"
     preview_path = output_directory / "preview.mp4"
     manifest_path = output_directory / "manifest.json"
+    width, height = _preview_dimensions(str(context["job"].get("output_aspect") or "vertical"))
 
     events = caption_events(plan, context["assets"], caption_corrections)
-    _atomic_text(captions_path, render_ass(events))
+    _atomic_text(captions_path, render_ass(events, width=width, height=height))
     encoder = _render_video(
         sources,
         plan,
         captions_path,
         preview_path,
         settings.analysis_command_timeout_seconds,
+        width=width,
+        height=height,
         music_source=music_source,
     )
 
@@ -465,8 +481,8 @@ def render_edit_preview(
         "music": music_metadata,
         "caption_corrections": caption_corrections or [],
         "render": {
-            "width": PREVIEW_WIDTH,
-            "height": PREVIEW_HEIGHT,
+            "width": width,
+            "height": height,
             "frames_per_second": PREVIEW_FPS,
             "video_encoder": encoder,
             "audio_preset": "spoken_voice_v1",
@@ -561,6 +577,8 @@ def render_final_delivery(
     caption_corrections: list[dict[str, str]],
     approved_at: str,
     settings: Settings | None = None,
+    delivery_slug: str | None = None,
+    variant_metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     settings = settings or get_settings()
     capacity = ensure_capacity(settings)
@@ -577,6 +595,9 @@ def render_final_delivery(
     project_id = str(context["job"]["project_id"])
     job_id = str(context["job"]["id"])
     output_directory = settings.media_root / "deliveries" / project_id / job_id / f"v{version}"
+    if delivery_slug:
+        output_directory = output_directory / "variants" / delivery_slug
+    width, height = _delivery_dimensions(str(context["job"].get("output_aspect") or "vertical"))
     captions_ass_path = output_directory / "captions.ass"
     captions_vtt_path = output_directory / "captions.vtt"
     video_path = output_directory / "final.mp4"
@@ -588,7 +609,7 @@ def render_final_delivery(
     events = caption_events(plan, context["assets"], caption_corrections)
     _atomic_text(
         captions_ass_path,
-        render_ass(events, width=FINAL_WIDTH, height=FINAL_HEIGHT),
+        render_ass(events, width=width, height=height),
     )
     _atomic_text(captions_vtt_path, render_webvtt(events))
     encoder = _render_video(
@@ -597,8 +618,8 @@ def render_final_delivery(
         captions_ass_path,
         video_path,
         settings.analysis_command_timeout_seconds,
-        width=FINAL_WIDTH,
-        height=FINAL_HEIGHT,
+        width=width,
+        height=height,
         frames_per_second=FINAL_FPS,
         final_quality=True,
         music_source=music_source,
@@ -614,7 +635,7 @@ def render_final_delivery(
     )
     if video_stream is None or audio_stream is None:
         raise RuntimeError("final delivery QA requires both video and audio")
-    if video_stream.get("width") != FINAL_WIDTH or video_stream.get("height") != FINAL_HEIGHT:
+    if video_stream.get("width") != width or video_stream.get("height") != height:
         raise RuntimeError("final delivery QA found an unexpected frame size")
 
     duration = float(technical_probe.get("format", {}).get("duration_seconds") or 0)
@@ -671,11 +692,11 @@ def render_final_delivery(
         "tools": {
             "gm_studio_core": "0.1.0",
             "ffmpeg": _ffmpeg_version(settings.analysis_command_timeout_seconds),
-            "render_template": "talking_head_vertical_v1",
+            "render_template": "talking_head_adaptive_v2",
         },
         "render": {
-            "width": FINAL_WIDTH,
-            "height": FINAL_HEIGHT,
+            "width": width,
+            "height": height,
             "frames_per_second": FINAL_FPS,
             "video_encoder": encoder,
             "audio_preset": "spoken_voice_v1",
@@ -717,6 +738,8 @@ def render_final_delivery(
     }
     if plan.post_copy:
         manifest["output_sha256"]["post_copy"] = _file_sha256(post_copy_path)
+    if variant_metadata is not None:
+        manifest["delivery_variant"] = variant_metadata
     manifest["manifest_path"] = manifest_path.relative_to(settings.media_root).as_posix()
     _atomic_text(manifest_path, json.dumps(manifest, indent=2, ensure_ascii=False) + "\n")
     _create_delivery_package(

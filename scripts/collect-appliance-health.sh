@@ -51,8 +51,8 @@ if docker compose ps --status running postgres 2>/dev/null | grep -q postgres; t
     'visual_pending', (SELECT COUNT(*) FROM asset_visual_indexes WHERE status IN ('pending', 'running')),
     'catalog_pending', (SELECT COUNT(*) FROM asset_catalogs WHERE status IN ('pending', 'running')),
     'edit_pending', (SELECT COUNT(*) FROM edit_runs WHERE status IN ('pending', 'planning', 'rendering')),
-    'final_pending', (SELECT COUNT(*) FROM final_exports WHERE status IN ('pending', 'rendering')),
-    'failures_24h', ((SELECT COUNT(*) FROM edit_runs WHERE status = 'failed' AND updated_at >= now() - interval '24 hours') + (SELECT COUNT(*) FROM final_exports WHERE status = 'failed' AND updated_at >= now() - interval '24 hours'))
+    'final_pending', ((SELECT COUNT(*) FROM final_exports WHERE status IN ('pending', 'rendering')) + (SELECT COUNT(*) FROM delivery_variants WHERE status IN ('pending', 'rendering'))),
+    'failures_24h', ((SELECT COUNT(*) FROM edit_runs WHERE status = 'failed' AND updated_at >= now() - interval '24 hours') + (SELECT COUNT(*) FROM final_exports WHERE status = 'failed' AND updated_at >= now() - interval '24 hours') + (SELECT COUNT(*) FROM delivery_variants WHERE status = 'failed' AND updated_at >= now() - interval '24 hours'))
   );"
   queue_json=$(printf '%s\n' "$queue_sql" | docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -At' 2>/dev/null || printf '{}')
 fi

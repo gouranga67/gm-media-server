@@ -14,6 +14,8 @@ from app.editor_context import build_editor_context
 from app.media_analysis import resolve_source
 from app.schemas import (
     ApprovalCreate,
+    DeliveryVariantCreate,
+    DeliveryVariantResponse,
     EditRunResponse,
     FinalExportResponse,
     JobReviewResponse,
@@ -147,6 +149,15 @@ def _final_response(row: dict[str, Any]) -> dict[str, Any]:
             row.get(key)
             for key in ("video_path", "captions_path", "cover_path", "package_path", "manifest_path")
         ),
+        "post_copy_available": row.get("status") == "ready" and bool(row.get("post_copy_path")),
+    }
+
+
+def _variant_response(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        **row,
+        "files_available": row.get("status") == "ready"
+        and all(row.get(key) for key in ("video_path", "captions_path", "cover_path", "package_path", "manifest_path")),
         "post_copy_available": row.get("status") == "ready" and bool(row.get("post_copy_path")),
     }
 
@@ -610,6 +621,16 @@ def job_review(job_id: UUID) -> dict[str, Any]:
             (job_id,),
         ).fetchall()
         export = _select_final_export(database, job_id)
+        variants = database.execute(
+            """
+            SELECT delivery_variants.*, edit_runs.version
+            FROM delivery_variants
+            JOIN edit_runs ON edit_runs.id = delivery_variants.edit_run_id
+            WHERE delivery_variants.job_id = %s
+            ORDER BY delivery_variants.created_at DESC
+            """,
+            (job_id,),
+        ).fetchall()
         events = database.execute(
             """
             SELECT id, event_type, payload, created_at
@@ -624,9 +645,99 @@ def job_review(job_id: UUID) -> dict[str, Any]:
         "versions": versions,
         "latest_run": versions[0] if versions else None,
         "final_export": _final_response(export) if export is not None else None,
+        "delivery_variants": [_variant_response(row) for row in variants],
         "events": list(events),
         "usage": usage,
     }
+
+
+@router.post(
+    "/jobs/{job_id}/variants",
+    response_model=DeliveryVariantResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def request_delivery_variant(job_id: UUID, payload: DeliveryVariantCreate) -> dict[str, Any]:
+    with connection() as database:
+        selected = database.execute(
+            """
+            SELECT final_exports.edit_run_id, edit_runs.version
+            FROM final_exports
+            JOIN edit_runs ON edit_runs.id = final_exports.edit_run_id
+            WHERE final_exports.job_id = %s AND final_exports.status = 'ready'
+              AND edit_runs.approved_at IS NOT NULL
+            ORDER BY final_exports.created_at DESC
+            LIMIT 1
+            """,
+            (job_id,),
+        ).fetchone()
+        if selected is None:
+            raise HTTPException(status_code=409, detail="approve and finish a final delivery before creating variants")
+        row = database.execute(
+            """
+            INSERT INTO delivery_variants (
+                job_id, edit_run_id, output_aspect, target_duration_seconds
+            ) VALUES (%s, %s, %s, %s)
+            ON CONFLICT (edit_run_id, output_aspect, target_duration_seconds)
+            DO UPDATE SET
+                status = CASE WHEN delivery_variants.status = 'failed' THEN 'pending' ELSE delivery_variants.status END,
+                attempts = CASE WHEN delivery_variants.status = 'failed' THEN 0 ELSE delivery_variants.attempts END,
+                error = CASE WHEN delivery_variants.status = 'failed' THEN NULL ELSE delivery_variants.error END,
+                lease_expires_at = NULL,
+                updated_at = now()
+            RETURNING *
+            """,
+            (
+                job_id,
+                selected["edit_run_id"],
+                payload.output_aspect.value,
+                payload.target_duration_seconds,
+            ),
+        ).fetchone()
+        database.execute(
+            """
+            INSERT INTO job_events (job_id, event_type, payload)
+            VALUES (%s, 'delivery_variant_requested', %s)
+            """,
+            (
+                job_id,
+                Jsonb(
+                    {
+                        "version": selected["version"],
+                        "output_aspect": payload.output_aspect.value,
+                        "target_duration_seconds": payload.target_duration_seconds,
+                    }
+                ),
+            ),
+        )
+    assert row is not None
+    return _variant_response({**row, "version": selected["version"]})
+
+
+@router.get("/jobs/{job_id}/variants/{variant_id}/{file_kind}")
+def delivery_variant_file(job_id: UUID, variant_id: UUID, file_kind: str) -> FileResponse:
+    choices = {
+        "video": ("video_path", "video/mp4", "gm-studio-variant.mp4"),
+        "captions": ("captions_path", "text/vtt", "gm-studio-variant-captions.vtt"),
+        "cover": ("cover_path", "image/jpeg", "gm-studio-variant-cover.jpg"),
+        "manifest": ("manifest_path", "application/json", "gm-studio-variant-manifest.json"),
+        "package": ("package_path", "application/zip", "gm-studio-variant-delivery.zip"),
+    }
+    choice = choices.get(file_kind)
+    if choice is None:
+        raise HTTPException(status_code=404, detail="unknown variant file")
+    with connection() as database:
+        row = database.execute(
+            "SELECT * FROM delivery_variants WHERE id = %s AND job_id = %s",
+            (variant_id, job_id),
+        ).fetchone()
+    path_key, media_type, filename = choice
+    if row is None or row["status"] != "ready" or not row.get(path_key):
+        raise HTTPException(status_code=404, detail="variant file is not ready")
+    try:
+        path = resolve_source(get_settings().media_root, str(row[path_key]))
+    except (OSError, ValueError) as error:
+        raise HTTPException(status_code=404, detail="variant file is unavailable") from error
+    return FileResponse(path, media_type=media_type, filename=filename, content_disposition_type="attachment")
 
 
 @router.get("/jobs/{job_id}/final", response_model=FinalExportResponse)

@@ -52,10 +52,14 @@ export function JobPreview({ jobId }: { readonly jobId: string }) {
           latestExport !== null && latestExport.version === latestRun?.version
             ? latestExport.status
             : undefined;
+        const variantActive = latest.delivery_variants.some(
+          (variant) => variant.status === "pending" || variant.status === "rendering",
+        );
         if (
           (runStatus !== undefined && runStatus !== "ready" && runStatus !== "failed")
           || exportStatus === "pending"
           || exportStatus === "rendering"
+          || variantActive
         ) {
           timer = setTimeout(poll, POLL_INTERVAL_MS);
         }
@@ -100,6 +104,7 @@ export function JobPreview({ jobId }: { readonly jobId: string }) {
   const usesChatGptPlan = run?.provider === "chatgpt_plan";
   const isMontage = review?.job.recipe === "montage";
   const isLandscape = review?.job.output_aspect === "landscape";
+  const isSquare = review?.job.output_aspect === "square";
   const failureMessage = run?.error ?? error ?? "";
   const hasPlanUsageIssue = /subscription_sharing_usage_|chatgpt plan usage is unavailable/i.test(failureMessage);
 
@@ -146,7 +151,7 @@ export function JobPreview({ jobId }: { readonly jobId: string }) {
                 </h1>
               </div>
               <video
-                className={`${isLandscape ? "aspect-video" : "aspect-[9/16]"} w-full rounded-md bg-black object-contain`}
+                className={`${isLandscape ? "aspect-video" : isSquare ? "aspect-square" : "aspect-[9/16]"} w-full rounded-md bg-black object-contain`}
                 controls
                 playsInline
                 preload="metadata"
@@ -169,6 +174,10 @@ export function JobPreview({ jobId }: { readonly jobId: string }) {
                   onUpdated={() => setPollGeneration((current) => current + 1)}
                   outputAspect={review?.job.output_aspect ?? "vertical"}
                   recipe={review?.job.recipe ?? "talking_head"}
+                  targetDuration={review?.job.target_duration_seconds ?? 45}
+                  deliveryVariants={(review?.delivery_variants ?? []).filter(
+                    (variant) => variant.version === run.version,
+                  )}
                   run={run}
                 />
               ) : null}

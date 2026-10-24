@@ -54,6 +54,7 @@ class ReasoningEffort(StringEnum):
 class OutputAspect(StringEnum):
     VERTICAL = "vertical"
     LANDSCAPE = "landscape"
+    SQUARE = "square"
 
 
 class ProjectCreate(BaseModel):
@@ -87,6 +88,7 @@ class JobCreate(BaseModel):
     editor_model: str | None = Field(default=None, min_length=1, max_length=160)
     reasoning_effort: ReasoningEffort = ReasoningEffort.MEDIUM
     output_aspect: OutputAspect = OutputAspect.VERTICAL
+    creative_profile_id: UUID | None = None
 
     @field_validator("must_include")
     @classmethod
@@ -121,6 +123,7 @@ class JobResponse(BaseModel):
     editor_model: str | None = None
     reasoning_effort: ReasoningEffort = ReasoningEffort.MEDIUM
     output_aspect: OutputAspect = OutputAspect.VERTICAL
+    creative_profile_id: UUID | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -560,6 +563,74 @@ class FinalExportResponse(BaseModel):
     updated_at: datetime
 
 
+class CreativeProfileCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=80)
+    description: str = Field(default="", max_length=400)
+    recipe: Recipe
+    target_duration_seconds: Literal[15, 20, 30, 45, 60]
+    edit_style: EditStyle
+    music_mode: MusicMode
+    target_platform: TargetPlatform
+    output_aspect: OutputAspect
+    reasoning_effort: ReasoningEffort
+    source_job_id: UUID | None = None
+
+    @field_validator("name", "description")
+    @classmethod
+    def normalize_profile_text(cls, value: str) -> str:
+        return " ".join(value.split())
+
+
+class CreativeProfileResponse(CreativeProfileCreate):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    created_at: datetime
+    updated_at: datetime
+
+
+class CreativeProfileFromJobCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=80)
+    description: str = Field(default="", max_length=400)
+
+    @field_validator("name", "description")
+    @classmethod
+    def normalize_profile_text(cls, value: str) -> str:
+        return " ".join(value.split())
+
+
+class DeliveryVariantCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    output_aspect: OutputAspect
+    target_duration_seconds: Literal[15, 20, 30, 45, 60]
+
+
+class DeliveryVariantResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    job_id: UUID
+    edit_run_id: UUID
+    version: int
+    output_aspect: OutputAspect
+    target_duration_seconds: int
+    status: str
+    attempts: int
+    files_available: bool = False
+    post_copy_available: bool = False
+    manifest: dict[str, Any] = Field(default_factory=dict)
+    error: str | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
 class JobEventResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -645,5 +716,6 @@ class JobReviewResponse(BaseModel):
     versions: list[EditRunResponse]
     latest_run: EditRunResponse | None = None
     final_export: FinalExportResponse | None = None
+    delivery_variants: list[DeliveryVariantResponse] = Field(default_factory=list)
     events: list[JobEventResponse]
     usage: JobUsageSummary = Field(default_factory=JobUsageSummary)

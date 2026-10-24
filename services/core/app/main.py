@@ -7,6 +7,7 @@ from fastapi import FastAPI, HTTPException
 from redis import Redis
 
 from app.config import get_settings
+from app.creative_profiles import router as creative_profiles_router
 from app.editing import router as editing_router
 from app.library import router as library_router
 from app.projects import router as projects_router
@@ -32,6 +33,7 @@ app.include_router(projects_router)
 app.include_router(editing_router)
 app.include_router(library_router)
 app.include_router(upload_hooks_router)
+app.include_router(creative_profiles_router)
 
 
 @app.get("/health/live")

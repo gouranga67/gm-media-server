@@ -3,7 +3,7 @@ import unittest
 from pydantic import ValidationError
 
 from app.editing import _job_history_kind, _needs_montage_delivery_refresh
-from app.schemas import JobAssetAttach, JobCreate, LibraryAssetUpdate, LibraryCollectionCreate, RevisionCreate
+from app.schemas import DeliveryVariantCreate, JobAssetAttach, JobCreate, LibraryAssetUpdate, LibraryCollectionCreate, RevisionCreate
 
 
 class RevisionSchemaTests(unittest.TestCase):
@@ -47,6 +47,13 @@ class RevisionSchemaTests(unittest.TestCase):
         self.assertEqual(job.recipe.value, "montage")
         self.assertEqual(job.editor_model, "gpt-5-mini")
         self.assertEqual(job.output_aspect.value, "landscape")
+
+    def test_accepts_square_jobs_and_delivery_variants(self) -> None:
+        job = JobCreate(output_aspect="square")
+        variant = DeliveryVariantCreate(output_aspect="square", target_duration_seconds=15)
+
+        self.assertEqual(job.output_aspect.value, "square")
+        self.assertEqual(variant.output_aspect.value, "square")
 
     def test_rejects_unsafe_model_slug(self) -> None:
         with self.assertRaisesRegex(ValidationError, "unsupported characters"):

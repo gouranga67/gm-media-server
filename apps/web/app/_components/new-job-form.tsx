@@ -30,6 +30,7 @@ import {
   attachServerAssets,
   createProject,
   createMediaJob,
+  getCreativeProfiles,
   getEditorModels,
   getAsset,
   getMusicTracks,
@@ -44,6 +45,7 @@ import {
   visualIndexFrameUrl,
   type Asset,
   type CatalogSearchResult,
+  type CreativeProfile,
   type EditStyle,
   type EditorModel,
   type MusicMode,
@@ -692,6 +694,8 @@ function NewJobFormContent() {
   const [editorModel, setEditorModel] = useState<string | null>(null);
   const [reasoningEffort, setReasoningEffort] = useState<ReasoningEffort>("medium");
   const [outputAspect, setOutputAspect] = useState<OutputAspect>("vertical");
+  const [creativeProfiles, setCreativeProfiles] = useState<readonly CreativeProfile[]>([]);
+  const [creativeProfileId, setCreativeProfileId] = useState<string | null>(null);
   const [musicTracks, setMusicTracks] = useState<readonly MusicTrack[]>([]);
   const [entries, setEntries] = useState<UploadEntry[]>([]);
   const [sourcePanel, setSourcePanel] = useState<SourcePanel>("library");
@@ -721,11 +725,12 @@ function NewJobFormContent() {
   useEffect(() => {
     mountedRef.current = true;
     let cancelled = false;
-    void Promise.all([getSystemInformation(), getMusicTracks(), getEditorModels()])
-      .then(([, tracks, models]) => {
+    void Promise.all([getSystemInformation(), getMusicTracks(), getEditorModels(), getCreativeProfiles()])
+      .then(([, tracks, models, profiles]) => {
         if (!cancelled) {
           setMusicTracks(tracks);
           setEditorModels(models);
+          setCreativeProfiles(profiles);
           setEditorModel((current) => current ?? models[0]?.slug ?? null);
           setServerStatus("online");
         }
@@ -1146,6 +1151,7 @@ function NewJobFormContent() {
           editorModel,
           reasoningEffort,
           outputAspect,
+          creativeProfileId,
         });
         activeJobId = job.id;
       }
@@ -1297,6 +1303,40 @@ function NewJobFormContent() {
         <section className="space-y-4">
           <SectionHeading number="02">Direction</SectionHeading>
           <div className="space-y-5">
+            {creativeProfiles.length > 0 ? (
+              <div className="space-y-2 rounded-md border border-[#BFE3FF] bg-[#F4FAFE] p-4">
+                <label className="text-xs font-bold text-[#173F5F]" htmlFor="creative-profile">
+                  CREATIVE PROFILE
+                </label>
+                <select
+                  className="h-12 w-full rounded-md border border-[#D7D9D3] bg-white px-3 text-sm text-[#20211F] focus:border-[#173F5F] focus:outline-none focus:ring-2 focus:ring-[#173F5F]/20"
+                  disabled={formLocked}
+                  id="creative-profile"
+                  onChange={(event) => {
+                    const profile = creativeProfiles.find((item) => item.id === event.currentTarget.value);
+                    setCreativeProfileId(profile?.id ?? null);
+                    if (profile) {
+                      setRecipe(profile.recipe);
+                      setTargetDuration(profile.target_duration_seconds);
+                      setEditStyle(profile.edit_style);
+                      setMusicMode(profile.music_mode);
+                      setTargetPlatform(profile.target_platform);
+                      setOutputAspect(profile.output_aspect);
+                      setReasoningEffort(profile.reasoning_effort);
+                    }
+                  }}
+                  value={creativeProfileId ?? ""}
+                >
+                  <option value="">No saved profile</option>
+                  {creativeProfiles.map((profile) => (
+                    <option key={profile.id} value={profile.id}>{profile.name}</option>
+                  ))}
+                </select>
+                <p className="text-xs leading-relaxed text-[#666862]">
+                  Applies your saved recipe, pacing, music, platform, shape and reasoning settings. You can still adjust them below.
+                </p>
+              </div>
+            ) : null}
             <div className="space-y-2">
               <label className="flex justify-between text-xs font-bold text-[#173F5F]" htmlFor="project-name">
                 <span>PROJECT NAME</span>
@@ -1377,10 +1417,11 @@ function NewJobFormContent() {
             </fieldset>
             <fieldset className="space-y-3" disabled={formLocked}>
               <legend className="text-xs font-bold text-[#173F5F]">OUTPUT SHAPE</legend>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 {([
                   { value: "vertical", label: "Vertical 9:16" },
                   { value: "landscape", label: "Landscape 16:9" },
+                  { value: "square", label: "Square 1:1" },
                 ] as const).map((option) => (
                   <label
                     className={cn(

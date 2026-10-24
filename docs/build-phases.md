@@ -304,3 +304,15 @@ New uploads receive the same storage optimization automatically after their comp
 Source verification covers atomic replacement, checksum refusal, idempotent already-shared storage, audit calculations, Python compilation, TypeScript, and production web build.
 
 Exit check: deploy migration 015, run `python3 scripts/verify-phase9.py --confirm-storage-optimization`, confirm the reviewed group reports zero remaining reclaimable bytes, open an existing job and library preview that used a redundant asset, then run the complete live suite. No library record may be deleted.
+
+## Phase 10 — creative profiles and local delivery variants
+
+**Purpose:** turn a successful edit into a reusable house style and produce channel-specific versions without paying for another editorial model call.
+
+Current source checkpoint (2026-10-24): migration 016 adds named Creative Profiles containing the recipe, target duration, editing style, music level, platform, output shape, and reasoning effort used by a delivered job. The final-delivery screen can save these settings, and the new-job screen can apply a profile while keeping every field editable.
+
+An approved edit can now create durable vertical, landscape, or square delivery variants at 15, 20, 30, 45, or 60-second caps. The worker derives a prefix cut from the frozen plan, preserves its source order and provenance, rerenders locally with FFmpeg/NVIDIA, includes captions, cover, manifest, and ZIP package, and records `derived_without_model_call: true`. Variant queues recover after restarts and do not change the job's AI usage ledger. Talking-head previews and finals now respect all three output shapes as well.
+
+Acceptance helper after deployment: `python3 scripts/verify-phase10.py` saves and removes a temporary profile from an existing delivered job, creates a square 15-second local variant, downloads its ZIP, validates its 1080 × 1080 manifest and zero-model provenance, and confirms the job token count did not change.
+
+Exit check: deploy migration 016, pass the Phase 10 helper, apply a saved profile to a fresh phone job, then download one locally derived variant package.

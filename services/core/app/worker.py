@@ -16,6 +16,7 @@ from app.duplicate_storage import share_exact_duplicate_storage
 from app.edit_plan import (
     EditPlan,
     MontageEditPlan,
+    derive_duration_variant,
     document_sha256,
     repair_predictable_plan_defaults,
     validate_edit_plan,
@@ -46,6 +47,7 @@ class WorkerState:
     active_visual_index_id: str | None = None
     active_edit_run_id: str | None = None
     active_final_export_id: str | None = None
+    active_delivery_variant_id: str | None = None
 
 
 def claim_pending_upload() -> dict[str, Any] | None:
@@ -1177,6 +1179,159 @@ def process_one_final_export(state: WorkerState) -> bool:
     return True
 
 
+def recover_interrupted_delivery_variants() -> int:
+    with connection() as database:
+        result = database.execute(
+            """
+            UPDATE delivery_variants
+            SET status = 'pending', lease_expires_at = NULL, error = NULL, updated_at = now()
+            WHERE status = 'rendering'
+            """
+        )
+        return result.rowcount
+
+
+def claim_pending_delivery_variant() -> dict[str, Any] | None:
+    settings = get_settings()
+    with connection() as database:
+        row = database.execute(
+            """
+            SELECT delivery_variants.*, edit_runs.version, edit_runs.edit_plan_id,
+                   edit_runs.provider, edit_runs.model, edit_runs.caption_corrections,
+                   edit_runs.approved_at
+            FROM delivery_variants
+            JOIN edit_runs ON edit_runs.id = delivery_variants.edit_run_id
+            WHERE delivery_variants.status = 'pending'
+               OR (delivery_variants.status = 'failed' AND delivery_variants.attempts < 3)
+               OR (delivery_variants.status = 'rendering' AND delivery_variants.lease_expires_at < now())
+            ORDER BY delivery_variants.updated_at, delivery_variants.created_at
+            LIMIT 1
+            FOR UPDATE OF delivery_variants SKIP LOCKED
+            """
+        ).fetchone()
+        if row is None:
+            return None
+        claimed = database.execute(
+            """
+            UPDATE delivery_variants
+            SET status = 'rendering', attempts = attempts + 1,
+                lease_expires_at = now() + (%s * interval '1 second'),
+                error = NULL, started_at = COALESCE(started_at, now()), updated_at = now()
+            WHERE id = %s
+            RETURNING *
+            """,
+            (settings.edit_lease_seconds, row["id"]),
+        ).fetchone()
+        return {**row, **claimed}
+
+
+def process_one_delivery_variant(state: WorkerState) -> bool:
+    variant = claim_pending_delivery_variant()
+    if variant is None:
+        return False
+    variant_id = str(variant["id"])
+    state.active_delivery_variant_id = variant_id
+    try:
+        with connection() as database:
+            plan_row = database.execute(
+                "SELECT document FROM edit_plans WHERE id = %s",
+                (variant["edit_plan_id"],),
+            ).fetchone()
+        if plan_row is None:
+            raise RuntimeError("the approved edit plan was not found")
+        context = build_editor_context(variant["job_id"], include_internal_paths=True)
+        plan = validate_edit_plan(
+            plan_row["document"],
+            context["assets"],
+            allow_post_copy=bool(context["project"]["ai_copy_allowed"]),
+            creative_direction=context["job"],
+            music_tracks=context["music_library"],
+        )
+        plan = derive_duration_variant(plan, int(variant["target_duration_seconds"]))
+        context["job"] = {
+            **context["job"],
+            "output_aspect": variant["output_aspect"],
+            "target_duration_seconds": variant["target_duration_seconds"],
+        }
+        approved_at = variant.get("approved_at")
+        if approved_at is None:
+            raise RuntimeError("the selected edit version is not approved")
+        slug = f"{variant['output_aspect']}-{variant['target_duration_seconds']}s-{variant_id[:8]}"
+        arguments = (
+            context,
+            plan,
+            int(variant["version"]),
+            str(variant["provider"]),
+            str(variant["model"]),
+            list(variant.get("caption_corrections") or []),
+            approved_at.isoformat(),
+        )
+        variant_metadata = {
+            "id": variant_id,
+            "derived_without_model_call": True,
+            "output_aspect": variant["output_aspect"],
+            "target_duration_seconds": variant["target_duration_seconds"],
+        }
+        if isinstance(plan, MontageEditPlan):
+            manifest = render_montage_delivery(
+                *arguments, delivery_slug=slug, variant_metadata=variant_metadata
+            )
+        else:
+            manifest = render_final_delivery(
+                *arguments, delivery_slug=slug, variant_metadata=variant_metadata
+            )
+        outputs = manifest["outputs"]
+        with connection() as database:
+            database.execute(
+                """
+                UPDATE delivery_variants
+                SET status = 'ready', video_path = %s, captions_path = %s,
+                    cover_path = %s, post_copy_path = %s, package_path = %s,
+                    manifest_path = %s, manifest = %s, lease_expires_at = NULL,
+                    completed_at = now(), updated_at = now()
+                WHERE id = %s
+                """,
+                (
+                    outputs["video"], outputs["captions"], outputs["cover"],
+                    outputs.get("post_copy"), outputs["package"], manifest["manifest_path"],
+                    Jsonb(manifest), variant["id"],
+                ),
+            )
+            database.execute(
+                "INSERT INTO job_events (job_id, event_type, payload) VALUES (%s, 'delivery_variant_ready', %s)",
+                (
+                    variant["job_id"],
+                    Jsonb(
+                        {
+                            "variant_id": variant_id,
+                            "output_aspect": variant["output_aspect"],
+                            "target_duration_seconds": variant["target_duration_seconds"],
+                            "model_requests": 0,
+                        }
+                    ),
+                ),
+            )
+        print(f"delivery variant ready: {variant_id}", flush=True)
+    except Exception as error:
+        with connection() as database:
+            database.execute(
+                """
+                UPDATE delivery_variants
+                SET status = 'failed', error = %s, lease_expires_at = NULL, updated_at = now()
+                WHERE id = %s
+                """,
+                (str(error)[:1000], variant["id"]),
+            )
+            database.execute(
+                "INSERT INTO job_events (job_id, event_type, payload) VALUES (%s, 'delivery_variant_failed', %s)",
+                (variant["job_id"], Jsonb({"variant_id": variant_id, "error": str(error)[:500]})),
+            )
+        print(f"delivery variant failed: {variant_id}: {error}", flush=True)
+    finally:
+        state.active_delivery_variant_id = None
+    return True
+
+
 def refresh_editor_model_catalog() -> int:
     settings = get_settings()
     models = list_chatgpt_models(settings)
@@ -1253,6 +1408,8 @@ def heartbeat_loop(state: WorkerState, stop_event: threading.Event) -> None:
                 if state.active_edit_run_id
                 else "exporting"
                 if state.active_final_export_id
+                else "rendering-variant"
+                if state.active_delivery_variant_id
                 else "idle"
             )
             client.set(
@@ -1266,6 +1423,7 @@ def heartbeat_loop(state: WorkerState, stop_event: threading.Event) -> None:
                         "visual_index_asset_id": state.active_visual_index_id,
                         "edit_run_id": state.active_edit_run_id,
                         "final_export_id": state.active_final_export_id,
+                        "delivery_variant_id": state.active_delivery_variant_id,
                     }
                 ),
                 ex=settings.worker_heartbeat_ttl_seconds,
@@ -1340,6 +1498,20 @@ def heartbeat_loop(state: WorkerState, stop_event: threading.Event) -> None:
                         )
                 except Exception as error:
                     print(f"final export lease heartbeat failed: {error}", flush=True)
+            if state.active_delivery_variant_id:
+                try:
+                    with connection() as database:
+                        database.execute(
+                            """
+                            UPDATE delivery_variants
+                            SET lease_expires_at = now() + (%s * interval '1 second'),
+                                updated_at = now()
+                            WHERE id = %s AND status = 'rendering'
+                            """,
+                            (settings.edit_lease_seconds, state.active_delivery_variant_id),
+                        )
+                except Exception as error:
+                    print(f"delivery variant lease heartbeat failed: {error}", flush=True)
             stop_event.wait(interval)
     finally:
         client.delete(settings.worker_heartbeat_key)
@@ -1381,6 +1553,9 @@ def main() -> None:
     recovered_exports = recover_interrupted_final_exports()
     if recovered_exports:
         print(f"requeued interrupted final exports: {recovered_exports}", flush=True)
+    recovered_variants = recover_interrupted_delivery_variants()
+    if recovered_variants:
+        print(f"requeued interrupted delivery variants: {recovered_variants}", flush=True)
     try:
         model_count = refresh_editor_model_catalog()
         print(f"refreshed ChatGPT model catalogue: {model_count} models", flush=True)
@@ -1411,6 +1586,8 @@ def main() -> None:
         while not state.stopping and process_one_edit(state):
             pass
         while not state.stopping and process_one_final_export(state):
+            pass
+        while not state.stopping and process_one_delivery_variant(state):
             pass
         # Visual backfill is deliberately one asset per loop so an existing
         # library cannot starve user-requested previews or final exports.

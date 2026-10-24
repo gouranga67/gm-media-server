@@ -18,10 +18,14 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   approveEdit,
   requestRevision,
+  requestDeliveryVariant,
+  saveCreativeProfileFromJob,
+  type DeliveryVariant,
   type EditRun,
   type FinalExport,
   type OutputAspect,
   type Recipe,
+  type TargetDuration,
 } from "@/lib/media-api";
 
 function message(error: unknown) {
@@ -53,6 +57,8 @@ export function JobReviewControls({
   finalExport,
   outputAspect,
   recipe,
+  targetDuration,
+  deliveryVariants,
   onUpdated,
 }: {
   readonly jobId: string;
@@ -60,6 +66,8 @@ export function JobReviewControls({
   readonly finalExport: FinalExport | null;
   readonly outputAspect: OutputAspect;
   readonly recipe: Recipe;
+  readonly targetDuration: TargetDuration;
+  readonly deliveryVariants: readonly DeliveryVariant[];
   readonly onUpdated: () => void;
 }) {
   const [note, setNote] = useState("");
@@ -67,6 +75,11 @@ export function JobReviewControls({
   const [replacementText, setReplacementText] = useState("");
   const [submitting, setSubmitting] = useState<"revision" | "approval">();
   const [error, setError] = useState<string>();
+  const [profileName, setProfileName] = useState("");
+  const [profileSaved, setProfileSaved] = useState(false);
+  const [variantAspect, setVariantAspect] = useState<OutputAspect>(outputAspect === "vertical" ? "square" : "vertical");
+  const [variantDuration, setVariantDuration] = useState<TargetDuration>(targetDuration >= 30 ? 15 : targetDuration);
+  const [toolSubmitting, setToolSubmitting] = useState<"profile" | "variant">();
 
   const submitRevision = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -120,9 +133,42 @@ export function JobReviewControls({
   // belongs to the preview version currently on screen.
   const currentFinal = finalExport?.version === run.version ? finalExport : null;
 
+  const saveProfile = async () => {
+    if (!profileName.trim()) {
+      setError("Give the creative profile a name.");
+      return;
+    }
+    setToolSubmitting("profile");
+    setError(undefined);
+    try {
+      await saveCreativeProfileFromJob(jobId, profileName.trim());
+      setProfileSaved(true);
+    } catch (profileError) {
+      setError(message(profileError));
+    } finally {
+      setToolSubmitting(undefined);
+    }
+  };
+
+  const createVariant = async () => {
+    setToolSubmitting("variant");
+    setError(undefined);
+    try {
+      await requestDeliveryVariant(jobId, {
+        outputAspect: variantAspect,
+        targetDurationSeconds: variantDuration,
+      });
+      onUpdated();
+    } catch (variantError) {
+      setError(message(variantError));
+    } finally {
+      setToolSubmitting(undefined);
+    }
+  };
+
   if (currentFinal?.status === "ready" && currentFinal.files_available) {
     const root = `/api/media/jobs/${encodeURIComponent(jobId)}/final`;
-    const dimensions = outputAspect === "landscape" ? "1920 × 1080" : "1080 × 1920";
+    const dimensions = outputAspect === "landscape" ? "1920 × 1080" : outputAspect === "square" ? "1080 × 1080" : "1080 × 1920";
     const deliverable = recipe === "montage" ? "montage" : "reel";
     return (
       <section className="space-y-4 rounded-md border border-[#BFE3FF] bg-white p-5">
@@ -149,6 +195,67 @@ export function JobReviewControls({
             <DownloadButton href={`${root}/post-copy`} icon={<FileTextIcon aria-hidden="true" />} label="Post copy" />
           ) : null}
         </div>
+        <div className="border-t border-[#D7D9D3] pt-4">
+          <p className="font-mono text-xs font-bold tracking-wide text-[#173F5F] uppercase">Reuse this look</p>
+          <p className="mt-2 text-sm text-[#666862]">Save these creative settings for future jobs.</p>
+          <div className="mt-3 flex gap-2">
+            <Input
+              aria-label="Creative profile name"
+              disabled={profileSaved || toolSubmitting !== undefined}
+              maxLength={80}
+              onChange={(event) => setProfileName(event.target.value)}
+              placeholder="e.g. Fast travel reel"
+              value={profileName}
+            />
+            <Button disabled={profileSaved || toolSubmitting !== undefined} onClick={() => void saveProfile()} type="button" variant="outline">
+              {toolSubmitting === "profile" ? <LoaderCircleIcon aria-hidden="true" className="animate-spin" /> : null}
+              {profileSaved ? "Saved" : "Save"}
+            </Button>
+          </div>
+        </div>
+        <div className="border-t border-[#D7D9D3] pt-4">
+          <p className="font-mono text-xs font-bold tracking-wide text-[#173F5F] uppercase">Create another format</p>
+          <p className="mt-2 text-sm text-[#666862]">Uses this approved edit locally with zero additional model calls.</p>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <select className="h-12 rounded-md border border-[#D7D9D3] bg-white px-3 text-sm" onChange={(event) => setVariantAspect(event.target.value as OutputAspect)} value={variantAspect}>
+              <option value="vertical">Vertical 9:16</option>
+              <option value="landscape">Landscape 16:9</option>
+              <option value="square">Square 1:1</option>
+            </select>
+            <select className="h-12 rounded-md border border-[#D7D9D3] bg-white px-3 text-sm" onChange={(event) => setVariantDuration(Number(event.target.value) as TargetDuration)} value={variantDuration}>
+              {[15, 20, 30, 45, 60].filter((seconds) => seconds <= targetDuration).map((seconds) => (
+                <option key={seconds} value={seconds}>{seconds} seconds</option>
+              ))}
+            </select>
+          </div>
+          <Button className="mt-2 h-12 w-full" disabled={toolSubmitting !== undefined} onClick={() => void createVariant()} type="button" variant="outline">
+            {toolSubmitting === "variant" ? <LoaderCircleIcon aria-hidden="true" className="animate-spin" /> : <RefreshCwIcon aria-hidden="true" />}
+            Create local variant
+          </Button>
+          {deliveryVariants.length > 0 ? (
+            <div className="mt-4 space-y-2">
+              {deliveryVariants.map((variant) => {
+                const variantRoot = `/api/media/jobs/${encodeURIComponent(jobId)}/variants/${encodeURIComponent(variant.id)}`;
+                return (
+                  <div className="rounded-md border border-[#D7D9D3] p-3" key={variant.id}>
+                    <div className="flex items-center justify-between gap-3 text-sm">
+                      <span className="font-bold text-[#173F5F]">{variant.output_aspect} · {variant.target_duration_seconds}s</span>
+                      <span className="font-mono text-[10px] uppercase text-[#666862]">{variant.status}</span>
+                    </div>
+                    {variant.status === "ready" ? (
+                      <a className="mt-2 inline-block text-sm font-bold text-[#173F5F] underline underline-offset-4" href={`${variantRoot}/package`}>Download package</a>
+                    ) : variant.status === "failed" ? (
+                      <p className="mt-2 text-xs text-[#A23B2A]">{variant.error}</p>
+                    ) : (
+                      <p className="mt-2 text-xs text-[#666862]">Rendering on the Lenovo…</p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+        </div>
+        {error ? <p className="text-xs text-[#A23B2A]" role="alert">{error}</p> : null}
       </section>
     );
   }
