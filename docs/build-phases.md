@@ -315,4 +315,6 @@ An approved edit can now create durable vertical, landscape, or square delivery 
 
 Acceptance helper after deployment: `python3 scripts/verify-phase10.py` saves and removes a temporary profile from an existing delivered job, creates a square 15-second local variant, downloads its ZIP, validates its 1080 × 1080 manifest and zero-model provenance, and confirms the job token count did not change.
 
+Completion evidence (2026-10-24): migration 016 deployed successfully. The live verifier round-tripped a Creative Profile from delivered job `aa8269b5`, rendered square variant `5a553d19` at a 15-second cap, downloaded its package through the phone endpoint, and measured zero additional model tokens. **Passed.**
+
 Exit check: deploy migration 016, pass the Phase 10 helper, apply a saved profile to a fresh phone job, then download one locally derived variant package.
