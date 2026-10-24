@@ -139,6 +139,43 @@ def derive_duration_variant(plan: EditPlan, target_seconds: int) -> EditPlan:
     return plan.model_copy(update={"clips": clips}, deep=True)
 
 
+def apply_timeline_adjustments(plan: EditPlan, adjustments: list[dict[str, Any]]) -> EditPlan:
+    """Apply review-screen changes to a persisted plan without a model call."""
+
+    clips = [clip.model_copy(deep=True) for clip in plan.clips]
+    for adjustment in adjustments:
+        index = int(adjustment["clip_index"])
+        if index >= len(clips):
+            raise ValueError(f"clip {index + 1} is no longer present in this edit")
+        action = str(adjustment.get("action") or "keep")
+        if action == "remove":
+            clips.pop(index)
+            continue
+        if action == "move_up" and index > 0:
+            clips[index - 1], clips[index] = clips[index], clips[index - 1]
+            index -= 1
+        elif action == "move_down" and index < len(clips) - 1:
+            clips[index + 1], clips[index] = clips[index], clips[index + 1]
+            index += 1
+        visual_preset = adjustment.get("visual_preset")
+        if visual_preset is not None:
+            clips[index].visual_preset = visual_preset
+        audio_gain = adjustment.get("source_audio_gain_db")
+        if audio_gain is not None:
+            if not isinstance(plan, MontageEditPlan):
+                raise ValueError("per-clip source volume is available for montages")
+            clips[index].source_audio_gain_db = float(audio_gain)
+            clips[index].include_source_audio = True
+    minimum = 2 if isinstance(plan, MontageEditPlan) else 1
+    if len(clips) < minimum:
+        raise ValueError(f"this edit must keep at least {minimum} clip{'s' if minimum > 1 else ''}")
+    clips[0].transition = "cut"
+    return plan.model_copy(
+        update={"clips": clips, "editorial_summary": f"{plan.editorial_summary} Adjusted in the local editorial workspace."},
+        deep=True,
+    )
+
+
 # This schema is intentionally small and contains only Structured Outputs
 # features supported by the Responses API. Every property is required and all
 # objects reject unknown keys.

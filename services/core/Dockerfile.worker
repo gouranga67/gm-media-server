@@ -11,6 +11,7 @@ RUN apt-get update \
     && apt-get install --yes --no-install-recommends \
         ca-certificates \
         ffmpeg \
+        fonts-dejavu-core \
         python3 \
         python3-venv \
     && rm -rf /var/lib/apt/lists/*

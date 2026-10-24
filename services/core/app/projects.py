@@ -968,9 +968,10 @@ def create_job(project_id: UUID, payload: JobCreate) -> dict[str, Any]:
                 INSERT INTO jobs (
                     id, project_id, recipe, target_duration_seconds,
                     edit_style, music_mode, target_platform, must_include,
-                    editor_model, reasoning_effort, output_aspect, creative_profile_id
+                    editor_model, reasoning_effort, output_aspect, creative_profile_id,
+                    brand_kit_id, publishing_preset
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 RETURNING *
                 """,
                 (
@@ -986,6 +987,8 @@ def create_job(project_id: UUID, payload: JobCreate) -> dict[str, Any]:
                     payload.reasoning_effort.value,
                     payload.output_aspect.value,
                     payload.creative_profile_id,
+                    payload.brand_kit_id,
+                    payload.publishing_preset.value,
                 ),
             ).fetchone()
     except ForeignKeyViolation as error:
@@ -1005,6 +1008,8 @@ def create_job(project_id: UUID, payload: JobCreate) -> dict[str, Any]:
             or row["reasoning_effort"] != payload.reasoning_effort.value
             or row["output_aspect"] != payload.output_aspect.value
             or row["creative_profile_id"] != payload.creative_profile_id
+            or row["brand_kit_id"] != payload.brand_kit_id
+            or row["publishing_preset"] != payload.publishing_preset.value
         ):
             raise HTTPException(status_code=409, detail="job ID is already in use") from None
     assert row is not None

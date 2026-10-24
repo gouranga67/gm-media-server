@@ -3,6 +3,8 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import {
   ArchiveIcon,
+  ArrowDownIcon,
+  ArrowUpIcon,
   CheckIcon,
   DownloadIcon,
   FileTextIcon,
@@ -10,6 +12,7 @@ import {
   LoaderCircleIcon,
   RefreshCwIcon,
   SendIcon,
+  Trash2Icon,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -20,8 +23,10 @@ import {
   requestRevision,
   requestDeliveryVariant,
   saveCreativeProfileFromJob,
+  updateCoverFrame,
   type DeliveryVariant,
   type EditRun,
+  type EditorialClip,
   type FinalExport,
   type OutputAspect,
   type Recipe,
@@ -59,6 +64,8 @@ export function JobReviewControls({
   recipe,
   targetDuration,
   deliveryVariants,
+  editorialTimeline,
+  initialCoverTime,
   onUpdated,
 }: {
   readonly jobId: string;
@@ -68,6 +75,8 @@ export function JobReviewControls({
   readonly recipe: Recipe;
   readonly targetDuration: TargetDuration;
   readonly deliveryVariants: readonly DeliveryVariant[];
+  readonly editorialTimeline: readonly EditorialClip[];
+  readonly initialCoverTime: number;
   readonly onUpdated: () => void;
 }) {
   const [note, setNote] = useState("");
@@ -80,6 +89,9 @@ export function JobReviewControls({
   const [variantAspect, setVariantAspect] = useState<OutputAspect>(outputAspect === "vertical" ? "square" : "vertical");
   const [variantDuration, setVariantDuration] = useState<TargetDuration>(targetDuration >= 30 ? 15 : targetDuration);
   const [toolSubmitting, setToolSubmitting] = useState<"profile" | "variant">();
+  const [timelineSubmitting, setTimelineSubmitting] = useState<number>();
+  const [lockedElements, setLockedElements] = useState<readonly string[]>([]);
+  const [coverTime, setCoverTime] = useState(initialCoverTime);
 
   const submitRevision = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -103,6 +115,7 @@ export function JobReviewControls({
           cleanOriginal && cleanReplacement
             ? [{ original_text: cleanOriginal, replacement_text: cleanReplacement }]
             : [],
+        lockedElements,
       });
       setNote("");
       setOriginalText("");
@@ -115,10 +128,32 @@ export function JobReviewControls({
     }
   };
 
+  const adjustClip = async (
+    clip: EditorialClip,
+    change: { readonly action: "keep" | "remove" | "move_up" | "move_down"; readonly visual_preset?: EditorialClip["visual_preset"]; readonly source_audio_gain_db?: number },
+  ) => {
+    setTimelineSubmitting(clip.clip_index);
+    setError(undefined);
+    try {
+      await requestRevision(jobId, {
+        note: "",
+        captionCorrections: [],
+        clipAdjustments: [{ clip_index: clip.clip_index, ...change }],
+        lockedElements,
+      });
+      onUpdated();
+    } catch (timelineError) {
+      setError(message(timelineError));
+    } finally {
+      setTimelineSubmitting(undefined);
+    }
+  };
+
   const approve = async () => {
     setSubmitting("approval");
     setError(undefined);
     try {
+      await updateCoverFrame(jobId, coverTime);
       await approveEdit(jobId, run.version);
       onUpdated();
     } catch (approvalError) {
@@ -243,7 +278,10 @@ export function JobReviewControls({
                       <span className="font-mono text-[10px] uppercase text-[#666862]">{variant.status}</span>
                     </div>
                     {variant.status === "ready" ? (
-                      <a className="mt-2 inline-block text-sm font-bold text-[#173F5F] underline underline-offset-4" href={`${variantRoot}/package`}>Download package</a>
+                      <div className="mt-3">
+                        <video className={`${variant.output_aspect === "landscape" ? "aspect-video" : variant.output_aspect === "square" ? "aspect-square" : "aspect-[9/16]"} max-h-72 w-full rounded bg-black object-contain`} controls playsInline preload="metadata" src={`${variantRoot}/video?download=false`} />
+                        <a className="mt-2 inline-block text-sm font-bold text-[#173F5F] underline underline-offset-4" href={`${variantRoot}/package`}>Download package</a>
+                      </div>
                     ) : variant.status === "failed" ? (
                       <p className="mt-2 text-xs text-[#A23B2A]">{variant.error}</p>
                     ) : (
@@ -285,11 +323,72 @@ export function JobReviewControls({
       ) : null}
 
       <section className="rounded-md border border-[#D7D9D3] bg-white p-5">
+        <div className="mb-5">
+          <p className="font-mono text-xs font-bold tracking-wide text-[#173F5F] uppercase">Edit breakdown</p>
+          <p className="mt-2 text-sm text-[#666862]">Every change here makes a new local preview with zero additional model tokens.</p>
+          <div className="mt-4 space-y-3">
+            {editorialTimeline.map((clip) => (
+              <article className="rounded-md border border-[#D7D9D3] p-3" key={`${clip.clip_index}-${clip.asset_id}`}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-bold text-[#173F5F]">{clip.clip_index + 1}. {clip.source_name}</p>
+                    <p className="mt-1 font-mono text-[10px] text-[#666862]">{clip.source_in.toFixed(1)}–{clip.source_out.toFixed(1)}s · {clip.duration.toFixed(1)}s · {clip.transition.replaceAll("_", " ")}</p>
+                  </div>
+                  <div className="flex shrink-0 gap-1">
+                    <Button aria-label="Move clip earlier" disabled={timelineSubmitting !== undefined || clip.clip_index === 0} onClick={() => void adjustClip(clip, { action: "move_up" })} size="icon" type="button" variant="outline"><ArrowUpIcon /></Button>
+                    <Button aria-label="Move clip later" disabled={timelineSubmitting !== undefined || clip.clip_index === editorialTimeline.length - 1} onClick={() => void adjustClip(clip, { action: "move_down" })} size="icon" type="button" variant="outline"><ArrowDownIcon /></Button>
+                    <Button aria-label="Remove clip" disabled={timelineSubmitting !== undefined || editorialTimeline.length <= (recipe === "montage" ? 2 : 1)} onClick={() => void adjustClip(clip, { action: "remove" })} size="icon" type="button" variant="outline"><Trash2Icon /></Button>
+                  </div>
+                </div>
+                {clip.transcript_excerpt ? <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-[#666862]">“{clip.transcript_excerpt}”</p> : null}
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <select
+                    aria-label={`Framing for clip ${clip.clip_index + 1}`}
+                    className="h-10 rounded-md border border-[#D7D9D3] bg-white px-2 text-xs"
+                    disabled={timelineSubmitting !== undefined}
+                    onChange={(event) => void adjustClip(clip, { action: "keep", visual_preset: event.currentTarget.value as EditorialClip["visual_preset"] })}
+                    value={clip.visual_preset}
+                  >
+                    <option value="standard">Standard frame</option>
+                    <option value="punch_in">Punch in</option>
+                    {recipe === "talking_head" ? <option value="strong_punch_in">Strong punch in</option> : null}
+                    {clip.duration >= 2 ? <option value="slow_push_in">Slow push in</option> : null}
+                    {clip.duration >= 2 ? <option value="slow_pull_out">Slow pull out</option> : null}
+                  </select>
+                  {recipe === "montage" && clip.media_kind === "video" ? (
+                    <select
+                      aria-label={`Source volume for clip ${clip.clip_index + 1}`}
+                      className="h-10 rounded-md border border-[#D7D9D3] bg-white px-2 text-xs"
+                      disabled={timelineSubmitting !== undefined}
+                      onChange={(event) => void adjustClip(clip, { action: "keep", source_audio_gain_db: Number(event.currentTarget.value) })}
+                      value={clip.source_audio_gain_db}
+                    >
+                      <option value={-6}>Quiet source</option><option value={0}>Normal source</option><option value={4}>Louder source</option><option value={8}>Feature source</option>
+                    </select>
+                  ) : <span className="flex items-center px-2 text-xs text-[#666862]">{clip.media_kind}</span>}
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+        <div className="mb-5 border-t border-[#D7D9D3] pt-4">
+          <p className="font-mono text-xs font-bold text-[#173F5F] uppercase">Protect in AI revisions</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {["clip order", "spoken phrases", "captions", "music"].map((item) => (
+              <label className="flex items-center gap-2 rounded-full border border-[#D7D9D3] px-3 py-2 text-xs" key={item}>
+                <input checked={lockedElements.includes(item)} onChange={() => setLockedElements((current) => current.includes(item) ? current.filter((value) => value !== item) : [...current, item])} type="checkbox" />
+                Keep {item}
+              </label>
+            ))}
+          </div>
+        </div>
         <p className="font-mono text-xs font-bold tracking-wide text-[#173F5F] uppercase">Approve version {run.version}</p>
         <h2 className="mt-2 text-xl font-bold text-[#173F5F]">Happy with this edit?</h2>
         <p className="mt-2 text-sm leading-relaxed text-[#666862]">
           Approval freezes this edit plan and starts the full-quality local render.
         </p>
+        <label className="mt-4 block text-xs font-bold text-[#173F5F]" htmlFor="cover-frame-time">COVER FRAME · SECONDS INTO EDIT</label>
+        <Input className="mt-2" id="cover-frame-time" min={0} onChange={(event) => setCoverTime(Math.max(0, Number(event.currentTarget.value)))} step={0.1} type="number" value={coverTime} />
         <Button
           className="mt-5 h-14 w-full bg-[#173F5F] text-white hover:bg-[#12344F]"
           disabled={submitting !== undefined}

@@ -3,7 +3,7 @@ from uuid import uuid4
 
 from pydantic import ValidationError
 
-from app.edit_plan import derive_duration_variant, edit_plan_duration, validate_edit_plan
+from app.edit_plan import apply_timeline_adjustments, derive_duration_variant, edit_plan_duration, validate_edit_plan
 
 
 class EditPlanValidationTests(unittest.TestCase):
@@ -167,6 +167,22 @@ class EditPlanValidationTests(unittest.TestCase):
         variant = derive_duration_variant(plan, 15)
 
         self.assertAlmostEqual(edit_plan_duration(variant), 7.5)
+
+    def test_timeline_adjustments_reorder_and_change_framing_without_model(self) -> None:
+        self.document["clips"] = [
+            {**self.document["clips"][0], "source_in": 0, "source_out": 5},
+            {**self.document["clips"][0], "source_in": 10, "source_out": 15},
+        ]
+        plan = validate_edit_plan(self.document, self.assets)
+
+        adjusted = apply_timeline_adjustments(
+            plan,
+            [{"clip_index": 1, "action": "move_up", "visual_preset": "punch_in"}],
+        )
+
+        self.assertEqual(adjusted.clips[0].source_in, 10)
+        self.assertEqual(adjusted.clips[0].visual_preset, "punch_in")
+        self.assertEqual(adjusted.clips[0].transition, "cut")
 
 
 if __name__ == "__main__":

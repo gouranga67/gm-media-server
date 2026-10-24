@@ -107,15 +107,22 @@ def render_ass(
     *,
     width: int = PREVIEW_WIDTH,
     height: int = PREVIEW_HEIGHT,
+    brand_kit: dict[str, Any] | None = None,
 ) -> str:
     # Scale from frame height so the same caption style remains proportional
     # for both vertical reels and landscape montages.
     scale = height / PREVIEW_HEIGHT
-    font_size = max(18, round(34 * scale))
+    style = str((brand_kit or {}).get("caption_style") or "clean")
+    font_size = max(18, round((30 if style == "minimal" else 34 if style == "clean" else 38) * scale))
     outline = max(1, round(3 * scale))
     shadow = max(1, round(scale))
     horizontal_margin = max(24, round(38 * width / PREVIEW_WIDTH))
     vertical_margin = max(32, round(86 * scale))
+    font = {"sans": "DejaVu Sans", "serif": "DejaVu Serif", "mono": "DejaVu Sans Mono"}.get(str((brand_kit or {}).get("font_family")), "Arial")
+    accent = str((brand_kit or {}).get("accent_color") or "#195BB4")
+    red, green, blue = int(accent[1:3], 16), int(accent[3:5], 16), int(accent[5:7], 16)
+    ass_accent = f"&H00{blue:02X}{green:02X}{red:02X}"
+    bold = 0 if style == "minimal" else -1
     header = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {width}
@@ -125,7 +132,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: GMBlue,Arial,{font_size},&H00FFFFFF,&H00FFFFFF,&H00B45B19,&H78000000,-1,0,0,0,100,100,0,0,1,{outline},{shadow},2,{horizontal_margin},{horizontal_margin},{vertical_margin},1
+Style: GMBlue,{font},{font_size},&H00FFFFFF,&H00FFFFFF,{ass_accent},&H78000000,{bold},0,0,0,100,100,0,0,1,{outline},{shadow},2,{horizontal_margin},{horizontal_margin},{vertical_margin},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -451,7 +458,7 @@ def render_edit_preview(
     width, height = _preview_dimensions(str(context["job"].get("output_aspect") or "vertical"))
 
     events = caption_events(plan, context["assets"], caption_corrections)
-    _atomic_text(captions_path, render_ass(events, width=width, height=height))
+    _atomic_text(captions_path, render_ass(events, width=width, height=height, brand_kit=context.get("brand_kit")))
     encoder = _render_video(
         sources,
         plan,
@@ -477,8 +484,10 @@ def render_edit_preview(
             "music_mode": context["job"].get("music_mode"),
             "target_platform": context["job"].get("target_platform"),
             "must_include": context["job"].get("must_include"),
+            "cover_time_seconds": context["job"].get("cover_time_seconds"),
         },
         "music": music_metadata,
+        "brand_kit": context.get("brand_kit"),
         "caption_corrections": caption_corrections or [],
         "render": {
             "width": width,
@@ -609,7 +618,7 @@ def render_final_delivery(
     events = caption_events(plan, context["assets"], caption_corrections)
     _atomic_text(
         captions_ass_path,
-        render_ass(events, width=width, height=height),
+        render_ass(events, width=width, height=height, brand_kit=context.get("brand_kit")),
     )
     _atomic_text(captions_vtt_path, render_webvtt(events))
     encoder = _render_video(
@@ -639,7 +648,7 @@ def render_final_delivery(
         raise RuntimeError("final delivery QA found an unexpected frame size")
 
     duration = float(technical_probe.get("format", {}).get("duration_seconds") or 0)
-    cover_seek = min(1.0, max(0.0, duration / 2))
+    cover_seek = min(float(context["job"].get("cover_time_seconds") or 0), max(0.0, duration - 0.05))
     generate_file(
         [
             "ffmpeg",
@@ -687,8 +696,10 @@ def render_final_delivery(
             "music_mode": context["job"].get("music_mode"),
             "target_platform": context["job"].get("target_platform"),
             "must_include": context["job"].get("must_include"),
+            "cover_time_seconds": context["job"].get("cover_time_seconds"),
         },
         "music": music_metadata,
+        "brand_kit": context.get("brand_kit"),
         "tools": {
             "gm_studio_core": "0.1.0",
             "ffmpeg": _ffmpeg_version(settings.analysis_command_timeout_seconds),

@@ -16,6 +16,7 @@ from app.duplicate_storage import share_exact_duplicate_storage
 from app.edit_plan import (
     EditPlan,
     MontageEditPlan,
+    apply_timeline_adjustments,
     derive_duration_variant,
     document_sha256,
     repair_predictable_plan_defaults,
@@ -862,8 +863,24 @@ def process_one_edit(state: WorkerState) -> bool:
                     "based_on_version": previous["version"],
                     "previous_plan": previous["document"],
                     "caption_corrections": run.get("caption_corrections") or [],
+                    "locked_elements": run.get("locked_elements") or [],
                 }
-            proposed, provenance = create_edit_plan(context)
+            adjustments = list(run.get("clip_adjustments") or [])
+            if adjustments and not run.get("revision_note"):
+                previous_plan = validate_edit_plan(
+                    context["revision"]["previous_plan"],
+                    context["assets"],
+                    allow_post_copy=bool(context["project"]["ai_copy_allowed"]),
+                    music_tracks=context["music_library"],
+                )
+                proposed = apply_timeline_adjustments(previous_plan, adjustments)
+                provenance = {
+                    "provider": "local_timeline",
+                    "model": "deterministic_editor_v1",
+                    "reasoning_effort": None,
+                }
+            else:
+                proposed, provenance = create_edit_plan(context)
             request_kind = "revision" if run.get("based_on_run_id") else "initial_plan"
             _record_plan_usage(run, provenance, request_kind)
             try:
@@ -871,7 +888,7 @@ def process_one_edit(state: WorkerState) -> bool:
                     proposed.model_dump(mode="json"),
                     context["assets"],
                     allow_post_copy=bool(context["project"]["ai_copy_allowed"]),
-                    creative_direction=context["job"],
+                    creative_direction=None if adjustments and not run.get("revision_note") else context["job"],
                     music_tracks=context["music_library"],
                 )
             except (ValueError, ValidationError) as validation_error:

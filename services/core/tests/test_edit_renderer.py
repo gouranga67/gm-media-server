@@ -136,6 +136,15 @@ class CaptionMappingTests(unittest.TestCase):
         self.assertIn("PlayResY: 540", ass)
         self.assertIn("GMBlue,Arial,19", ass)
 
+    def test_brand_kit_changes_caption_type_and_accent(self) -> None:
+        ass = render_ass(
+            [{"start": 0, "end": 1, "text": "Brand"}],
+            brand_kit={"caption_style": "bold", "font_family": "mono", "accent_color": "#FF0000"},
+        )
+
+        self.assertIn("GMBlue,DejaVu Sans Mono,38", ass)
+        self.assertIn("&H000000FF", ass)
+
     def test_builds_bounded_push_in_filter(self) -> None:
         result = _clip_video_filter(
             index=0,

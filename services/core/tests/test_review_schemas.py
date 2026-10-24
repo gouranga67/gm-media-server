@@ -129,6 +129,17 @@ class RevisionSchemaTests(unittest.TestCase):
                 }
             )
 
+    def test_accepts_bounded_local_timeline_adjustment_and_locks(self) -> None:
+        revision = RevisionCreate.model_validate(
+            {
+                "clip_adjustments": [{"clip_index": 1, "action": "move_up", "source_audio_gain_db": 4}],
+                "locked_elements": ["captions", "music"],
+            }
+        )
+
+        self.assertEqual(revision.clip_adjustments[0].clip_index, 1)
+        self.assertEqual(revision.locked_elements, ["captions", "music"])
+
 
 if __name__ == "__main__":
     unittest.main()

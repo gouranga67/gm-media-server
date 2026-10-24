@@ -27,7 +27,7 @@ sudo ./scripts/install-service.sh
 sudo ./scripts/verify-live-suite.sh
 ```
 
-This checks service health, migrations 010–016, backend unit/integration tests inside the pinned CUDA worker image, an existing real analysis manifest, reusable-library references, exact-duplicate calculations, the content catalogue backfill/search API, local semantic visual indexing, reversible managed-library operations, and complete non-destructive job-history classification. The test location matters: it catches compatibility differences between the Python 3.13 API image and the CUDA image's Python runtime.
+This checks service health, migrations 010–017, backend unit/integration tests inside the pinned CUDA worker image, an existing real analysis manifest, reusable-library references, exact-duplicate calculations, the content catalogue backfill/search API, local semantic visual indexing, reversible managed-library operations, complete non-destructive job-history classification, and the Phase 11 editorial workspace/brand/preset API. The test location matters: it catches compatibility differences between the Python 3.13 API image and the CUDA image's Python runtime.
 
 The library verifier uses one stable verification project and job on every run. The duplicate verifier may store a canonical preference, but neither helper deletes, moves, merges, or rewrites an original media file. The catalogue and visual-search tests are read-only after their background backfills; the visual test reads a generated source-frame derivative but never modifies an original.
 

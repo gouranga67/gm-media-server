@@ -248,10 +248,19 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
     revision = public.get("revision")
     revision_instruction = ""
     if isinstance(revision, dict):
+        locked = revision.get("locked_elements") or []
+        locked_instruction = (
+            " The user locked these elements; preserve them exactly unless the revision explicitly asks to unlock one: "
+            + ", ".join(str(item) for item in locked)
+            + "."
+            if locked else ""
+        )
         revision_instruction = (
             "This is a revision of the supplied previous_plan. Follow the user's revision instruction "
             "while preserving requested strengths and all source-led constraints. Caption corrections "
-            "are applied deterministically after planning; do not alter spoken words to simulate them.\n\n"
+            "are applied deterministically after planning; do not alter spoken words to simulate them."
+            + locked_instruction
+            + "\n\n"
         )
     correction = public.get("validation_correction")
     correction_instruction = ""

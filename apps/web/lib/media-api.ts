@@ -6,6 +6,7 @@ export type Recipe = "talking_head" | "montage";
 export type ReasoningEffort = "low" | "medium" | "high";
 export type OutputAspect = "vertical" | "landscape" | "square";
 export type TargetPlatform = "all_social" | "facebook" | "instagram" | "linkedin" | "tiktok" | "youtube";
+export type PublishingPreset = "custom" | "instagram_reel" | "tiktok" | "youtube_short" | "linkedin_landscape" | "facebook_square";
 
 export type Project = {
   readonly id: string;
@@ -32,6 +33,9 @@ export type MediaJob = {
   readonly reasoning_effort: ReasoningEffort;
   readonly output_aspect: OutputAspect;
   readonly creative_profile_id: string | null;
+  readonly brand_kit_id: string | null;
+  readonly publishing_preset: PublishingPreset;
+  readonly cover_time_seconds: number;
   readonly created_at: string;
   readonly updated_at: string;
 };
@@ -273,8 +277,36 @@ export type CreativeProfile = {
   readonly output_aspect: OutputAspect;
   readonly reasoning_effort: ReasoningEffort;
   readonly source_job_id: string | null;
+  readonly brand_kit_id: string | null;
+  readonly publishing_preset: PublishingPreset;
   readonly created_at: string;
   readonly updated_at: string;
+};
+
+export type BrandKit = {
+  readonly id: string;
+  readonly name: string;
+  readonly primary_color: string;
+  readonly accent_color: string;
+  readonly caption_style: "clean" | "bold" | "minimal";
+  readonly font_family: "sans" | "serif" | "mono";
+  readonly created_at: string;
+  readonly updated_at: string;
+};
+
+export type EditorialClip = {
+  readonly clip_index: number;
+  readonly asset_id: string;
+  readonly source_name: string;
+  readonly media_kind: "video" | "image";
+  readonly source_in: number;
+  readonly source_out: number;
+  readonly duration: number;
+  readonly transition: string;
+  readonly visual_preset: "standard" | "punch_in" | "strong_punch_in" | "slow_push_in" | "slow_pull_out";
+  readonly include_source_audio: boolean;
+  readonly source_audio_gain_db: number;
+  readonly transcript_excerpt: string;
 };
 
 export type DeliveryVariant = {
@@ -309,6 +341,8 @@ export type JobReview = {
   readonly latest_run: EditRun | null;
   readonly final_export: FinalExport | null;
   readonly delivery_variants: readonly DeliveryVariant[];
+  readonly editorial_timeline: readonly EditorialClip[];
+  readonly brand_kit: BrandKit | null;
   readonly events: readonly JobEvent[];
   readonly usage: JobUsage;
 };
@@ -459,6 +493,8 @@ export function createMediaJob(
     readonly reasoningEffort: ReasoningEffort;
     readonly outputAspect: OutputAspect;
     readonly creativeProfileId?: string | null;
+    readonly brandKitId?: string | null;
+    readonly publishingPreset?: PublishingPreset;
   },
 ) {
   return apiRequest<MediaJob>(`projects/${projectId}/jobs`, {
@@ -475,6 +511,8 @@ export function createMediaJob(
       reasoning_effort: input.reasoningEffort,
       output_aspect: input.outputAspect,
       creative_profile_id: input.creativeProfileId ?? null,
+      brand_kit_id: input.brandKitId ?? null,
+      publishing_preset: input.publishingPreset ?? "custom",
     }),
   });
 }
@@ -693,6 +731,36 @@ export function getCreativeProfiles() {
   return apiRequest<readonly CreativeProfile[]>("creative-profiles", { cache: "no-store" });
 }
 
+export function createCreativeProfile(input: Omit<CreativeProfile, "id" | "created_at" | "updated_at">) {
+  return apiRequest<CreativeProfile>("creative-profiles", { method: "POST", body: JSON.stringify(input) });
+}
+
+export function updateCreativeProfile(profileId: string, name: string, description = "") {
+  return apiRequest<CreativeProfile>(`creative-profiles/${profileId}`, {
+    method: "PUT",
+    body: JSON.stringify({ name, description }),
+  });
+}
+
+export function deleteCreativeProfile(profileId: string) {
+  return apiRequest<void>(`creative-profiles/${profileId}`, { method: "DELETE" });
+}
+
+export function getBrandKits() {
+  return apiRequest<readonly BrandKit[]>("brand-kits", { cache: "no-store" });
+}
+
+export function saveBrandKit(input: Omit<BrandKit, "id" | "created_at" | "updated_at">, id?: string) {
+  return apiRequest<BrandKit>(id ? `brand-kits/${id}` : "brand-kits", {
+    method: id ? "PUT" : "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteBrandKit(id: string) {
+  return apiRequest<void>(`brand-kits/${id}`, { method: "DELETE" });
+}
+
 export function saveCreativeProfileFromJob(jobId: string, name: string, description = "") {
   return apiRequest<CreativeProfile>(`jobs/${jobId}/creative-profile`, {
     method: "POST",
@@ -737,6 +805,13 @@ export function requestRevision(
   input: {
     readonly note: string;
     readonly captionCorrections: readonly CaptionCorrection[];
+    readonly clipAdjustments?: readonly {
+      readonly clip_index: number;
+      readonly action: "keep" | "remove" | "move_up" | "move_down";
+      readonly visual_preset?: EditorialClip["visual_preset"];
+      readonly source_audio_gain_db?: number;
+    }[];
+    readonly lockedElements?: readonly string[];
   },
 ) {
   return apiRequest<EditRun>(`jobs/${jobId}/revisions`, {
@@ -744,6 +819,8 @@ export function requestRevision(
     body: JSON.stringify({
       note: input.note,
       caption_corrections: input.captionCorrections,
+      clip_adjustments: input.clipAdjustments ?? [],
+      locked_elements: input.lockedElements ?? [],
     }),
   });
 }
@@ -752,6 +829,13 @@ export function approveEdit(jobId: string, version: number) {
   return apiRequest<FinalExport>(`jobs/${jobId}/approval`, {
     method: "POST",
     body: JSON.stringify({ version, note: "Approved from the GM Studio phone review." }),
+  });
+}
+
+export function updateCoverFrame(jobId: string, timeSeconds: number) {
+  return apiRequest<MediaJob>(`jobs/${jobId}/cover-frame`, {
+    method: "PUT",
+    body: JSON.stringify({ time_seconds: timeSeconds }),
   });
 }
 

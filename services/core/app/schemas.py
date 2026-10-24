@@ -57,6 +57,15 @@ class OutputAspect(StringEnum):
     SQUARE = "square"
 
 
+class PublishingPreset(StringEnum):
+    CUSTOM = "custom"
+    INSTAGRAM_REEL = "instagram_reel"
+    TIKTOK = "tiktok"
+    YOUTUBE_SHORT = "youtube_short"
+    LINKEDIN_LANDSCAPE = "linkedin_landscape"
+    FACEBOOK_SQUARE = "facebook_square"
+
+
 class ProjectCreate(BaseModel):
     id: UUID | None = None
     name: str = Field(min_length=1, max_length=160)
@@ -89,6 +98,8 @@ class JobCreate(BaseModel):
     reasoning_effort: ReasoningEffort = ReasoningEffort.MEDIUM
     output_aspect: OutputAspect = OutputAspect.VERTICAL
     creative_profile_id: UUID | None = None
+    brand_kit_id: UUID | None = None
+    publishing_preset: PublishingPreset = PublishingPreset.CUSTOM
 
     @field_validator("must_include")
     @classmethod
@@ -124,6 +135,9 @@ class JobResponse(BaseModel):
     reasoning_effort: ReasoningEffort = ReasoningEffort.MEDIUM
     output_aspect: OutputAspect = OutputAspect.VERTICAL
     creative_profile_id: UUID | None = None
+    brand_kit_id: UUID | None = None
+    publishing_preset: PublishingPreset = PublishingPreset.CUSTOM
+    cover_time_seconds: float = 1.0
     created_at: datetime
     updated_at: datetime
 
@@ -485,6 +499,8 @@ class EditRunResponse(BaseModel):
     based_on_run_id: UUID | None = None
     revision_note: str | None = None
     caption_corrections: list[dict[str, str]] = Field(default_factory=list)
+    clip_adjustments: list[dict[str, Any]] = Field(default_factory=list)
+    locked_elements: list[str] = Field(default_factory=list)
     approved_at: datetime | None = None
     preview_available: bool = False
     manifest: dict[str, Any] = Field(default_factory=dict)
@@ -516,11 +532,24 @@ class CaptionCorrection(BaseModel):
         return self
 
 
+class ClipAdjustment(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    clip_index: int = Field(ge=0, le=47)
+    action: Literal["keep", "remove", "move_up", "move_down"] = "keep"
+    visual_preset: Literal[
+        "standard", "punch_in", "strong_punch_in", "slow_push_in", "slow_pull_out"
+    ] | None = None
+    source_audio_gain_db: float | None = Field(default=None, ge=-12.0, le=12.0)
+
+
 class RevisionCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     note: str = Field(default="", max_length=1200)
     caption_corrections: list[CaptionCorrection] = Field(default_factory=list, max_length=50)
+    clip_adjustments: list[ClipAdjustment] = Field(default_factory=list, max_length=48)
+    locked_elements: list[Literal["clip order", "spoken phrases", "captions", "music"]] = Field(default_factory=list, max_length=4)
 
     @field_validator("note")
     @classmethod
@@ -529,11 +558,14 @@ class RevisionCreate(BaseModel):
 
     @model_validator(mode="after")
     def has_requested_change(self) -> "RevisionCreate":
-        if not self.note and not self.caption_corrections:
-            raise ValueError("provide a revision note or at least one caption correction")
+        if not self.note and not self.caption_corrections and not self.clip_adjustments:
+            raise ValueError("provide a revision note, caption correction, or timeline adjustment")
         originals = [item.original_text for item in self.caption_corrections]
         if len(originals) != len(set(originals)):
             raise ValueError("caption corrections cannot repeat the same original text")
+        indexes = [item.clip_index for item in self.clip_adjustments]
+        if len(indexes) != len(set(indexes)):
+            raise ValueError("timeline adjustments cannot repeat a clip index")
         return self
 
 
@@ -542,6 +574,11 @@ class ApprovalCreate(BaseModel):
 
     version: int = Field(gt=0)
     note: str = Field(default="", max_length=1000)
+
+
+class CoverFrameUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    time_seconds: float = Field(ge=0, le=3600)
 
 
 class FinalExportResponse(BaseModel):
@@ -576,6 +613,8 @@ class CreativeProfileCreate(BaseModel):
     output_aspect: OutputAspect
     reasoning_effort: ReasoningEffort
     source_job_id: UUID | None = None
+    brand_kit_id: UUID | None = None
+    publishing_preset: PublishingPreset = PublishingPreset.CUSTOM
 
     @field_validator("name", "description")
     @classmethod
@@ -601,6 +640,41 @@ class CreativeProfileFromJobCreate(BaseModel):
     @classmethod
     def normalize_profile_text(cls, value: str) -> str:
         return " ".join(value.split())
+
+
+class CreativeProfileUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=80)
+    description: str = Field(default="", max_length=400)
+
+    @field_validator("name", "description")
+    @classmethod
+    def normalize_profile_text(cls, value: str) -> str:
+        return " ".join(value.split())
+
+
+class BrandKitCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=80)
+    primary_color: str = Field(default="#173F5F", pattern=r"^#[0-9A-Fa-f]{6}$")
+    accent_color: str = Field(default="#4BA3D3", pattern=r"^#[0-9A-Fa-f]{6}$")
+    caption_style: Literal["clean", "bold", "minimal"] = "bold"
+    font_family: Literal["sans", "serif", "mono"] = "sans"
+
+    @field_validator("name")
+    @classmethod
+    def normalize_name(cls, value: str) -> str:
+        return " ".join(value.split())
+
+
+class BrandKitResponse(BrandKitCreate):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    created_at: datetime
+    updated_at: datetime
 
 
 class DeliveryVariantCreate(BaseModel):
@@ -680,6 +754,21 @@ class JobUsageSummary(BaseModel):
     events: list[AiUsageEventResponse] = Field(default_factory=list)
 
 
+class EditorialClipResponse(BaseModel):
+    clip_index: int
+    asset_id: UUID
+    source_name: str
+    media_kind: Literal["video", "image"]
+    source_in: float
+    source_out: float
+    duration: float
+    transition: str
+    visual_preset: str
+    include_source_audio: bool = True
+    source_audio_gain_db: float = 0.0
+    transcript_excerpt: str = ""
+
+
 class UsageModelSummary(BaseModel):
     model: str
     requests: int
@@ -717,5 +806,7 @@ class JobReviewResponse(BaseModel):
     latest_run: EditRunResponse | None = None
     final_export: FinalExportResponse | None = None
     delivery_variants: list[DeliveryVariantResponse] = Field(default_factory=list)
+    editorial_timeline: list[EditorialClipResponse] = Field(default_factory=list)
+    brand_kit: BrandKitResponse | None = None
     events: list[JobEventResponse]
     usage: JobUsageSummary = Field(default_factory=JobUsageSummary)

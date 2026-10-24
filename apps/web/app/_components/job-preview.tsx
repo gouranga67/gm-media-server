@@ -178,6 +178,8 @@ export function JobPreview({ jobId }: { readonly jobId: string }) {
                   deliveryVariants={(review?.delivery_variants ?? []).filter(
                     (variant) => variant.version === run.version,
                   )}
+                  editorialTimeline={review?.editorial_timeline ?? []}
+                  initialCoverTime={review?.job.cover_time_seconds ?? 1}
                   run={run}
                 />
               ) : null}

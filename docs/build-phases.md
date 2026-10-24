@@ -318,3 +318,15 @@ Acceptance helper after deployment: `python3 scripts/verify-phase10.py` saves an
 Completion evidence (2026-10-24): migration 016 deployed successfully. The live verifier round-tripped a Creative Profile from delivered job `aa8269b5`, rendered square variant `5a553d19` at a 15-second cap, downloaded its package through the phone endpoint, and measured zero additional model tokens. **Passed.**
 
 Exit check: deploy migration 016, pass the Phase 10 helper, apply a saved profile to a fresh phone job, then download one locally derived variant package.
+
+## Phase 11 — editorial workspace and brand system
+
+**Purpose:** expose the source-led edit plan in plain language, make precise revisions without repeated model calls, and keep recurring output visually consistent.
+
+Current source checkpoint (2026-10-24): migration 017 adds managed Brand Kits, publishing presets, cover-frame selection, locked revision elements, and persisted clip adjustments. The review screen lists every selected source with its source range, assembled duration, transcript excerpt, transition, framing move, and source-audio level. A user can reorder or remove clips, change emphasis, and raise or lower montage source sound; these operations derive a new validated plan and render locally with zero additional model usage. Free-text revisions can protect clip order, spoken phrases, captions, and music from model changes.
+
+The new Brand & Presets screen creates and edits caption colours, weight, and a safe bundled typeface; it also renames, duplicates, and removes Creative Profiles. New jobs can apply a named brand kit and deterministic Instagram, TikTok, YouTube, LinkedIn, or Facebook publishing preset. Brand settings flow into preview and final ASS captions and are recorded in provenance. Final approval accepts an explicit cover-frame timestamp, and completed delivery variants can be played beside the original before downloading.
+
+Acceptance helper after deployment: `python3 scripts/verify-phase11.py` round-trips a temporary brand kit, creates and renames a profile carrying brand/publishing provenance, and confirms an existing real job exposes a source-backed editorial timeline. It cleans up its temporary records and makes no model request.
+
+Exit check: deploy migration 017, pass the Phase 11 helper and complete live suite, create one branded montage, make a clip-level local adjustment, confirm the token count is unchanged, approve it with a selected cover frame, and compare one delivery variant in the browser.

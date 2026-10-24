@@ -66,6 +66,11 @@ def build_editor_context(
             ORDER BY mood, energy, title
             """
         ).fetchall()
+        brand_kit = None
+        if job.get("brand_kit_id") is not None:
+            brand_kit = database.execute(
+                "SELECT * FROM brand_kits WHERE id = %s", (job["brand_kit_id"],)
+            ).fetchone()
 
     assets: list[dict[str, Any]] = []
     for row in rows:
@@ -151,6 +156,9 @@ def build_editor_context(
             "editor_model": job.get("editor_model"),
             "reasoning_effort": job.get("reasoning_effort") or "medium",
             "output_aspect": job.get("output_aspect") or "vertical",
+            "brand_kit_id": str(job["brand_kit_id"]) if job.get("brand_kit_id") else None,
+            "publishing_preset": job.get("publishing_preset") or "custom",
+            "cover_time_seconds": float(job.get("cover_time_seconds") or 0),
         },
         "project": {
             "name": job["project_name"],
@@ -161,6 +169,17 @@ def build_editor_context(
         "ready_for_editing": ready,
         "assets": assets,
         "music_library": music_library,
+        "brand_kit": (
+            {
+                "id": str(brand_kit["id"]),
+                "name": brand_kit["name"],
+                "primary_color": brand_kit["primary_color"],
+                "accent_color": brand_kit["accent_color"],
+                "caption_style": brand_kit["caption_style"],
+                "font_family": brand_kit["font_family"],
+            }
+            if brand_kit is not None else None
+        ),
         "content_policy": {
             "source_derived_only": True,
             "synthetic_image": False,

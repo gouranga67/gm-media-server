@@ -421,6 +421,7 @@ def _manifest(
             "target_platform": context["job"].get("target_platform"),
             "output_aspect": context["job"].get("output_aspect"),
             "must_include": context["job"].get("must_include"),
+            "cover_time_seconds": context["job"].get("cover_time_seconds"),
         },
         "music": music,
         "render": {
@@ -483,7 +484,7 @@ def render_montage_preview(
     manifest_path = directory / "manifest.json"
     events = montage_caption_events(plan, context["assets"], caption_corrections)
     if events:
-        _atomic_text(captions_ass, render_ass(events, width=width, height=height))
+        _atomic_text(captions_ass, render_ass(events, width=width, height=height, brand_kit=context.get("brand_kit")))
     encoder = _render(
         context,
         plan,
@@ -513,6 +514,7 @@ def render_montage_preview(
         "events": len(events),
         "source_speech_only": True,
     }
+    manifest["brand_kit"] = context.get("brand_kit")
     _atomic_text(manifest_path, json.dumps(manifest, indent=2, ensure_ascii=False) + "\n")
     return manifest
 
@@ -545,7 +547,7 @@ def render_montage_delivery(
     events = montage_caption_events(plan, context["assets"], caption_corrections)
     _atomic_text(captions, render_webvtt(events))
     if events:
-        _atomic_text(captions_ass, render_ass(events, width=width, height=height))
+        _atomic_text(captions_ass, render_ass(events, width=width, height=height, brand_kit=context.get("brand_kit")))
     encoder = _render(
         context,
         plan,
@@ -563,6 +565,10 @@ def render_montage_delivery(
         raise RuntimeError("final montage QA requires video and audio")
     if video_stream.get("width") != width or video_stream.get("height") != height:
         raise RuntimeError("final montage QA found an unexpected frame size")
+    cover_seek = min(
+        float(context["job"].get("cover_time_seconds") or 0),
+        max(0.0, float(probe.get("format", {}).get("duration_seconds") or 0) - 0.05),
+    )
     generate_file(
         [
             "ffmpeg",
@@ -572,7 +578,7 @@ def render_montage_delivery(
             "-nostdin",
             "-y",
             "-ss",
-            "1.000",
+            f"{cover_seek:.3f}",
             "-i",
             str(video),
             "-frames:v",
@@ -616,6 +622,7 @@ def render_montage_delivery(
                 "source_speech_only": True,
                 "corrections": caption_corrections or [],
             },
+            "brand_kit": context.get("brand_kit"),
             "tools": {
                 "gm_studio_core": "0.2.0",
                 "ffmpeg": _ffmpeg_version(settings.analysis_command_timeout_seconds),

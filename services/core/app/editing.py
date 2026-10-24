@@ -14,6 +14,7 @@ from app.editor_context import build_editor_context
 from app.media_analysis import resolve_source
 from app.schemas import (
     ApprovalCreate,
+    CoverFrameUpdate,
     DeliveryVariantCreate,
     DeliveryVariantResponse,
     EditRunResponse,
@@ -21,10 +22,23 @@ from app.schemas import (
     JobReviewResponse,
     UsageDashboardResponse,
     RevisionCreate,
+    JobResponse,
 )
 
 
 router = APIRouter(prefix="/api/v1", tags=["editing"])
+
+
+@router.put("/jobs/{job_id}/cover-frame", response_model=JobResponse)
+def update_cover_frame(job_id: UUID, payload: CoverFrameUpdate) -> dict[str, Any]:
+    with connection() as database:
+        row = database.execute(
+            "UPDATE jobs SET cover_time_seconds=%s, updated_at=now() WHERE id=%s RETURNING *",
+            (payload.time_seconds, job_id),
+        ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="job not found")
+    return row
 
 VERIFICATION_PROJECT_PATTERN = re.compile(
     r"^Phase\s+\d+[A-Z]*\s+(?:library\s+)?verification(?:\s|—|$)",
@@ -172,6 +186,48 @@ def _needs_montage_delivery_refresh(job: dict[str, Any], export: dict[str, Any])
         return True
     captions = manifest.get("captions")
     return not isinstance(captions, dict) or captions.get("style") != "clean_blue_v1"
+
+
+def _editorial_timeline(document: dict[str, Any] | None, context: dict[str, Any]) -> list[dict[str, Any]]:
+    if not isinstance(document, dict):
+        return []
+    assets = {str(item["asset_id"]): item for item in context["assets"]}
+    result: list[dict[str, Any]] = []
+    for index, clip in enumerate(document.get("clips") or []):
+        if not isinstance(clip, dict):
+            continue
+        asset_id = str(clip.get("asset_id") or "")
+        asset = assets.get(asset_id)
+        if asset is None:
+            continue
+        source_in = float(clip.get("source_in") or 0)
+        source_out = float(clip.get("source_out") or source_in)
+        excerpts = []
+        for segment in asset.get("transcript_segments", []):
+            if not isinstance(segment, dict):
+                continue
+            if float(segment.get("end") or 0) > source_in and float(segment.get("start") or 0) < source_out:
+                text = " ".join(str(segment.get("text") or "").split())
+                if text:
+                    excerpts.append(text)
+        media_kind = str(clip.get("media_kind") or "video")
+        result.append(
+            {
+                "clip_index": index,
+                "asset_id": asset_id,
+                "source_name": asset["source_name"],
+                "media_kind": media_kind,
+                "source_in": source_in,
+                "source_out": source_out,
+                "duration": float(clip.get("duration") or max(0, source_out - source_in)),
+                "transition": str(clip.get("transition") or "cut"),
+                "visual_preset": str(clip.get("visual_preset") or "standard"),
+                "include_source_audio": bool(clip.get("include_source_audio", media_kind == "video")),
+                "source_audio_gain_db": float(clip.get("source_audio_gain_db") or 0),
+                "transcript_excerpt": " ".join(excerpts)[:320],
+            }
+        )
+    return result
 
 
 def _context_or_http(job_id: UUID, *, internal: bool = False) -> dict[str, Any]:
@@ -407,6 +463,7 @@ def request_revision(job_id: UUID, payload: RevisionCreate) -> dict[str, Any]:
     if not context["ready_for_editing"]:
         raise HTTPException(status_code=409, detail="source analysis is not ready")
     corrections = [item.model_dump() for item in payload.caption_corrections]
+    adjustments = [item.model_dump(exclude_none=True) for item in payload.clip_adjustments]
     _validate_caption_corrections(context, corrections)
     if context["project"]["privacy_mode"] == "local_only" and payload.note:
         raise HTTPException(
@@ -447,11 +504,15 @@ def request_revision(job_id: UUID, payload: RevisionCreate) -> dict[str, Any]:
         row = database.execute(
             """
             INSERT INTO edit_runs (
-                job_id, version, based_on_run_id, revision_note, caption_corrections
-            ) VALUES (%s, %s, %s, %s, %s)
+                job_id, version, based_on_run_id, revision_note, caption_corrections,
+                clip_adjustments, locked_elements
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s)
             RETURNING *
             """,
-            (job_id, version, based_on["id"], payload.note or None, Jsonb(corrections)),
+            (
+                job_id, version, based_on["id"], payload.note or None, Jsonb(corrections),
+                Jsonb(adjustments), Jsonb(payload.locked_elements),
+            ),
         ).fetchone()
         database.execute(
             "UPDATE jobs SET status = 'revising', updated_at = now() WHERE id = %s",
@@ -470,6 +531,8 @@ def request_revision(job_id: UUID, payload: RevisionCreate) -> dict[str, Any]:
                         "based_on_version": based_on["version"],
                         "note": payload.note,
                         "caption_correction_count": len(corrections),
+                        "timeline_adjustment_count": len(adjustments),
+                        "locked_elements": payload.locked_elements,
                     }
                 ),
             ),
@@ -639,6 +702,18 @@ def job_review(job_id: UUID) -> dict[str, Any]:
             (job_id,),
         ).fetchall()
         usage = _job_usage(database, job_id)
+        plan_row = database.execute(
+            """
+            SELECT edit_plans.document FROM edit_runs
+            JOIN edit_plans ON edit_plans.id = edit_runs.edit_plan_id
+            WHERE edit_runs.job_id = %s ORDER BY edit_runs.version DESC LIMIT 1
+            """,
+            (job_id,),
+        ).fetchone()
+        brand_kit = None
+        if job.get("brand_kit_id") is not None:
+            brand_kit = database.execute("SELECT * FROM brand_kits WHERE id=%s", (job["brand_kit_id"],)).fetchone()
+    context = _context_or_http(job_id)
     versions = [_response(row) for row in runs]
     return {
         "job": job,
@@ -646,6 +721,8 @@ def job_review(job_id: UUID) -> dict[str, Any]:
         "latest_run": versions[0] if versions else None,
         "final_export": _final_response(export) if export is not None else None,
         "delivery_variants": [_variant_response(row) for row in variants],
+        "editorial_timeline": _editorial_timeline(plan_row["document"] if plan_row else None, context),
+        "brand_kit": brand_kit,
         "events": list(events),
         "usage": usage,
     }
@@ -714,7 +791,9 @@ def request_delivery_variant(job_id: UUID, payload: DeliveryVariantCreate) -> di
 
 
 @router.get("/jobs/{job_id}/variants/{variant_id}/{file_kind}")
-def delivery_variant_file(job_id: UUID, variant_id: UUID, file_kind: str) -> FileResponse:
+def delivery_variant_file(
+    job_id: UUID, variant_id: UUID, file_kind: str, download: bool = Query(default=True)
+) -> FileResponse:
     choices = {
         "video": ("video_path", "video/mp4", "gm-studio-variant.mp4"),
         "captions": ("captions_path", "text/vtt", "gm-studio-variant-captions.vtt"),
@@ -737,7 +816,12 @@ def delivery_variant_file(job_id: UUID, variant_id: UUID, file_kind: str) -> Fil
         path = resolve_source(get_settings().media_root, str(row[path_key]))
     except (OSError, ValueError) as error:
         raise HTTPException(status_code=404, detail="variant file is unavailable") from error
-    return FileResponse(path, media_type=media_type, filename=filename, content_disposition_type="attachment")
+    return FileResponse(
+        path,
+        media_type=media_type,
+        filename=filename,
+        content_disposition_type="attachment" if download else "inline",
+    )
 
 
 @router.get("/jobs/{job_id}/final", response_model=FinalExportResponse)

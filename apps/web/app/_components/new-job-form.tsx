@@ -31,6 +31,7 @@ import {
   createProject,
   createMediaJob,
   getCreativeProfiles,
+  getBrandKits,
   getEditorModels,
   getAsset,
   getMusicTracks,
@@ -46,6 +47,8 @@ import {
   type Asset,
   type CatalogSearchResult,
   type CreativeProfile,
+  type BrandKit,
+  type PublishingPreset,
   type EditStyle,
   type EditorModel,
   type MusicMode,
@@ -696,6 +699,9 @@ function NewJobFormContent() {
   const [outputAspect, setOutputAspect] = useState<OutputAspect>("vertical");
   const [creativeProfiles, setCreativeProfiles] = useState<readonly CreativeProfile[]>([]);
   const [creativeProfileId, setCreativeProfileId] = useState<string | null>(null);
+  const [brandKits, setBrandKits] = useState<readonly BrandKit[]>([]);
+  const [brandKitId, setBrandKitId] = useState<string | null>(null);
+  const [publishingPreset, setPublishingPreset] = useState<PublishingPreset>("custom");
   const [musicTracks, setMusicTracks] = useState<readonly MusicTrack[]>([]);
   const [entries, setEntries] = useState<UploadEntry[]>([]);
   const [sourcePanel, setSourcePanel] = useState<SourcePanel>("library");
@@ -725,12 +731,13 @@ function NewJobFormContent() {
   useEffect(() => {
     mountedRef.current = true;
     let cancelled = false;
-    void Promise.all([getSystemInformation(), getMusicTracks(), getEditorModels(), getCreativeProfiles()])
-      .then(([, tracks, models, profiles]) => {
+    void Promise.all([getSystemInformation(), getMusicTracks(), getEditorModels(), getCreativeProfiles(), getBrandKits()])
+      .then(([, tracks, models, profiles, kits]) => {
         if (!cancelled) {
           setMusicTracks(tracks);
           setEditorModels(models);
           setCreativeProfiles(profiles);
+          setBrandKits(kits);
           setEditorModel((current) => current ?? models[0]?.slug ?? null);
           setServerStatus("online");
         }
@@ -1152,6 +1159,8 @@ function NewJobFormContent() {
           reasoningEffort,
           outputAspect,
           creativeProfileId,
+          brandKitId,
+          publishingPreset,
         });
         activeJobId = job.id;
       }
@@ -1246,6 +1255,9 @@ function NewJobFormContent() {
             <Link className="font-mono text-[10px] font-bold text-[#173F5F] underline underline-offset-4" href="/library">
               Library
             </Link>
+            <Link className="hidden font-mono text-[10px] font-bold text-[#173F5F] underline underline-offset-4 sm:inline" href="/settings">
+              Brand &amp; presets
+            </Link>
             <Link className="hidden font-mono text-[10px] font-bold text-[#173F5F] underline underline-offset-4 md:inline" href="/system">
               System
             </Link>
@@ -1323,6 +1335,8 @@ function NewJobFormContent() {
                       setTargetPlatform(profile.target_platform);
                       setOutputAspect(profile.output_aspect);
                       setReasoningEffort(profile.reasoning_effort);
+                      setBrandKitId(profile.brand_kit_id);
+                      setPublishingPreset(profile.publishing_preset);
                     }
                   }}
                   value={creativeProfileId ?? ""}
@@ -1337,6 +1351,49 @@ function NewJobFormContent() {
                 </p>
               </div>
             ) : null}
+            <div className="grid gap-4 rounded-md border border-[#D7D9D3] bg-white p-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-[#173F5F]" htmlFor="publishing-preset">PUBLISHING PRESET</label>
+                <select
+                  className="h-12 w-full rounded-md border border-[#D7D9D3] bg-white px-3 text-sm"
+                  disabled={formLocked}
+                  id="publishing-preset"
+                  onChange={(event) => {
+                    const preset = event.currentTarget.value as PublishingPreset;
+                    setPublishingPreset(preset);
+                    if (preset === "instagram_reel") { setTargetPlatform("instagram"); setOutputAspect("vertical"); setTargetDuration(30); }
+                    if (preset === "tiktok") { setTargetPlatform("tiktok"); setOutputAspect("vertical"); setTargetDuration(30); }
+                    if (preset === "youtube_short") { setTargetPlatform("youtube"); setOutputAspect("vertical"); setTargetDuration(45); }
+                    if (preset === "linkedin_landscape") { setTargetPlatform("linkedin"); setOutputAspect("landscape"); setTargetDuration(30); }
+                    if (preset === "facebook_square") { setTargetPlatform("facebook"); setOutputAspect("square"); setTargetDuration(30); }
+                  }}
+                  value={publishingPreset}
+                >
+                  <option value="custom">Custom settings</option>
+                  <option value="instagram_reel">Instagram Reel · 9:16 · 30s</option>
+                  <option value="tiktok">TikTok · 9:16 · 30s</option>
+                  <option value="youtube_short">YouTube Short · 9:16 · 45s</option>
+                  <option value="linkedin_landscape">LinkedIn · 16:9 · 30s</option>
+                  <option value="facebook_square">Facebook · 1:1 · 30s</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-[#173F5F]" htmlFor="brand-kit">BRAND KIT</label>
+                <select
+                  className="h-12 w-full rounded-md border border-[#D7D9D3] bg-white px-3 text-sm"
+                  disabled={formLocked}
+                  id="brand-kit"
+                  onChange={(event) => setBrandKitId(event.currentTarget.value || null)}
+                  value={brandKitId ?? ""}
+                >
+                  <option value="">GM Studio default</option>
+                  {brandKits.map((kit) => <option key={kit.id} value={kit.id}>{kit.name}</option>)}
+                </select>
+              </div>
+              <p className="text-xs leading-relaxed text-[#666862] sm:col-span-2">
+                Presets set the platform, shape and duration. Brand kits apply your caption colours, weight and typeface.
+              </p>
+            </div>
             <div className="space-y-2">
               <label className="flex justify-between text-xs font-bold text-[#173F5F]" htmlFor="project-name">
                 <span>PROJECT NAME</span>
