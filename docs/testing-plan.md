@@ -25,6 +25,12 @@ A worker regression also checks that a newly generated energetic talking-head pl
 
 ## Gate 2 — deploy and live core
 
+Local rendered-quality inspection (Phase 17A) is report-only. Every new talking-head or montage preview and final export includes a versioned `quality_review` in its manifest; final ZIPs include the same report. Inspection runs locally with a 30-second FFmpeg budget plus a bounded probe, reports zero model usage, and preserves the video and edit plan even if inspection fails. Word-timing gaps and dark/quiet intervals are suggestions to review, not instructions to remove reactions or humour. Caption checks inspect the schedule, not OCR of burned-in text. Colour checks inspect metadata, not skin-tone accuracy. Story judgement remains explicitly unassessed.
+
+After deployment, create a fresh preview or re-render an existing exact edit, then run `python3 scripts/verify-phase17.py` (optionally `--job-id UUID`). This acceptance helper only reads the report and never generates an edit or incurs model usage. Older renders have no report until re-rendered. The core live suite does not require a new render just to make this optional acceptance check pass.
+
+Source acceptance covered 184 backend/render tests, seven source/build checks, and static report rendering for legacy, complete, incomplete, and timestamped results. A local copy of a successful real preview completed all 11 review checks in approximately 0.9 seconds with no findings, no hosted model calls, and an unchanged video SHA-256. This demonstrates technical inspection, not autonomous story assessment; live report persistence still requires deploying and rendering with the new build.
+
 Status: **Passed on 2026-10-24.** All 10 live core gates passed, including 61 backend tests. The deployed catalogue, exact-duplicate audit, local visual index, managed library, and complete job history were verified without deleting an original.
 
 Deploy once, then run the live suite with Docker access:

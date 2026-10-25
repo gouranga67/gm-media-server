@@ -17,6 +17,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { EditFeedbackCard } from "@/app/_components/edit-feedback-card";
+import { RenderQualityCard } from "@/app/_components/render-quality-card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -280,6 +281,7 @@ export function JobReviewControls({
     const deliverable = recipe === "montage" ? "montage" : "reel";
     return (
       <div className="space-y-4">
+      <RenderQualityCard review={currentFinal.manifest.quality_review} />
       <section className="space-y-4 rounded-md border border-[#BFE3FF] bg-white p-5">
         <div>
           <p className="flex items-center gap-2 font-mono text-xs font-bold tracking-wide text-[#3A8F63] uppercase">
@@ -398,6 +400,7 @@ export function JobReviewControls({
         </section>
       ) : null}
 
+      <RenderQualityCard review={run.manifest.quality_review} />
       <section className="rounded-md border border-[#D7D9D3] bg-white p-5">
         {storyAssessment ? (
           <div className="mb-5 rounded-md border border-[#BFE3FF] bg-[#EFF6FA] p-4">

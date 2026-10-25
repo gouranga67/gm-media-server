@@ -1,6 +1,6 @@
 # Build phases and live status
 
-Updated: 2026-10-24 (Australia/Brisbane)
+Updated: 2026-10-26 (Australia/Brisbane)
 
 This is the working plan for turning the Lenovo into a private media-editing appliance. A phase is complete only when its exit checks pass. Discussion, generated files, and installed packages do not count as a completed phase by themselves.
 
@@ -27,6 +27,9 @@ This is the working plan for turning the Lenovo into a private media-editing app
 | 10 | Creative profiles and local delivery variants | Complete |
 | 11 | Editorial workspace and brand system | Complete |
 | 12 | Product dashboard, access, budgets, and retention | Source complete; live acceptance pending |
+| 17A | Local rendered-quality reports with zero hosted AI usage | Source complete; live acceptance pending |
+
+The current improvement-loop increment is Phase 17A: inspect the rendered file and retain a versioned report without changing the edit. Planned follow-ups are targeted, reversible repairs for verified faults; budgeted AI review of story and delivery; and evaluating candidate editing preferences against saved examples and human ratings before adopting them. These follow-ups are not implemented by the report-only increment.
 
 ## Phase 0 — inventory and guardrails
 

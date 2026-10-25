@@ -27,6 +27,7 @@ from app.media_analysis import (
     run_command,
     video_probe_hdr_mode,
 )
+from app.quality_review import review_rendered_video
 
 
 PREVIEW_WIDTH = 540
@@ -734,6 +735,10 @@ def render_edit_preview(
         },
     }
     manifest["manifest_path"] = manifest_path.relative_to(settings.media_root).as_posix()
+    manifest["quality_review"] = review_rendered_video(
+        context, plan, preview_path, events, width=width, height=height,
+        timeout=settings.analysis_command_timeout_seconds,
+    )
     _atomic_text(manifest_path, json.dumps(manifest, indent=2, ensure_ascii=False) + "\n")
     return manifest
 
@@ -996,6 +1001,10 @@ def render_final_delivery(
     if variant_metadata is not None:
         manifest["delivery_variant"] = variant_metadata
     manifest["manifest_path"] = manifest_path.relative_to(settings.media_root).as_posix()
+    manifest["quality_review"] = review_rendered_video(
+        context, plan, video_path, events, width=width, height=height,
+        timeout=settings.analysis_command_timeout_seconds, probe=technical_probe,
+    )
     _atomic_text(manifest_path, json.dumps(manifest, indent=2, ensure_ascii=False) + "\n")
     _create_delivery_package(
         package_path,
