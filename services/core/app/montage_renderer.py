@@ -11,6 +11,7 @@ from app.edit_renderer import (
     _ffmpeg_version,
     _file_sha256,
     _selected_music,
+    adjust_caption_timing,
     clip_caption_events,
     render_ass,
 )
@@ -507,9 +508,19 @@ def render_montage_preview(
     preview = directory / "preview.mp4"
     captions_ass = directory / "captions.ass"
     manifest_path = directory / "manifest.json"
-    events = montage_caption_events(plan, context["assets"], caption_corrections)
+    events = adjust_caption_timing(
+        montage_caption_events(plan, context["assets"], caption_corrections),
+        float(plan.caption_timing_offset_seconds),
+    )
     if events:
-        _atomic_text(captions_ass, render_ass(events, width=width, height=height, brand_kit=context.get("brand_kit")))
+        _atomic_text(
+            captions_ass,
+            render_ass(
+                events, width=width, height=height,
+                brand_kit=context.get("brand_kit"), position=plan.caption_position,
+                target_platform=str(context["job"].get("target_platform") or "all_social"),
+            ),
+        )
     encoder = _render(
         context,
         plan,
@@ -538,6 +549,9 @@ def render_montage_preview(
         "style": "clean_blue_v1",
         "events": len(events),
         "source_speech_only": True,
+        "position": plan.caption_position,
+        "timing_offset_seconds": plan.caption_timing_offset_seconds,
+        "platform_safe": True,
     }
     manifest["brand_kit"] = context.get("brand_kit")
     _atomic_text(manifest_path, json.dumps(manifest, indent=2, ensure_ascii=False) + "\n")
@@ -569,10 +583,20 @@ def render_montage_delivery(
     post_copy = directory / "post-copy.txt"
     package = directory / "delivery.zip"
     manifest_path = directory / "manifest.json"
-    events = montage_caption_events(plan, context["assets"], caption_corrections)
+    events = adjust_caption_timing(
+        montage_caption_events(plan, context["assets"], caption_corrections),
+        float(plan.caption_timing_offset_seconds),
+    )
     _atomic_text(captions, render_webvtt(events))
     if events:
-        _atomic_text(captions_ass, render_ass(events, width=width, height=height, brand_kit=context.get("brand_kit")))
+        _atomic_text(
+            captions_ass,
+            render_ass(
+                events, width=width, height=height,
+                brand_kit=context.get("brand_kit"), position=plan.caption_position,
+                target_platform=str(context["job"].get("target_platform") or "all_social"),
+            ),
+        )
     encoder = _render(
         context,
         plan,
@@ -646,6 +670,9 @@ def render_montage_delivery(
                 "events": len(events),
                 "source_speech_only": True,
                 "corrections": caption_corrections or [],
+                "position": plan.caption_position,
+                "timing_offset_seconds": plan.caption_timing_offset_seconds,
+                "platform_safe": True,
             },
             "brand_kit": context.get("brand_kit"),
             "tools": {

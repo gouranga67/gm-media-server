@@ -242,6 +242,60 @@ class EditPlanValidationTests(unittest.TestCase):
         self.assertEqual(adjusted.clips[0].visual_preset, "punch_in")
         self.assertEqual(adjusted.clips[0].transition, "cut")
 
+    def test_timeline_adjustment_shortens_internal_pauses_without_model(self) -> None:
+        self.document["clips"] = [
+            {**self.document["clips"][0], "source_in": 0, "source_out": 8},
+        ]
+        self.assets[0]["transcript_segments"] = [{
+            "start": 0,
+            "end": 8,
+            "text": "setup reaction payoff",
+            "words": [
+                {"start": 0.5, "end": 1.0, "text": "setup"},
+                {"start": 4.0, "end": 4.5, "text": "reaction"},
+                {"start": 7.0, "end": 7.5, "text": "payoff"},
+            ],
+        }]
+        plan = validate_edit_plan(self.document, self.assets)
+
+        adjusted = apply_timeline_adjustments(
+            plan,
+            [{"clip_index": 0, "action": "keep", "max_pause_seconds": 0.6}],
+            self.assets,
+        )
+
+        self.assertEqual(len(adjusted.clips), 3)
+        self.assertLess(edit_plan_duration(adjusted), edit_plan_duration(plan) - 4)
+        self.assertAlmostEqual(adjusted.clips[1].source_in, 3.7)
+        self.assertAlmostEqual(adjusted.clips[1].source_out, 4.8)
+
+    def test_timeline_adjustment_shortens_leading_comic_pause(self) -> None:
+        self.document["clips"] = [
+            {**self.document["clips"][0], "source_in": 49.45, "source_out": 53.52},
+        ]
+        self.assets[0]["duration_seconds"] = 90
+        self.assets[0]["transcript_segments"] = [{
+            "start": 51.86,
+            "end": 53.36,
+            "text": "was terrible wasn't it",
+            "words": [
+                {"start": 51.86, "end": 52.1, "text": "was"},
+                {"start": 52.2, "end": 52.7, "text": "terrible"},
+                {"start": 52.8, "end": 53.36, "text": "wasn't it"},
+            ],
+        }]
+        plan = validate_edit_plan(self.document, self.assets)
+
+        adjusted = apply_timeline_adjustments(
+            plan,
+            [{"clip_index": 0, "action": "keep", "max_pause_seconds": 0.6}],
+            self.assets,
+        )
+
+        self.assertEqual(len(adjusted.clips), 1)
+        self.assertAlmostEqual(adjusted.clips[0].source_in, 51.26)
+        self.assertAlmostEqual(adjusted.clips[0].source_out, 53.52)
+
 
 if __name__ == "__main__":
     unittest.main()

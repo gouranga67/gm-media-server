@@ -44,6 +44,7 @@ type ClipChange = {
   readonly action: "keep" | "remove" | "move_up" | "move_down";
   readonly visual_preset?: EditorialClip["visual_preset"];
   readonly source_audio_gain_db?: number;
+  readonly max_pause_seconds?: number;
 };
 
 function DownloadButton({
@@ -95,7 +96,7 @@ export function JobReviewControls({
   const [note, setNote] = useState("");
   const [originalText, setOriginalText] = useState("");
   const [replacementText, setReplacementText] = useState("");
-  const [submitting, setSubmitting] = useState<"revision" | "approval">();
+  const [submitting, setSubmitting] = useState<"revision" | "approval" | "caption">();
   const [error, setError] = useState<string>();
   const [profileName, setProfileName] = useState("");
   const [profileSaved, setProfileSaved] = useState(false);
@@ -109,6 +110,12 @@ export function JobReviewControls({
   }>();
   const [lockedElements, setLockedElements] = useState<readonly string[]>([]);
   const [coverTime, setCoverTime] = useState(initialCoverTime);
+  const [captionPosition, setCaptionPosition] = useState<"lower_safe" | "middle" | "upper">(
+    run.caption_settings.position ?? "lower_safe",
+  );
+  const [captionTiming, setCaptionTiming] = useState(
+    run.caption_settings.timing_offset_seconds ?? 0,
+  );
 
   const submitRevision = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -164,6 +171,27 @@ export function JobReviewControls({
       setError(message(timelineError));
     } finally {
       setTimelineSubmitting(undefined);
+    }
+  };
+
+  const adjustCaptions = async () => {
+    setSubmitting("caption");
+    setError(undefined);
+    try {
+      await requestRevision(jobId, {
+        note: "",
+        captionCorrections: [],
+        captionSettings: {
+          position: captionPosition,
+          timing_offset_seconds: captionTiming,
+        },
+        lockedElements,
+      });
+      onUpdated();
+    } catch (captionError) {
+      setError(message(captionError));
+    } finally {
+      setSubmitting(undefined);
     }
   };
 
@@ -416,6 +444,33 @@ export function JobReviewControls({
                     </select>
                   ) : <span className="flex items-center px-2 text-xs text-[#666862]">{clip.media_kind}</span>}
                 </div>
+                {clip.longest_pause_seconds >= 0.65 ? (
+                  <label className="mt-2 block text-[11px] font-bold text-[#53646F]">
+                    Longest pause: {clip.longest_pause_seconds.toFixed(1)}s
+                    <select
+                      aria-label={`Pause length for clip ${clip.clip_index + 1}`}
+                      className="mt-1 h-10 w-full rounded-md border border-[#D7D9D3] bg-white px-2 text-xs font-normal"
+                      disabled={timelineSubmitting !== undefined}
+                      onChange={(event) => {
+                        if (event.currentTarget.value) {
+                          setPendingClipChange({
+                            clip,
+                            change: {
+                              action: "keep",
+                              max_pause_seconds: Number(event.currentTarget.value),
+                            },
+                          });
+                        }
+                      }}
+                      value={pendingClipChange?.clip.clip_index === clip.clip_index && pendingClipChange.change.max_pause_seconds !== undefined ? pendingClipChange.change.max_pause_seconds : ""}
+                    >
+                      <option value="">Keep current pause</option>
+                      <option value={0.35}>Tight beat · 0.35s</option>
+                      <option value={0.6}>Short comic beat · 0.6s</option>
+                      <option value={1}>Long comic beat · 1.0s</option>
+                    </select>
+                  </label>
+                ) : null}
               </article>
             ))}
           </div>
@@ -426,6 +481,7 @@ export function JobReviewControls({
                 Clip {pendingClipChange.clip.clip_index + 1}: {pendingClipChange.change.action.replaceAll("_", " ")}
                 {pendingClipChange.change.visual_preset ? ` · ${pendingClipChange.change.visual_preset.replaceAll("_", " ")}` : ""}
                 {pendingClipChange.change.source_audio_gain_db !== undefined ? ` · ${pendingClipChange.change.source_audio_gain_db > 0 ? "+" : ""}${pendingClipChange.change.source_audio_gain_db} dB` : ""}
+                {pendingClipChange.change.max_pause_seconds !== undefined ? ` · cap pauses at ${pendingClipChange.change.max_pause_seconds}s` : ""}
               </p>
               <div className="mt-3 grid grid-cols-2 gap-2">
                 <Button disabled={timelineSubmitting !== undefined} onClick={() => setPendingClipChange(undefined)} type="button" variant="outline">Cancel</Button>
@@ -436,6 +492,36 @@ export function JobReviewControls({
               </div>
             </div>
           ) : null}
+        </div>
+        <div className="mb-5 border-t border-[#D7D9D3] pt-5">
+          <p className="font-mono text-xs font-bold tracking-wide text-[#173F5F] uppercase">Caption placement</p>
+          <p className="mt-2 text-xs leading-relaxed text-[#666862]">
+            Lower safe stays clear of Instagram and TikTok controls. Position and sync changes preserve the exact edit and use zero model tokens.
+          </p>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <label className="text-[11px] font-bold text-[#53646F]">
+              Position
+              <select className="mt-1 h-10 w-full rounded-md border border-[#D7D9D3] bg-white px-2 text-xs font-normal" onChange={(event) => setCaptionPosition(event.currentTarget.value as typeof captionPosition)} value={captionPosition}>
+                <option value="lower_safe">Lower · app-safe</option>
+                <option value="middle">Centre</option>
+                <option value="upper">Upper</option>
+              </select>
+            </label>
+            <label className="text-[11px] font-bold text-[#53646F]">
+              Timing
+              <select className="mt-1 h-10 w-full rounded-md border border-[#D7D9D3] bg-white px-2 text-xs font-normal" onChange={(event) => setCaptionTiming(Number(event.currentTarget.value))} value={captionTiming}>
+                <option value={-0.3}>0.3s earlier</option>
+                <option value={-0.15}>0.15s earlier</option>
+                <option value={0}>On speech</option>
+                <option value={0.15}>0.15s later</option>
+                <option value={0.3}>0.3s later</option>
+              </select>
+            </label>
+          </div>
+          <Button className="mt-3 h-11 w-full" disabled={submitting !== undefined || timelineSubmitting !== undefined} onClick={() => void adjustCaptions()} type="button" variant="outline">
+            {submitting === "caption" ? <LoaderCircleIcon aria-hidden="true" className="animate-spin" /> : <CheckIcon aria-hidden="true" />}
+            Apply caption layout &amp; render
+          </Button>
         </div>
         <div className="mb-5 border-t border-[#D7D9D3] pt-4">
           <p className="font-mono text-xs font-bold text-[#173F5F] uppercase">Protect in AI revisions</p>

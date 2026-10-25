@@ -379,3 +379,13 @@ Mature directives enter the next job's editor context as local preference eviden
 Acceptance helper after deployment: `python3 scripts/verify-phase14.py` temporarily records feedback against a finished real edit, verifies its dashboard and future editor context, requires the three-sample safety floor and zero added model calls, then restores the prior feedback or removes the temporary record.
 
 Exit check: deploy migration 020, pass the Phase 14 helper and full live suite, rate at least three real edits of one recipe, confirm an explainable preference becomes active on `/learning`, and verify the next editor context contains that directive with its sample count and confidence.
+
+## Phase 15 — deterministic pacing and social-safe captions
+
+**Purpose:** let a reviewer correct pacing and subtitle presentation without risking a strong story or paying for another planning request.
+
+Current source checkpoint (2026-10-25): migration 021 persists caption layout choices on each edit version. Vertical captions now default to a lower safe zone that stays above Instagram and TikTok controls, with upper and centre alternatives. Reviewers can shift all cues slightly earlier or later when source timing needs correction. These changes reuse the frozen edit plan, retain prior text corrections, and render locally with zero model tokens.
+
+The editorial timeline measures pauses from local word timestamps. Clips containing a pause of at least 0.65 seconds expose explicit tight, short-comic, and long-comic beat controls. Applying one splits only the selected source range at word-safe boundaries, caps excessive silence at the chosen length, preserves the surrounding story, and creates a deterministic preview without asking the agent to reinterpret the request.
+
+Exit check: deploy migration 021, tighten one measured pause, change a vertical edit to the lower app-safe caption position, confirm both previews retain the same surrounding clips and existing caption corrections, and pass the full live suite.

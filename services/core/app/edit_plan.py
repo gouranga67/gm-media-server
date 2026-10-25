@@ -60,6 +60,8 @@ class TalkingHeadEditPlan(BaseModel):
     post_copy: str = Field(default="", max_length=2200)
     music_track_id: UUID | None = None
     music_mix: Literal["none", "subtle", "present"] = "none"
+    caption_position: Literal["lower_safe", "middle", "upper"] = "lower_safe"
+    caption_timing_offset_seconds: float = Field(default=0.0, ge=-0.5, le=0.5)
 
 
 class MontageClip(BaseModel):
@@ -96,6 +98,8 @@ class MontageEditPlan(BaseModel):
     post_copy: str = Field(default="", max_length=2200)
     music_track_id: UUID | None = None
     music_mix: Literal["none", "subtle", "present"] = "none"
+    caption_position: Literal["lower_safe", "middle", "upper"] = "lower_safe"
+    caption_timing_offset_seconds: float = Field(default=0.0, ge=-0.5, le=0.5)
 
 
 EditPlan: TypeAlias = TalkingHeadEditPlan | MontageEditPlan
@@ -143,10 +147,104 @@ def derive_duration_variant(plan: EditPlan, target_seconds: int) -> EditPlan:
     return plan.model_copy(update={"clips": clips}, deep=True)
 
 
-def apply_timeline_adjustments(plan: EditPlan, adjustments: list[dict[str, Any]]) -> EditPlan:
+def source_word_gaps(
+    asset: dict[str, Any], source_in: float, source_out: float
+) -> list[tuple[float, float, float]]:
+    """Return spoken-word gaps fully contained in one selected source range."""
+
+    words: list[tuple[float, float]] = []
+    for segment in asset.get("transcript_segments", []):
+        if not isinstance(segment, dict):
+            continue
+        for word in segment.get("words", []):
+            if not isinstance(word, dict):
+                continue
+            try:
+                start = float(word["start"])
+                end = float(word["end"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if end > source_in and start < source_out and end > start:
+                words.append((max(source_in, start), min(source_out, end)))
+    words.sort()
+    if not words:
+        return []
+    gaps: list[tuple[float, float, float]] = []
+    if words[0][0] > source_in:
+        gaps.append((source_in, words[0][0], words[0][0] - source_in))
+    previous_end: float | None = None
+    for start, end in words:
+        if previous_end is not None and start > previous_end:
+            gaps.append((previous_end, start, start - previous_end))
+        previous_end = max(previous_end or end, end)
+    if previous_end is not None and source_out > previous_end:
+        gaps.append((previous_end, source_out, source_out - previous_end))
+    return gaps
+
+
+def _tighten_clip_pauses(
+    plan: EditPlan,
+    clip: Any,
+    asset: dict[str, Any],
+    max_pause_seconds: float,
+) -> list[Any]:
+    gaps = [
+        gap
+        for gap in source_word_gaps(asset, float(clip.source_in), float(clip.source_out))
+        if gap[2] > max_pause_seconds + 0.08
+    ]
+    if not gaps:
+        return [clip]
+
+    minimum = 0.5 if isinstance(plan, MontageEditPlan) else 0.25
+    source_in = float(clip.source_in)
+    source_out = float(clip.source_out)
+    leading = next((gap for gap in gaps if gap[0] == source_in), None)
+    trailing = next((gap for gap in gaps if gap[1] == source_out), None)
+    if leading is not None:
+        source_in = max(source_in, leading[1] - max_pause_seconds)
+    if trailing is not None:
+        source_out = min(source_out, trailing[0] + max_pause_seconds)
+    internal_gaps = [
+        gap for gap in gaps if gap[0] > float(clip.source_in) and gap[1] < float(clip.source_out)
+    ]
+    ranges: list[tuple[float, float]] = []
+    range_start = source_in
+    for gap_start, gap_end, _duration in internal_gaps:
+        left_end = gap_start + max_pause_seconds / 2
+        right_start = gap_end - max_pause_seconds / 2
+        if left_end - range_start < minimum:
+            continue
+        if source_out - right_start < minimum:
+            continue
+        ranges.append((range_start, left_end))
+        range_start = right_start
+    ranges.append((range_start, source_out))
+    if len(ranges) == 1 and ranges[0] == (float(clip.source_in), float(clip.source_out)):
+        return [clip]
+
+    result: list[Any] = []
+    for index, (source_in, source_out) in enumerate(ranges):
+        candidate = clip.model_copy(deep=True)
+        candidate.source_in = round(source_in, 3)
+        candidate.source_out = round(source_out, 3)
+        if index > 0:
+            candidate.transition = "cut"
+        if isinstance(plan, MontageEditPlan):
+            candidate.duration = round(source_out - source_in, 3)
+        result.append(candidate)
+    return result
+
+
+def apply_timeline_adjustments(
+    plan: EditPlan,
+    adjustments: list[dict[str, Any]],
+    assets: list[dict[str, Any]] | None = None,
+) -> EditPlan:
     """Apply review-screen changes to a persisted plan without a model call."""
 
     clips = [clip.model_copy(deep=True) for clip in plan.clips]
+    inventory = {str(asset["asset_id"]): asset for asset in assets or []}
     for adjustment in adjustments:
         index = int(adjustment["clip_index"])
         if index >= len(clips):
@@ -170,6 +268,16 @@ def apply_timeline_adjustments(plan: EditPlan, adjustments: list[dict[str, Any]]
                 raise ValueError("per-clip source volume is available for montages")
             clips[index].source_audio_gain_db = float(audio_gain)
             clips[index].include_source_audio = True
+        max_pause = adjustment.get("max_pause_seconds")
+        if max_pause is not None:
+            asset = inventory.get(str(clips[index].asset_id))
+            if asset is None:
+                raise ValueError("source transcript timing is unavailable for this clip")
+            tightened = _tighten_clip_pauses(plan, clips[index], asset, float(max_pause))
+            maximum = MAX_MONTAGE_CLIPS if isinstance(plan, MontageEditPlan) else MAX_CLIPS
+            if len(clips) - 1 + len(tightened) > maximum:
+                raise ValueError("tightening pauses would create too many timeline clips")
+            clips[index:index + 1] = tightened
     minimum = 2 if isinstance(plan, MontageEditPlan) else 1
     if len(clips) < minimum:
         raise ValueError(f"this edit must keep at least {minimum} clip{'s' if minimum > 1 else ''}")

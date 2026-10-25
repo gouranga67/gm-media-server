@@ -10,6 +10,7 @@ from app.edit_renderer import (
     _create_delivery_package,
     _ffmpeg_failure_detail,
     _ffmpeg_filter,
+    adjust_caption_timing,
     caption_events,
     render_ass,
 )
@@ -197,6 +198,27 @@ class CaptionMappingTests(unittest.TestCase):
         self.assertIn("PlayResX: 1080", ass)
         self.assertIn("PlayResY: 1920", ass)
         self.assertIn("GMBlue,Arial,68", ass)
+
+    def test_vertical_captions_use_tiktok_safe_zone(self) -> None:
+        ass = render_ass(
+            [{"start": 0, "end": 1, "text": "Safe"}],
+            width=540,
+            height=960,
+            position="lower_safe",
+            target_platform="tiktok",
+        )
+
+        self.assertIn(",2,65,65,269,1", ass)
+
+    def test_caption_position_and_timing_can_change_without_editing_video(self) -> None:
+        events = adjust_caption_timing(
+            [{"start": 0.4, "end": 1.0, "text": "Shift me"}], -0.15
+        )
+        ass = render_ass(events, position="upper")
+
+        self.assertAlmostEqual(events[0]["start"], 0.25)
+        self.assertAlmostEqual(events[0]["end"], 0.85)
+        self.assertIn(",8,65,65,134,1", ass)
 
     def test_scales_ass_layout_for_landscape_preview(self) -> None:
         ass = render_ass(

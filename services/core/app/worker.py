@@ -939,12 +939,32 @@ def process_one_edit(state: WorkerState) -> bool:
                     music_tracks=context["music_library"],
                 )
                 proposed = (
-                    apply_timeline_adjustments(previous_plan, adjustments)
+                    apply_timeline_adjustments(previous_plan, adjustments, context["assets"])
                     if adjustments
                     else previous_plan
                 )
+                caption_settings = dict(run.get("caption_settings") or {})
+                if caption_settings:
+                    proposed = proposed.model_copy(
+                        update={
+                            "caption_position": caption_settings.get(
+                                "position", proposed.caption_position
+                            ),
+                            "caption_timing_offset_seconds": caption_settings.get(
+                                "timing_offset_seconds",
+                                proposed.caption_timing_offset_seconds,
+                            ),
+                        },
+                        deep=True,
+                    )
                 provenance = {
-                    "provider": "local_timeline" if adjustments else "local_caption",
+                    "provider": (
+                        "local_timeline"
+                        if adjustments
+                        else "local_caption_layout"
+                        if caption_settings
+                        else "local_caption"
+                    ),
                     "model": "deterministic_editor_v1",
                     "reasoning_effort": None,
                 }

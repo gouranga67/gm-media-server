@@ -237,6 +237,10 @@ export type EditRun = {
   readonly based_on_run_id: string | null;
   readonly revision_note: string | null;
   readonly caption_corrections: readonly CaptionCorrection[];
+  readonly caption_settings: Readonly<{
+    position?: "lower_safe" | "middle" | "upper";
+    timing_offset_seconds?: number;
+  }>;
   readonly approved_at: string | null;
   readonly preview_available: boolean;
   readonly manifest: Record<string, unknown>;
@@ -313,6 +317,7 @@ export type EditorialClip = {
   readonly transcript_excerpt: string;
   readonly story_role: "hook" | "context" | "development" | "payoff" | "reaction" | "ending";
   readonly editorial_intent: string;
+  readonly longest_pause_seconds: number;
 };
 
 export type DeliveryVariant = {
@@ -981,7 +986,12 @@ export function requestRevision(
       readonly action: "keep" | "remove" | "move_up" | "move_down";
       readonly visual_preset?: EditorialClip["visual_preset"];
       readonly source_audio_gain_db?: number;
+      readonly max_pause_seconds?: number;
     }[];
+    readonly captionSettings?: {
+      readonly position: "lower_safe" | "middle" | "upper";
+      readonly timing_offset_seconds: number;
+    };
     readonly lockedElements?: readonly string[];
   },
 ) {
@@ -991,6 +1001,7 @@ export function requestRevision(
       note: input.note,
       caption_corrections: input.captionCorrections,
       clip_adjustments: input.clipAdjustments ?? [],
+      caption_settings: input.captionSettings,
       locked_elements: input.lockedElements ?? [],
     }),
   });

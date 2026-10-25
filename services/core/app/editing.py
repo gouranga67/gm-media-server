@@ -10,7 +10,13 @@ from pydantic import ValidationError
 from app.caption_text import caption_phrase_exists
 from app.config import get_settings
 from app.database import connection
-from app.edit_plan import MontageEditPlan, TalkingHeadEditPlan, document_sha256, validate_edit_plan
+from app.edit_plan import (
+    MontageEditPlan,
+    TalkingHeadEditPlan,
+    document_sha256,
+    source_word_gaps,
+    validate_edit_plan,
+)
 from app.editor_context import build_editor_context
 from app.media_analysis import resolve_source
 from app.productization import assert_job_capacity
@@ -213,6 +219,7 @@ def _editorial_timeline(document: dict[str, Any] | None, context: dict[str, Any]
                 if text:
                     excerpts.append(text)
         media_kind = str(clip.get("media_kind") or "video")
+        pauses = source_word_gaps(asset, source_in, source_out)
         result.append(
             {
                 "clip_index": index,
@@ -229,6 +236,9 @@ def _editorial_timeline(document: dict[str, Any] | None, context: dict[str, Any]
                 "transcript_excerpt": " ".join(excerpts)[:320],
                 "story_role": str(clip.get("story_role") or "development"),
                 "editorial_intent": str(clip.get("editorial_intent") or "")[:180],
+                "longest_pause_seconds": round(
+                    max((gap[2] for gap in pauses), default=0.0), 3
+                ),
             }
         )
     return result
@@ -615,6 +625,20 @@ def request_revision(job_id: UUID, payload: RevisionCreate) -> dict[str, Any]:
         ).fetchone()
         if based_on is None:
             raise HTTPException(status_code=409, detail="a ready preview is required before revision")
+        inherited_corrections = list(based_on.get("caption_corrections") or [])
+        replacement_targets = {
+            str(item.get("original_text") or "").casefold() for item in corrections
+        }
+        effective_corrections = [
+            item
+            for item in inherited_corrections
+            if str(item.get("original_text") or "").casefold() not in replacement_targets
+        ] + corrections
+        effective_caption_settings = (
+            payload.caption_settings.model_dump()
+            if payload.caption_settings is not None
+            else dict(based_on.get("caption_settings") or {})
+        )
         version = database.execute(
             "SELECT COALESCE(max(version), 0) + 1 AS version FROM edit_runs WHERE job_id = %s",
             (job_id,),
@@ -623,12 +647,13 @@ def request_revision(job_id: UUID, payload: RevisionCreate) -> dict[str, Any]:
             """
             INSERT INTO edit_runs (
                 job_id, version, based_on_run_id, revision_note, caption_corrections,
-                clip_adjustments, locked_elements
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                caption_settings, clip_adjustments, locked_elements
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING *
             """,
             (
-                job_id, version, based_on["id"], payload.note or None, Jsonb(corrections),
+                job_id, version, based_on["id"], payload.note or None,
+                Jsonb(effective_corrections), Jsonb(effective_caption_settings),
                 Jsonb(adjustments), Jsonb(payload.locked_elements),
             ),
         ).fetchone()
@@ -648,7 +673,8 @@ def request_revision(job_id: UUID, payload: RevisionCreate) -> dict[str, Any]:
                         "version": version,
                         "based_on_version": based_on["version"],
                         "note": payload.note,
-                        "caption_correction_count": len(corrections),
+                        "caption_correction_count": len(effective_corrections),
+                        "caption_settings": effective_caption_settings,
                         "timeline_adjustment_count": len(adjustments),
                         "locked_elements": payload.locked_elements,
                     }

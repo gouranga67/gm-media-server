@@ -174,6 +174,24 @@ class RevisionSchemaTests(unittest.TestCase):
         self.assertEqual(revision.clip_adjustments[0].clip_index, 1)
         self.assertEqual(revision.locked_elements, ["captions", "music"])
 
+    def test_accepts_pause_and_platform_safe_caption_controls(self) -> None:
+        revision = RevisionCreate.model_validate(
+            {
+                "clip_adjustments": [{
+                    "clip_index": 2,
+                    "max_pause_seconds": 0.6,
+                }],
+                "caption_settings": {
+                    "position": "lower_safe",
+                    "timing_offset_seconds": -0.15,
+                },
+            }
+        )
+
+        self.assertEqual(revision.clip_adjustments[0].max_pause_seconds, 0.6)
+        self.assertEqual(revision.caption_settings.position, "lower_safe")
+        self.assertEqual(revision.caption_settings.timing_offset_seconds, -0.15)
+
 
 if __name__ == "__main__":
     unittest.main()

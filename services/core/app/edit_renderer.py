@@ -202,12 +202,27 @@ def caption_events(
     return events
 
 
+def adjust_caption_timing(
+    events: list[dict[str, Any]], offset_seconds: float
+) -> list[dict[str, Any]]:
+    """Shift caption cues without changing the underlying edit timeline."""
+
+    adjusted: list[dict[str, Any]] = []
+    for event in events:
+        start = max(0.0, float(event["start"]) + offset_seconds)
+        end = max(start + 0.08, float(event["end"]) + offset_seconds)
+        adjusted.append({**event, "start": start, "end": end})
+    return adjusted
+
+
 def render_ass(
     events: list[dict[str, Any]],
     *,
     width: int = PREVIEW_WIDTH,
     height: int = PREVIEW_HEIGHT,
     brand_kit: dict[str, Any] | None = None,
+    position: str = "lower_safe",
+    target_platform: str = "all_social",
 ) -> str:
     # Scale from frame height so the same caption style remains proportional
     # for both vertical reels and landscape montages.
@@ -216,8 +231,28 @@ def render_ass(
     font_size = max(18, round((30 if style == "minimal" else 34 if style == "clean" else 38) * scale))
     outline = max(1, round(3 * scale))
     shadow = max(1, round(scale))
-    horizontal_margin = max(24, round(38 * width / PREVIEW_WIDTH))
-    vertical_margin = max(32, round(86 * scale))
+    is_vertical = height > width
+    horizontal_margin = (
+        max(24, round(width * 0.12))
+        if is_vertical
+        else max(24, round(38 * width / PREVIEW_WIDTH))
+    )
+    if position == "upper":
+        alignment = 8
+        vertical_margin = max(32, round(height * (0.14 if is_vertical else 0.1)))
+    elif position == "middle":
+        alignment = 5
+        vertical_margin = 0
+    else:
+        alignment = 2
+        safe_ratio = (
+            0.28
+            if target_platform == "tiktok"
+            else 0.24
+            if target_platform == "instagram"
+            else 0.25
+        )
+        vertical_margin = max(32, round(height * safe_ratio)) if is_vertical else max(32, round(86 * scale))
     font = {"sans": "DejaVu Sans", "serif": "DejaVu Serif", "mono": "DejaVu Sans Mono"}.get(str((brand_kit or {}).get("font_family")), "Arial")
     accent = str((brand_kit or {}).get("accent_color") or "#195BB4")
     red, green, blue = int(accent[1:3], 16), int(accent[3:5], 16), int(accent[5:7], 16)
@@ -232,7 +267,7 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: GMBlue,{font},{font_size},&H00FFFFFF,&H00FFFFFF,{ass_accent},&H78000000,{bold},0,0,0,100,100,0,0,1,{outline},{shadow},2,{horizontal_margin},{horizontal_margin},{vertical_margin},1
+Style: GMBlue,{font},{font_size},&H00FFFFFF,&H00FFFFFF,{ass_accent},&H78000000,{bold},0,0,0,100,100,0,0,1,{outline},{shadow},{alignment},{horizontal_margin},{horizontal_margin},{vertical_margin},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -580,8 +615,21 @@ def render_edit_preview(
     manifest_path = output_directory / "manifest.json"
     width, height = _preview_dimensions(str(context["job"].get("output_aspect") or "vertical"))
 
-    events = caption_events(plan, context["assets"], caption_corrections)
-    _atomic_text(captions_path, render_ass(events, width=width, height=height, brand_kit=context.get("brand_kit")))
+    events = adjust_caption_timing(
+        caption_events(plan, context["assets"], caption_corrections),
+        float(plan.caption_timing_offset_seconds),
+    )
+    _atomic_text(
+        captions_path,
+        render_ass(
+            events,
+            width=width,
+            height=height,
+            brand_kit=context.get("brand_kit"),
+            position=plan.caption_position,
+            target_platform=str(context["job"].get("target_platform") or "all_social"),
+        ),
+    )
     encoder = _render_video(
         sources,
         plan,
@@ -617,6 +665,13 @@ def render_edit_preview(
         "music": music_metadata,
         "brand_kit": context.get("brand_kit"),
         "caption_corrections": caption_corrections or [],
+        "captions": {
+            "style": "clean_blue_v1",
+            "events": len(events),
+            "position": plan.caption_position,
+            "timing_offset_seconds": plan.caption_timing_offset_seconds,
+            "platform_safe": True,
+        },
         "render": {
             "width": width,
             "height": height,
@@ -746,10 +801,20 @@ def render_final_delivery(
     package_path = output_directory / "delivery.zip"
     manifest_path = output_directory / "manifest.json"
 
-    events = caption_events(plan, context["assets"], caption_corrections)
+    events = adjust_caption_timing(
+        caption_events(plan, context["assets"], caption_corrections),
+        float(plan.caption_timing_offset_seconds),
+    )
     _atomic_text(
         captions_ass_path,
-        render_ass(events, width=width, height=height, brand_kit=context.get("brand_kit")),
+        render_ass(
+            events,
+            width=width,
+            height=height,
+            brand_kit=context.get("brand_kit"),
+            position=plan.caption_position,
+            target_platform=str(context["job"].get("target_platform") or "all_social"),
+        ),
     )
     _atomic_text(captions_vtt_path, render_webvtt(events))
     encoder = _render_video(
@@ -851,6 +916,13 @@ def render_final_delivery(
             "color_pipeline": "transfer_aware_hdr_to_bt709_sdr_v2",
         },
         "caption_corrections": caption_corrections,
+        "captions": {
+            "style": "clean_blue_v1",
+            "events": len(events),
+            "position": plan.caption_position,
+            "timing_offset_seconds": plan.caption_timing_offset_seconds,
+            "platform_safe": True,
+        },
         "sources": [
             {
                 "asset_id": str(clip.asset_id),

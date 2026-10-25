@@ -532,6 +532,7 @@ class EditRunResponse(BaseModel):
     based_on_run_id: UUID | None = None
     revision_note: str | None = None
     caption_corrections: list[dict[str, str]] = Field(default_factory=list)
+    caption_settings: dict[str, Any] = Field(default_factory=dict)
     clip_adjustments: list[dict[str, Any]] = Field(default_factory=list)
     locked_elements: list[str] = Field(default_factory=list)
     approved_at: datetime | None = None
@@ -574,6 +575,14 @@ class ClipAdjustment(BaseModel):
         "standard", "punch_in", "strong_punch_in", "slow_push_in", "slow_pull_out"
     ] | None = None
     source_audio_gain_db: float | None = Field(default=None, ge=-12.0, le=12.0)
+    max_pause_seconds: float | None = Field(default=None, ge=0.3, le=2.0)
+
+
+class CaptionSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    position: Literal["lower_safe", "middle", "upper"] = "lower_safe"
+    timing_offset_seconds: float = Field(default=0.0, ge=-0.5, le=0.5)
 
 
 class RevisionCreate(BaseModel):
@@ -582,6 +591,7 @@ class RevisionCreate(BaseModel):
     note: str = Field(default="", max_length=1200)
     caption_corrections: list[CaptionCorrection] = Field(default_factory=list, max_length=50)
     clip_adjustments: list[ClipAdjustment] = Field(default_factory=list, max_length=48)
+    caption_settings: CaptionSettings | None = None
     locked_elements: list[Literal["clip order", "spoken phrases", "captions", "music"]] = Field(default_factory=list, max_length=4)
 
     @field_validator("note")
@@ -591,8 +601,15 @@ class RevisionCreate(BaseModel):
 
     @model_validator(mode="after")
     def has_requested_change(self) -> "RevisionCreate":
-        if not self.note and not self.caption_corrections and not self.clip_adjustments:
-            raise ValueError("provide a revision note, caption correction, or timeline adjustment")
+        if (
+            not self.note
+            and not self.caption_corrections
+            and not self.clip_adjustments
+            and self.caption_settings is None
+        ):
+            raise ValueError(
+                "provide a revision note, caption correction, timeline adjustment, or caption layout"
+            )
         originals = [item.original_text for item in self.caption_corrections]
         if len(originals) != len(set(originals)):
             raise ValueError("caption corrections cannot repeat the same original text")
@@ -897,6 +914,7 @@ class EditorialClipResponse(BaseModel):
     transcript_excerpt: str = ""
     story_role: Literal["hook", "context", "development", "payoff", "reaction", "ending"] = "development"
     editorial_intent: str = ""
+    longest_pause_seconds: float = 0.0
 
 
 class UsageModelSummary(BaseModel):
