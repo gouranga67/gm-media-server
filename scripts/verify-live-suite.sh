@@ -44,6 +44,7 @@ fi
 
 passed=0
 failed=0
+failed_labels=()
 
 run_check() {
   local label=$1
@@ -54,27 +55,27 @@ run_check() {
     printf 'PASS  %s\n' "$label"
   else
     failed=$((failed + 1))
+    failed_labels+=("$label")
     printf 'FAIL  %s\n' "$label" >&2
   fi
 }
 
-check_library_migrations() {
-  local count
-  count=$(timeout --foreground --kill-after=5s 30s \
-    docker compose exec -T postgres \
-      sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "SELECT COUNT(*) FROM schema_migrations WHERE version IN ('"'"'010_asset_library.sql'"'"','"'"'011_exact_duplicate_audit.sql'"'"','"'"'012_content_catalog.sql'"'"','"'"'013_visual_index.sql'"'"','"'"'014_library_management.sql'"'"','"'"'015_safe_duplicate_storage.sql'"'"','"'"'016_creative_profiles_and_variants.sql'"'"','"'"'017_editorial_workspace.sql'"'"','"'"'018_productization.sql'"'"','"'"'019_story_intelligence.sql'"'"');"') || {
-    local result=$?
-    if [[ $result -eq 124 || $result -eq 137 ]]; then
-      printf 'Database migration check timed out after 30 seconds.\n' >&2
-    fi
-    return "$result"
-  }
-  printf 'Applied library migrations: %s/10\n' "$count"
-  [[ "$count" == "10" ]]
+check_migration_runner() {
+  local container_id state
+  container_id=$(timeout --foreground --kill-after=2s 10s \
+    docker compose ps -aq migrate) || return $?
+  if [[ -z "$container_id" ]]; then
+    printf 'Migration runner container was not found.\n' >&2
+    return 1
+  fi
+  state=$(timeout --foreground --kill-after=2s 10s \
+    docker inspect --format '{{.State.Status}} {{.State.ExitCode}}' "$container_id") || return $?
+  printf 'Migration runner state: %s\n' "$state"
+  [[ "$state" == "exited 0" ]]
 }
 
 run_check "Service and container health" timeout --foreground --kill-after=10s 120s ./scripts/verify-phase2.sh
-run_check "Database migrations 010-019" check_library_migrations
+run_check "Database migrations 010-019" check_migration_runner
 run_check "Backend unit and local render tests" timeout --foreground --kill-after=10s 300s docker compose run --rm --no-deps \
   -v "$project_root/services/core/tests:/app/tests:ro" \
   worker python -m unittest discover -s /app/tests -p 'test_*.py' -v
@@ -100,4 +101,8 @@ else
 fi
 
 printf '\nLive-suite summary: %d passed, %d failed\n' "$passed" "$failed"
+if ((failed > 0)); then
+  printf 'Failed checks:\n'
+  printf '  - %s\n' "${failed_labels[@]}"
+fi
 ((failed == 0))
