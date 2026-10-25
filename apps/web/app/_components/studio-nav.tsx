@@ -2,7 +2,7 @@ import Link from "next/link";
 
 export function StudioNav({ current }: { readonly current?: string }) {
   const links = [
-    ["Home", "/"], ["New edit", "/jobs/new"], ["Jobs", "/jobs"], ["Library", "/library"],
+    ["Home", "/"], ["New edit", "/jobs/new"], ["Jobs", "/jobs"], ["Prompts", "/prompts"], ["Library", "/library"],
     ["Creative", "/creative"], ["Brand", "/settings"], ["Learning", "/learning"], ["Usage", "/usage"], ["Operations", "/operations"], ["Access", "/access"],
   ] as const;
   return <nav aria-label="Studio navigation" className="flex flex-wrap items-center gap-x-4 gap-y-2">

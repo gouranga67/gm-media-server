@@ -6,6 +6,7 @@ import { CheckIcon, DownloadIcon, LoaderCircleIcon, RefreshCwIcon } from "lucide
 
 import { Button } from "@/components/ui/button";
 import { JobReviewControls } from "@/app/_components/job-review-controls";
+import { JobPromptHistory } from "@/app/_components/job-prompt-history";
 import {
   Dialog,
   DialogClose,
@@ -125,6 +126,9 @@ export function JobPreview({ jobId }: { readonly jobId: string }) {
   const isSquare = review?.job.output_aspect === "square";
   const failureMessage = run?.status === "ready" && !run.preview_available ? "This preview reached its retention date. Choose Try again to rebuild it from the saved edit plan." : run?.error ?? error ?? "";
   const hasPlanUsageIssue = /subscription_sharing_usage_|chatgpt plan usage is unavailable/i.test(failureMessage);
+  const prompts = review ? (
+    <JobPromptHistory activeVersion={run?.version} originalPrompt={review.original_prompt ?? ""} versions={review.versions} />
+  ) : null;
 
   useEffect(() => {
     if (!usesChatGptPlan) return;
@@ -198,6 +202,7 @@ export function JobPreview({ jobId }: { readonly jobId: string }) {
               <p className="text-center font-mono text-[10px] leading-relaxed text-[#666862]">
                 Version {run?.version} · {review?.job.target_duration_seconds ?? 60}s target · {review?.job.edit_style ?? "legacy"} style · {review?.job.music_mode ?? "none"} music{retainedFinalAvailable ? " · final delivery playback" : ""}
               </p>
+              {prompts}
               {run ? (
                 <JobReviewControls
                   finalExport={currentFinalExport}
@@ -277,6 +282,7 @@ export function JobPreview({ jobId }: { readonly jobId: string }) {
               <p className="mt-4 font-mono text-[10px] text-[#666862] uppercase">{status}</p>
             </div>
           )}
+          {status !== "ready" && prompts ? <div className="mt-5">{prompts}</div> : null}
           {usesChatGptPlan && !hasPlanUsageIssue ? (
             <div className="mt-5 flex items-center justify-between gap-4 rounded-md border border-[#D7D9D3] bg-white px-4 py-3 text-xs">
               <span className="font-mono font-bold text-[#173F5F]">Using ChatGPT plan</span>

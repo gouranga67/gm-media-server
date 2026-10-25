@@ -1002,8 +1002,28 @@ class UsageDashboardResponse(BaseModel):
     job_history: list[UsageJobSummary]
 
 
+class PromptHistoryEntry(BaseModel):
+    id: str
+    job_id: UUID
+    project_name: str
+    prompt: str
+    kind: Literal["original", "revision"]
+    version: int | None = None
+    status: str
+    created_at: datetime
+    archived: bool = False
+
+
+class PromptHistoryResponse(BaseModel):
+    items: list[PromptHistoryEntry]
+    has_more: bool
+    next_offset: int
+
+
 class JobReviewResponse(BaseModel):
     job: JobResponse
+    original_prompt: str = ""
+    project_name: str = ""
     versions: list[EditRunResponse]
     latest_run: EditRunResponse | None = None
     final_export: FinalExportResponse | None = None

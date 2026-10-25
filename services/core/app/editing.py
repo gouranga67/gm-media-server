@@ -28,6 +28,7 @@ from app.schemas import (
     EditRunResponse,
     FinalExportResponse,
     JobReviewResponse,
+    PromptHistoryResponse,
     UsageDashboardResponse,
     RevisionCreate,
     JobResponse,
@@ -49,13 +50,52 @@ def update_cover_frame(job_id: UUID, payload: CoverFrameUpdate) -> dict[str, Any
     return row
 
 VERIFICATION_PROJECT_PATTERN = re.compile(
-    r"^Phase\s+\d+[A-Z]*\s+(?:library\s+)?verification(?:\s|—|$)",
+    r"^Phase\s+\d+[A-Z]*\s+(?:(?:library|effects)\s+)?verification(?:\s|—|$)",
     re.IGNORECASE,
 )
 
 
 def _job_history_kind(project_name: str) -> str:
     return "verification" if VERIFICATION_PROJECT_PATTERN.search(project_name) else "editing"
+
+
+@router.get("/prompt-history", response_model=PromptHistoryResponse)
+def prompt_history(
+    query: str = Query(default="", max_length=500),
+    limit: int = Query(default=30, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+) -> dict[str, Any]:
+    # Original briefs are immutable project data. Revision notes are retained on
+    # edit runs independently of the short operational event feed and exports.
+    with connection() as database:
+        rows = database.execute(
+            """
+            WITH history AS (
+                SELECT 'original:' || jobs.id::text AS id, jobs.id AS job_id,
+                       projects.name AS project_name, projects.brief AS prompt,
+                       'original' AS kind, NULL::integer AS version, jobs.status,
+                       jobs.created_at, jobs.archived_at IS NOT NULL AS archived
+                FROM jobs JOIN projects ON projects.id = jobs.project_id
+                WHERE btrim(projects.brief) <> ''
+                UNION ALL
+                SELECT 'revision:' || edit_runs.id::text, jobs.id, projects.name,
+                       edit_runs.revision_note, 'revision', edit_runs.version,
+                       edit_runs.status, edit_runs.created_at,
+                       jobs.archived_at IS NOT NULL
+                FROM edit_runs JOIN jobs ON jobs.id = edit_runs.job_id
+                JOIN projects ON projects.id = jobs.project_id
+                WHERE btrim(coalesce(edit_runs.revision_note, '')) <> ''
+            )
+            SELECT * FROM history
+            WHERE project_name !~* %s
+              AND (%s = '' OR strpos(lower(project_name || ' ' || prompt), lower(%s)) > 0)
+            ORDER BY created_at DESC, id DESC
+            LIMIT %s OFFSET %s
+            """,
+            (VERIFICATION_PROJECT_PATTERN.pattern, query.strip(), query.strip(), limit + 1, offset),
+        ).fetchall()
+    items = list(rows[:limit])
+    return {"items": items, "has_more": len(rows) > limit, "next_offset": offset + len(items)}
 
 
 def _job_usage(database: Any, job_id: UUID) -> dict[str, Any]:
@@ -882,6 +922,8 @@ def job_review(job_id: UUID) -> dict[str, Any]:
     versions = [_response(row) for row in runs]
     return {
         "job": job,
+        "original_prompt": context["project"]["brief"],
+        "project_name": context["project"]["name"],
         "versions": versions,
         "latest_run": versions[0] if versions else None,
         "final_export": _final_response(export) if export is not None else None,

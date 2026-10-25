@@ -373,6 +373,8 @@ export type JobEvent = {
 
 export type JobReview = {
   readonly job: MediaJob;
+  readonly original_prompt: string;
+  readonly project_name: string;
   readonly versions: readonly EditRun[];
   readonly latest_run: EditRun | null;
   readonly final_export: FinalExport | null;
@@ -393,6 +395,29 @@ export type JobReview = {
   readonly events: readonly JobEvent[];
   readonly usage: JobUsage;
 };
+
+export type PromptHistoryEntry = {
+  readonly id: string;
+  readonly job_id: string;
+  readonly project_name: string;
+  readonly prompt: string;
+  readonly kind: "original" | "revision";
+  readonly version: number | null;
+  readonly status: string;
+  readonly created_at: string;
+  readonly archived: boolean;
+};
+
+export type PromptHistory = {
+  readonly items: readonly PromptHistoryEntry[];
+  readonly has_more: boolean;
+  readonly next_offset: number;
+};
+
+export function getPromptHistory(query = "", offset = 0) {
+  const params = new URLSearchParams({ query, offset: String(offset) });
+  return apiRequest<PromptHistory>(`prompt-history?${params}`, { cache: "no-store" });
+}
 
 export type FeedbackTag =
   | "strong_hook" | "weak_hook" | "clear_story" | "confusing_story"

@@ -42,6 +42,7 @@ class RevisionSchemaTests(unittest.TestCase):
     def test_labels_only_reserved_verification_project_names_as_tests(self) -> None:
         self.assertEqual(_job_history_kind("Phase 3 verification — 2026-10-24"), "verification")
         self.assertEqual(_job_history_kind("Phase 6C library verification"), "verification")
+        self.assertEqual(_job_history_kind("Phase 16 effects verification"), "verification")
         self.assertEqual(_job_history_kind("Interesting montage"), "editing")
 
     def test_only_legacy_ready_montage_delivery_needs_refresh(self) -> None:
