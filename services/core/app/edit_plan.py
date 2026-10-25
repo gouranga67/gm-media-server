@@ -269,6 +269,14 @@ def apply_timeline_adjustments(
     """Apply review-screen changes to a persisted plan without a model call."""
 
     clips = [clip.model_copy(deep=True) for clip in plan.clips]
+    # Keep each retained piece tied to its original timeline occurrence. Asset
+    # IDs alone cannot distinguish two uses of the same source in one edit.
+    origins: list[tuple[float, Any]] = []
+    original_time = 0.0
+    for clip in plan.clips:
+        origins.append((original_time, clip))
+        original_time += float(clip.duration if isinstance(plan, MontageEditPlan)
+                               else clip.source_out - clip.source_in)
     inventory = {str(asset["asset_id"]): asset for asset in assets or []}
     for adjustment in adjustments:
         index = int(adjustment["clip_index"])
@@ -277,12 +285,15 @@ def apply_timeline_adjustments(
         action = str(adjustment.get("action") or "keep")
         if action == "remove":
             clips.pop(index)
+            origins.pop(index)
             continue
         if action == "move_up" and index > 0:
             clips[index - 1], clips[index] = clips[index], clips[index - 1]
+            origins[index - 1], origins[index] = origins[index], origins[index - 1]
             index -= 1
         elif action == "move_down" and index < len(clips) - 1:
             clips[index + 1], clips[index] = clips[index], clips[index + 1]
+            origins[index + 1], origins[index] = origins[index], origins[index + 1]
             index += 1
         visual_preset = adjustment.get("visual_preset")
         if visual_preset is not None:
@@ -303,12 +314,40 @@ def apply_timeline_adjustments(
             if len(clips) - 1 + len(tightened) > maximum:
                 raise ValueError("tightening pauses would create too many timeline clips")
             clips[index:index + 1] = tightened
+            origins[index:index + 1] = [origins[index]] * len(tightened)
     minimum = 2 if isinstance(plan, MontageEditPlan) else 1
     if len(clips) < minimum:
         raise ValueError(f"this edit must keep at least {minimum} clip{'s' if minimum > 1 else ''}")
     clips[0].transition = "cut"
+    # Map cues only through content that survives. Cues inside a removed pause
+    # or deleted clip disappear; a cue at a new cut is clipped at that cut.
+    # Adjacent unchanged pieces merge so an existing cue can still span a cut.
+    mapping: list[list[float]] = []
+    new_time = 0.0
+    for clip, (old_time, original_clip) in zip(clips, origins, strict=True):
+        duration = float(clip.duration if isinstance(plan, MontageEditPlan)
+                         else clip.source_out - clip.source_in)
+        old_start = old_time + float(clip.source_in - original_clip.source_in)
+        old_end = old_start + duration
+        if mapping and abs(mapping[-1][1] - old_start) < 0.001:
+            mapping[-1][1] = old_end
+        else:
+            mapping.append([old_start, old_end, new_time])
+        new_time += duration
+    effects = []
+    for cue in plan.effects:
+        for old_start, old_end, new_start in mapping:
+            if old_start <= cue.start_seconds < old_end:
+                duration = round(min(cue.duration_seconds, old_end - cue.start_seconds), 3)
+                if duration >= 0.1:
+                    effects.append(cue.model_copy(update={
+                        "start_seconds": round(new_start + cue.start_seconds - old_start, 3),
+                        "duration_seconds": duration,
+                    }, deep=True))
+                break
     return plan.model_copy(
-        update={"clips": clips, "editorial_summary": f"{plan.editorial_summary} Adjusted in the local editorial workspace."},
+        update={"clips": clips, "effects": effects,
+                "editorial_summary": f"{plan.editorial_summary} Adjusted in the local editorial workspace."},
         deep=True,
     )
 

@@ -124,6 +124,14 @@ export function JobReviewControls({
   const plannedEffects = Array.isArray(run.manifest.creative_effects)
     ? run.manifest.creative_effects as readonly Record<string, unknown>[]
     : [];
+  const creativeDirection = run.manifest.creative_direction as { effect_level?: string } | undefined;
+  const effectMode = creativeDirection?.effect_level;
+  const punchInCount = editorialTimeline.filter((clip) =>
+    clip.visual_preset === "punch_in" || clip.visual_preset === "strong_punch_in").length;
+  const cameraMoveCount = editorialTimeline.filter((clip) =>
+    clip.visual_preset === "slow_push_in" || clip.visual_preset === "slow_pull_out").length;
+  const transitionCount = editorialTimeline.filter((clip, index) =>
+    index > 0 && clip.transition === "dip_to_black").length;
 
   const removeEffects = async () => {
     setSubmitting("revision"); setError(undefined);
@@ -544,7 +552,21 @@ export function JobReviewControls({
         </div>
         <div className="mb-5 border-t border-[#D7D9D3] pt-4">
           <p className="font-mono text-xs font-bold text-[#173F5F] uppercase">Creative effects</p>
+          <p className="mt-2 text-xs leading-relaxed text-[#53646F]">
+            This edit: {punchInCount} punch-ins · {cameraMoveCount} camera moves · {transitionCount} dips to black · {plannedEffects.length} sound or overlay cues.
+            {" "}Other clip boundaries use hard cuts. Use the clip framing controls above to adjust a punch-in without an AI call.
+          </p>
           {plannedEffects.length ? <><div className="mt-3 space-y-2">{plannedEffects.map((effect, index) => <div className="rounded-md bg-[#F7F7F5] px-3 py-2 text-xs text-[#53646F]" key={`${String(effect.asset_id)}-${index}`}><span className="font-bold text-[#173F5F]">{String(effect.title || effect.kind || "Effect")}</span> · {Number(effect.start_seconds || 0).toFixed(1)}s · {String(effect.purpose || "emphasis")}</div>)}</div><Button className="mt-3 h-10 w-full" disabled={submitting !== undefined} onClick={() => void removeEffects()} type="button" variant="outline"><Trash2Icon className="size-4" />Remove all effects &amp; render · zero AI</Button></> : <p className="mt-2 text-xs text-[#666862]">This version uses no creative effects.</p>}
+          {!plannedEffects.length ? (
+            <p className="mt-2 text-xs leading-relaxed text-[#666862]">
+              {run.effects_enabled === false
+                ? "Effects were removed in this revision."
+                : effectMode === "off"
+                  ? "Creative effects were Off for this job. For your next test, check the library and choose Social when creating the job."
+                  : "The editor selected no sounds or overlays for this version. Check that suitable assets are available and request a specific cue in your revision."}
+              {" "}<a className="font-bold text-[#173F5F] underline underline-offset-4" href="/creative">View music &amp; effects library</a>
+            </p>
+          ) : null}
         </div>
         <div className="mb-5 border-t border-[#D7D9D3] pt-4">
           <p className="font-mono text-xs font-bold text-[#173F5F] uppercase">Protect in AI revisions</p>

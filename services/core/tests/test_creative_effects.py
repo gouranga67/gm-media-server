@@ -1,7 +1,7 @@
 import unittest
 from uuid import uuid4
 
-from app.edit_plan import validate_edit_plan
+from app.edit_plan import MontageEditPlan, apply_timeline_adjustments, validate_edit_plan
 from app.effect_renderer import append_effect_filters
 
 
@@ -42,6 +42,64 @@ class CreativeEffectPlanTests(unittest.TestCase):
             validate_edit_plan(self.document, self.assets,
                 creative_direction={"music_mode": "none", "effect_level": "social"},
                 creative_effects=[])
+
+    def effect_plan(self, starts):
+        self.document["effects"] = [{**self.document["effects"][0], "start_seconds": start}
+                                    for start in starts]
+        return validate_edit_plan(self.document, self.assets,
+            creative_direction={"music_mode": "none", "effect_level": "social"},
+            creative_effects=[self.effect])
+
+    def add_second_clip(self):
+        self.document["clips"].append({**self.document["clips"][0], "source_in": 5, "source_out": 10})
+
+    def test_effect_moves_with_reordered_clip_even_when_source_is_reused(self):
+        self.add_second_clip()
+        plan = self.effect_plan([3.0, 8.0])
+        adjusted = apply_timeline_adjustments(plan, [{"clip_index": 1, "action": "move_up"}])
+        self.assertEqual([cue.start_seconds for cue in adjusted.effects], [8.0, 3.0])
+        self.assertEqual([cue.start_seconds for cue in plan.effects], [3.0, 8.0])
+
+    def test_effects_in_deleted_clip_disappear_and_later_cues_move_earlier(self):
+        self.add_second_clip()
+        plan = self.effect_plan([3.0, 8.0])
+        adjusted = apply_timeline_adjustments(plan, [{"clip_index": 0, "action": "remove"}])
+        self.assertEqual([cue.start_seconds for cue in adjusted.effects], [3.0])
+
+    def test_pause_trim_preserves_effect_on_payoff_and_removes_pause_effect(self):
+        self.document["clips"][0]["source_out"] = 8
+        self.assets[0]["transcript_segments"] = [{"start": 0, "end": 8, "text": "setup payoff",
+            "words": [{"start": 0.5, "end": 1.0, "text": "setup"},
+                      {"start": 6.5, "end": 7.5, "text": "payoff"}]}]
+        plan = self.effect_plan([3.0, 6.5])
+        adjusted = apply_timeline_adjustments(plan,
+            [{"clip_index": 0, "max_pause_seconds": 0.6}], self.assets)
+        self.assertEqual(len(adjusted.effects), 1)
+        new_payoff_start = adjusted.clips[0].source_out + 6.5 - adjusted.clips[1].source_in
+        self.assertAlmostEqual(adjusted.effects[0].start_seconds, new_payoff_start)
+
+    def test_framing_only_change_keeps_effect_that_spans_original_cut(self):
+        self.add_second_clip()
+        plan = self.effect_plan([4.8])
+        adjusted = apply_timeline_adjustments(plan, [{"clip_index": 0, "visual_preset": "punch_in"}])
+        self.assertEqual(adjusted.effects, plan.effects)
+
+    def test_effect_crossing_new_cut_is_shortened(self):
+        self.add_second_clip()
+        plan = self.effect_plan([4.8])
+        adjusted = apply_timeline_adjustments(plan, [{"clip_index": 1, "action": "move_up"}])
+        self.assertEqual(adjusted.effects[0].start_seconds, 9.8)
+        self.assertAlmostEqual(adjusted.effects[0].duration_seconds, 0.2)
+
+    def test_montage_still_image_effect_uses_timeline_duration_not_source_time(self):
+        self.add_second_clip()
+        talking = self.effect_plan([3.0, 8.0])
+        plan = MontageEditPlan(schema_version="1.3", recipe="montage", audio_preset="montage_mix_v1",
+            end_card="none", editorial_summary="Two photos", effects=talking.effects,
+            clips=[{"asset_id": uuid4(), "media_kind": "image", "source_in": 0, "source_out": 0,
+                    "duration": 5, "crop": "center_fill"} for _ in range(2)])
+        adjusted = apply_timeline_adjustments(plan, [{"clip_index": 1, "action": "move_up"}])
+        self.assertEqual([cue.start_seconds for cue in adjusted.effects], [8.0, 3.0])
 
     def test_filter_extension_mixes_bounded_audio_cue(self):
         cue = type("Cue", (), {"start_seconds": 1.25, "duration_seconds": 0.5,

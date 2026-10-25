@@ -22,9 +22,24 @@ const talkingHeadClip = z
   })
   .strict();
 
+const creativeCue = z.object({
+  asset_id: z.string().uuid(),
+  start_seconds: z.number().min(0).max(60),
+  duration_seconds: z.number().min(0.1).max(8),
+  position: z.enum(["top", "center", "bottom", "full_frame"]),
+  intensity: z.enum(["subtle", "standard", "strong"]),
+  purpose: z.enum(["hook", "transition", "emphasis", "reveal", "reaction", "payoff"]),
+}).strict();
+
+const captionAndEffects = {
+  caption_position: z.enum(["lower_safe", "middle", "upper"]).default("lower_safe"),
+  caption_timing_offset_seconds: z.number().min(-0.5).max(0.5).default(0),
+  effects: z.array(creativeCue).max(8).default([]),
+};
+
 const talkingHeadPlan = z
   .object({
-    schema_version: z.literal("1.2"),
+    schema_version: z.enum(["1.2", "1.3"]),
     recipe: z.literal("talking_head"),
     clips: z.array(talkingHeadClip).min(1).max(24),
     caption_style: z.literal("clean_blue_v1"),
@@ -34,6 +49,7 @@ const talkingHeadPlan = z
     post_copy: z.string().max(2200),
     music_track_id: z.string().uuid().nullable(),
     music_mix: z.enum(["none", "subtle", "present"]),
+    ...captionAndEffects,
   })
   .strict();
 
@@ -56,7 +72,7 @@ const montageClip = z
 
 const montagePlan = z
   .object({
-    schema_version: z.literal("1.2"),
+    schema_version: z.enum(["1.2", "1.3"]),
     recipe: z.literal("montage"),
     clips: z.array(montageClip).min(2).max(48),
     audio_preset: z.literal("montage_mix_v1"),
@@ -65,6 +81,7 @@ const montagePlan = z
     post_copy: z.string().max(2200),
     music_track_id: z.string().uuid().nullable(),
     music_mix: z.enum(["none", "subtle", "present"]),
+    ...captionAndEffects,
   })
   .strict();
 
@@ -72,7 +89,7 @@ const plan = z.discriminatedUnion("recipe", [talkingHeadPlan, montagePlan]);
 
 export default defineTool({
   description:
-    "Submit an exact source-only talking-head or montage plan after inspecting the job. Give every clip a source-grounded story role and concise editorial intent. Music may reference only a rights-approved track returned by inspect_job. The server independently validates duration, assets, ranges, motion, transitions, music, and copy permissions.",
+    "Submit an exact source-led talking-head or montage plan after inspecting the job. Give every clip a source-grounded story role and concise editorial intent. Music and creative effects may reference only approved assets returned by inspect_job and must respect the job's effect level. The server independently validates duration, assets, ranges, motion, transitions, effect timing, music, and copy permissions.",
   inputSchema: z.object({ jobId: z.string().uuid(), plan }).strict(),
   async execute({ jobId, plan: document }) {
     return mediaApi(`/api/v1/jobs/${encodeURIComponent(jobId)}/edit-plans`, {

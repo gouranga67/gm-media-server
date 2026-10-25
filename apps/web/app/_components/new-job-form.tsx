@@ -921,6 +921,10 @@ function NewJobFormContent() {
       track.allowed_platforms.includes("all_social")
       || track.allowed_platforms.includes(targetPlatform),
   ).length;
+  const compatibleEffectCount = creativeAssets.filter(
+    (asset) => asset.allowed_platforms.includes("all_social")
+      || asset.allowed_platforms.includes(targetPlatform),
+  ).length;
   const durationOptions: readonly TargetDuration[] = recipe === "montage" ? [15, 30, 45, 60] : [20, 30, 45, 60];
   const libraryProjects = Array.from(
     new Map(libraryAssets.map((asset) => [asset.project_id, asset.project_name])).entries(),
@@ -1646,16 +1650,25 @@ function NewJobFormContent() {
                 </label>
               ) : null}
             </fieldset>
-            <fieldset className="space-y-3" disabled={formLocked}>
+            <fieldset className="space-y-3" disabled={formLocked || privacyMode === "local_only"}>
               <legend className="text-xs font-bold text-[#173F5F]">CREATIVE EFFECTS</legend>
-              <p className="text-xs leading-relaxed text-[#666862]">Adds only reviewed SFX, stickers, GIFs, or meme assets when they support a real story beat.</p>
+              <p className="text-xs leading-relaxed text-[#666862]">
+                {privacyMode === "local_only"
+                  ? "The fixed local recipe does not select creative effects. Choose a model-assisted privacy mode to have the editor select cues."
+                  : "Adds reviewed sounds, stickers, GIFs, or meme assets at suitable story beats. Choose Social for a more noticeable test. Punch-ins and camera moves are controlled separately by the edit style."}
+              </p>
               <div className="grid grid-cols-2 gap-2">
                 {([
                   ["off", "Off", "Clean edit"], ["subtle", "Subtle", "Up to 2 cues"],
                   ["social", "Social", "Up to 4 cues"], ["meme_heavy", "Meme-heavy", "Up to 8 cues"],
-                ] as const).map(([value, label, description]) => { const unavailable = value !== "off" && !creativeAssets.some((asset) => asset.allowed_platforms.includes("all_social") || asset.allowed_platforms.includes(targetPlatform)); return <label className={`rounded-md border p-3 ${unavailable ? "cursor-not-allowed opacity-45" : ""} ${effectLevel === value ? "border-[#173F5F] bg-[#EFF6FA]" : "border-[#D7D9D3] bg-white"}`} key={value}><input checked={effectLevel === value} className="sr-only" disabled={unavailable} name="effect-level" onChange={() => setEffectLevel(value)} type="radio" /><span className="block text-sm font-bold text-[#173F5F]">{label}</span><span className="mt-1 block text-[11px] text-[#666862]">{description}</span></label>; })}
+                ] as const).map(([value, label, description]) => { const unavailable = value !== "off" && compatibleEffectCount === 0; return <label className={`rounded-md border p-3 focus-within:ring-2 focus-within:ring-[#173F5F]/40 ${unavailable ? "cursor-not-allowed opacity-45" : ""} ${effectLevel === value ? "border-[#173F5F] bg-[#EFF6FA]" : "border-[#D7D9D3] bg-white"}`} key={value}><input checked={effectLevel === value} className="sr-only" disabled={unavailable} name="effect-level" onChange={() => setEffectLevel(value)} type="radio" /><span className="block text-sm font-bold text-[#173F5F]">{label}</span><span className="mt-1 block text-[11px] text-[#666862]">{description}</span></label>; })}
               </div>
-              <p className="text-xs text-[#666862]">{creativeAssets.filter((asset) => asset.allowed_platforms.includes("all_social") || asset.allowed_platforms.includes(targetPlatform)).length} compatible reviewed effects available.</p>
+              <p className="text-xs text-[#666862]">
+                {compatibleEffectCount > 0
+                  ? `${compatibleEffectCount} compatible reviewed effects available. Off adds no sounds or overlays; other modes are maximum cue counts, not a guarantee of effects.`
+                  : "No compatible effects are installed yet. Import the starter library before testing sounds and stickers."}
+                {" "}<Link className="font-bold text-[#173F5F] underline underline-offset-4" href="/creative">View music &amp; effects library</Link>
+              </p>
             </fieldset>
             <fieldset className="space-y-3" disabled={formLocked || privacyMode === "local_only"}>
               <legend className="text-xs font-bold text-[#173F5F]">EDITOR MODEL</legend>
@@ -1717,7 +1730,10 @@ function NewJobFormContent() {
                 disabled={formLocked}
                 key={option.value}
                 label={option.label}
-                onChange={setPrivacyMode}
+                onChange={(value) => {
+                  setPrivacyMode(value);
+                  if (value === "local_only") setEffectLevel("off");
+                }}
                 selected={privacyMode === option.value}
                 value={option.value}
               />
