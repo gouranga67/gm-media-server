@@ -347,3 +347,17 @@ Retention deliberately excludes originals. It can remove only reproducible previ
 Acceptance helper after deployment: `python3 scripts/verify-phase12.py` bootstraps the configured owner, round-trips a temporary viewer/editor, raises and restores token thresholds, archives and restores an idle real job, runs retention with 10-year thresholds, confirms the operator audit, and requires zero removed originals and zero additional model tokens.
 
 Exit check: deploy migration 018, pass the Phase 12 helper and full core suite, complete the onboarding screen, archive and restore one job from a phone, and review Operations before inviting another tailnet user.
+
+## Phase 13 — story intelligence and viewer engagement
+
+**Purpose:** help the editor build a deliberate story from reusable local evidence while keeping hosted model use to one bounded planning request.
+
+Current source checkpoint (2026-10-25): migration 019 adds explicit audience, story goal, desired feeling, and ending direction to each job. The durable catalogue worker builds and caches source-timestamped moment cards from local Whisper segments and FFmpeg scene boundaries. Local retrieval ranks those moments against the brief and story direction while retaining opening and closing evidence; no hosted analysis call is made. Existing catalogues are automatically refreshed to version 1.1 after deployment.
+
+The editor receives a story spine plus the strongest retrieved source moments. Edit-plan schema 1.2 requires every new clip to declare a narrative role and concise editorial intent. The planning instructions now favor a supported hook, minimal context, development, payoff, and requested ending while preserving complete speech and source truth. The review timeline exposes these decisions in plain language. Legacy 1.0 and 1.1 plans remain valid, and deterministic local-only recipes populate the same metadata.
+
+Acceptance helper after deployment: `python3 scripts/verify-phase13.py` waits for the local backfill, round-trips explicit story direction, attaches an existing library video without copying it, requires timestamped evidence and suggested narrative roles, archives its verification job, and records zero additional model tokens.
+
+Next quality work: add local motion, shot-scale, face-presence, laughter/applause, and audio-continuity signals to moment cards; then use those facts for cut-on-action, reaction cutaways, audio bridges, and automatic hook alternatives.
+
+Exit check for this checkpoint: deploy migration 019, pass the Phase 13 helper and full live suite, then make one real edit using all four story-direction fields and confirm the review timeline explains the hook, development, payoff, and ending.

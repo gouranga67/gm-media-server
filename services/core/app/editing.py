@@ -226,6 +226,8 @@ def _editorial_timeline(document: dict[str, Any] | None, context: dict[str, Any]
                 "include_source_audio": bool(clip.get("include_source_audio", media_kind == "video")),
                 "source_audio_gain_db": float(clip.get("source_audio_gain_db") or 0),
                 "transcript_excerpt": " ".join(excerpts)[:320],
+                "story_role": str(clip.get("story_role") or "development"),
+                "editorial_intent": str(clip.get("editorial_intent") or "")[:180],
             }
         )
     return result

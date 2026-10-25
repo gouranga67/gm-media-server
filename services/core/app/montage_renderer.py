@@ -421,6 +421,10 @@ def _manifest(
             "target_platform": context["job"].get("target_platform"),
             "output_aspect": context["job"].get("output_aspect"),
             "must_include": context["job"].get("must_include"),
+            "audience": context["job"].get("audience"),
+            "story_goal": context["job"].get("story_goal"),
+            "desired_feeling": context["job"].get("desired_feeling"),
+            "ending_instruction": context["job"].get("ending_instruction"),
             "cover_time_seconds": context["job"].get("cover_time_seconds"),
         },
         "music": music,
@@ -443,6 +447,8 @@ def _manifest(
                 "visual_preset": clip.visual_preset,
                 "include_source_audio": clip.include_source_audio,
                 "source_audio_gain_db": clip.source_audio_gain_db,
+                "story_role": clip.story_role,
+                "editorial_intent": clip.editorial_intent,
                 "render_basis": (
                     "normalized_image_preview"
                     if clip.media_kind == "image" and inventory[str(clip.asset_id)].get("_preview_key")

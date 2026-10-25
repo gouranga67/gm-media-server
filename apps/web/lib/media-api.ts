@@ -29,6 +29,10 @@ export type MediaJob = {
   readonly music_mode: MusicMode | null;
   readonly target_platform: TargetPlatform | null;
   readonly must_include: string;
+  readonly audience: string;
+  readonly story_goal: string;
+  readonly desired_feeling: string;
+  readonly ending_instruction: string;
   readonly editor_model: string | null;
   readonly reasoning_effort: ReasoningEffort;
   readonly output_aspect: OutputAspect;
@@ -307,6 +311,8 @@ export type EditorialClip = {
   readonly include_source_audio: boolean;
   readonly source_audio_gain_db: number;
   readonly transcript_excerpt: string;
+  readonly story_role: "hook" | "context" | "development" | "payoff" | "reaction" | "ending";
+  readonly editorial_intent: string;
 };
 
 export type DeliveryVariant = {
@@ -569,6 +575,10 @@ export function createMediaJob(
     readonly musicMode: MusicMode;
     readonly targetPlatform: TargetPlatform;
     readonly mustInclude: string;
+    readonly audience?: string;
+    readonly storyGoal?: string;
+    readonly desiredFeeling?: string;
+    readonly endingInstruction?: string;
     readonly editorModel: string | null;
     readonly reasoningEffort: ReasoningEffort;
     readonly outputAspect: OutputAspect;
@@ -587,6 +597,10 @@ export function createMediaJob(
       music_mode: input.musicMode,
       target_platform: input.targetPlatform,
       must_include: input.mustInclude,
+      audience: input.audience ?? "",
+      story_goal: input.storyGoal ?? "",
+      desired_feeling: input.desiredFeeling ?? "",
+      ending_instruction: input.endingInstruction ?? "",
       editor_model: input.editorModel,
       reasoning_effort: input.reasoningEffort,
       output_aspect: input.outputAspect,

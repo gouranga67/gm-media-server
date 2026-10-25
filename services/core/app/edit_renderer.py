@@ -484,6 +484,10 @@ def render_edit_preview(
             "music_mode": context["job"].get("music_mode"),
             "target_platform": context["job"].get("target_platform"),
             "must_include": context["job"].get("must_include"),
+            "audience": context["job"].get("audience"),
+            "story_goal": context["job"].get("story_goal"),
+            "desired_feeling": context["job"].get("desired_feeling"),
+            "ending_instruction": context["job"].get("ending_instruction"),
             "cover_time_seconds": context["job"].get("cover_time_seconds"),
         },
         "music": music_metadata,
@@ -505,6 +509,8 @@ def render_edit_preview(
                 "source_out": clip.source_out,
                 "transition": clip.transition,
                 "visual_preset": clip.visual_preset,
+                "story_role": clip.story_role,
+                "editorial_intent": clip.editorial_intent,
                 "render_basis": (
                     "normalized_video_proxy"
                     if inventory[str(clip.asset_id)].get("_proxy_key")
@@ -696,6 +702,10 @@ def render_final_delivery(
             "music_mode": context["job"].get("music_mode"),
             "target_platform": context["job"].get("target_platform"),
             "must_include": context["job"].get("must_include"),
+            "audience": context["job"].get("audience"),
+            "story_goal": context["job"].get("story_goal"),
+            "desired_feeling": context["job"].get("desired_feeling"),
+            "ending_instruction": context["job"].get("ending_instruction"),
             "cover_time_seconds": context["job"].get("cover_time_seconds"),
         },
         "music": music_metadata,
@@ -722,6 +732,8 @@ def render_final_delivery(
                 "source_out": clip.source_out,
                 "transition": clip.transition,
                 "visual_preset": clip.visual_preset,
+                "story_role": clip.story_role,
+                "editorial_intent": clip.editorial_intent,
             }
             for clip in plan.clips
         ],

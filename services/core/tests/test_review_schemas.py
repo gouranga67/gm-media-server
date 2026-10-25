@@ -31,6 +31,21 @@ class RevisionSchemaTests(unittest.TestCase):
         self.assertEqual(job.music_mode.value, "none")
         self.assertEqual(job.target_platform.value, "all_social")
         self.assertEqual(job.reasoning_effort.value, "medium")
+        self.assertEqual(job.audience, "")
+        self.assertEqual(job.story_goal, "")
+
+    def test_story_direction_is_bounded_and_normalized(self) -> None:
+        job = JobCreate(
+            audience="  curious   first-time viewers ",
+            story_goal="  Understand the main point.  ",
+            desired_feeling="  surprised, then reassured ",
+            ending_instruction="  End on the laugh. ",
+        )
+
+        self.assertEqual(job.audience, "curious first-time viewers")
+        self.assertEqual(job.story_goal, "Understand the main point.")
+        self.assertEqual(job.desired_feeling, "surprised, then reassured")
+        self.assertEqual(job.ending_instruction, "End on the laugh.")
         self.assertEqual(job.output_aspect.value, "vertical")
 
     def test_accepts_montage_model_controls(self) -> None:

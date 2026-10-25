@@ -213,6 +213,15 @@ def _public_context(context: dict[str, Any], max_characters: int) -> dict[str, A
                 }
             )
         asset["transcript_segments"] = simplified
+        story_index = asset.get("story_index")
+        if isinstance(story_index, dict):
+            moments = story_index.get("moments")
+            if isinstance(moments, list):
+                story_index["moments"] = moments[:24]
+                if moments and not isinstance(public.get("revision"), dict):
+                    asset["transcript_segment_count"] = len(simplified)
+                    asset["transcript_segments"] = []
+                    asset["transcript_represented_by_story_index"] = True
     for track in public.get("music_library", []):
         for key in list(track):
             if key.startswith("_"):
@@ -240,6 +249,16 @@ def _public_context(context: dict[str, Any], max_characters: int) -> dict[str, A
             remaining -= len(candidate)
         asset["transcript_segments"] = retained
         asset["transcript_truncated"] = len(retained) < len(original_segments)
+    encoded = json.dumps(public, ensure_ascii=False, separators=(",", ":"))
+    if len(encoded) > max_characters:
+        for asset in public.get("assets", []):
+            story_index = asset.get("story_index")
+            if not isinstance(story_index, dict):
+                continue
+            moments = story_index.get("moments")
+            if isinstance(moments, list):
+                story_index["moments"] = moments[:8]
+                story_index["moments_truncated"] = len(moments) > 8
     return public
 
 
@@ -275,7 +294,12 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
     if recipe == "montage":
         task_instruction = (
             "Create one source-led montage JSON edit plan. Choose only uploaded video and image assets. "
-            "Prefer sharp, varied shots and coherent visual progression grounded in the brief. Video clip "
+            "Build a deliberate story spine from job.story direction and the locally retrieved story_index "
+            "moments. Open with the strongest supported hook, orient the viewer, build with new information, "
+            "place the best supported moment near the payoff, and finish cleanly. Assign every clip a story_role "
+            "and a short editorial_intent that explains its contribution. Prefer sharp, varied shots and coherent "
+            "visual progression grounded in the brief. Do not claim that a generic visual_window depicts an object "
+            "unless the supplied contact sheet supports that conclusion. Video clip "
             "duration must exactly match source_out minus source_in; image clips use zero source timecodes. "
             "Use 1.5–4 second shots for energetic work and 3–6 second shots for calm work. Keep every clip "
             "between 0.5 and 8 seconds, keep the assembled duration near the requested target, use only named "
@@ -294,12 +318,16 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
         task_instruction = (
             "Create one JSON edit plan from this trusted job context. The validator will reject invented "
             "asset IDs, out-of-range timecodes, overlapping ranges, unsupported effects, and previews longer "
-            "than 60 seconds. Prefer a coherent 15–60 second transcript-led story, preserve the speaker's "
+            "than 60 seconds. Use story_spine and the locally retrieved story_index moments to build a coherent "
+            "15–60 second transcript-led story. Start with the strongest supported hook instead of routine setup, "
+            "then give only the context needed to understand the point, develop it, deliver a payoff, and follow "
+            "the requested ending. Assign every clip a story_role and a concise editorial_intent. Preserve the speaker's "
             "meaning, remove obvious dead air, and keep chronological order unless the brief clearly requires "
             "otherwise. Treat job.target_duration_seconds as a real delivery target, job.must_include as "
             "required subject matter when supported by the transcript, and job.edit_style as the visual pacing "
             "direction. Use only the named visual and transition presets. For energetic edits, split around "
-            "genuine emphasis beats, alternate standard framing with restrained punch-ins, and include a "
+            "genuine emphasis beats identified in the source evidence, alternate standard framing with restrained "
+            "punch-ins, keep complete phrases intact, and include a "
             "transition beat when the edit is at least 20 seconds. For clean edits, favor stable framing. For "
             "calm edits, favor longer clips and slow moves. Select music only from music_library and only when "
             "job.music_mode requests it; otherwise return no music."

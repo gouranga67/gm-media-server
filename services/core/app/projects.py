@@ -363,7 +363,13 @@ def get_catalog_status() -> dict[str, Any]:
                    COALESCE(SUM(segment_count), 0)::integer AS segments_total,
                    COALESCE(SUM(transcript_segment_count), 0)::integer AS transcript_segments,
                    COALESCE(SUM(scene_segment_count), 0)::integer AS scene_segments,
-                   COALESCE(MAX(catalog_version), '1.0') AS catalog_version
+                   COALESCE(MAX(catalog_version), '1.0') AS catalog_version,
+                   (SELECT COUNT(*)::integer FROM asset_story_indexes
+                    WHERE status = 'ready') AS story_assets_ready,
+                   (SELECT COALESCE(SUM(moment_count), 0)::integer
+                    FROM asset_story_indexes WHERE status = 'ready') AS story_moments,
+                   (SELECT COALESCE(MAX(story_version), '1.0')
+                    FROM asset_story_indexes WHERE status = 'ready') AS story_version
             FROM asset_catalogs
             """
         ).fetchone()
@@ -973,10 +979,14 @@ def create_job(
                 INSERT INTO jobs (
                     id, project_id, recipe, target_duration_seconds,
                     edit_style, music_mode, target_platform, must_include,
+                    audience, story_goal, desired_feeling, ending_instruction,
                     editor_model, reasoning_effort, output_aspect, creative_profile_id,
                     brand_kit_id, publishing_preset, created_by_login
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (
+                    %s, %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                )
                 RETURNING *
                 """,
                 (
@@ -988,6 +998,10 @@ def create_job(
                     payload.music_mode.value,
                     payload.target_platform.value,
                     payload.must_include,
+                    payload.audience,
+                    payload.story_goal,
+                    payload.desired_feeling,
+                    payload.ending_instruction,
                     payload.editor_model,
                     payload.reasoning_effort.value,
                     payload.output_aspect.value,
@@ -1010,6 +1024,10 @@ def create_job(
             or row["music_mode"] != payload.music_mode.value
             or row["target_platform"] != payload.target_platform.value
             or row["must_include"] != payload.must_include
+            or row["audience"] != payload.audience
+            or row["story_goal"] != payload.story_goal
+            or row["desired_feeling"] != payload.desired_feeling
+            or row["ending_instruction"] != payload.ending_instruction
             or row["editor_model"] != payload.editor_model
             or row["reasoning_effort"] != payload.reasoning_effort.value
             or row["output_aspect"] != payload.output_aspect.value

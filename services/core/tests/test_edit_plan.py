@@ -88,6 +88,8 @@ class EditPlanValidationTests(unittest.TestCase):
         plan = validate_edit_plan(self.document, self.assets)
 
         self.assertEqual(plan.clips[0].visual_preset, "standard")
+        self.assertEqual(plan.clips[0].story_role, "development")
+        self.assertEqual(plan.clips[0].editorial_intent, "")
         self.assertEqual(plan.music_mix, "none")
 
     def test_enforces_requested_duration_when_footage_is_available(self) -> None:

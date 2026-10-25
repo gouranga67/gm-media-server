@@ -61,12 +61,12 @@ run_check() {
 check_library_migrations() {
   local count
   count=$(docker compose exec -T postgres \
-    sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "SELECT COUNT(*) FROM schema_migrations WHERE version IN ('"'"'010_asset_library.sql'"'"','"'"'011_exact_duplicate_audit.sql'"'"','"'"'012_content_catalog.sql'"'"','"'"'013_visual_index.sql'"'"','"'"'014_library_management.sql'"'"','"'"'015_safe_duplicate_storage.sql'"'"','"'"'016_creative_profiles_and_variants.sql'"'"','"'"'017_editorial_workspace.sql'"'"','"'"'018_productization.sql'"'"');"') || return 1
-  [[ "$count" == "9" ]]
+    sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "SELECT COUNT(*) FROM schema_migrations WHERE version IN ('"'"'010_asset_library.sql'"'"','"'"'011_exact_duplicate_audit.sql'"'"','"'"'012_content_catalog.sql'"'"','"'"'013_visual_index.sql'"'"','"'"'014_library_management.sql'"'"','"'"'015_safe_duplicate_storage.sql'"'"','"'"'016_creative_profiles_and_variants.sql'"'"','"'"'017_editorial_workspace.sql'"'"','"'"'018_productization.sql'"'"','"'"'019_story_intelligence.sql'"'"');"') || return 1
+  [[ "$count" == "10" ]]
 }
 
 run_check "Service and container health" ./scripts/verify-phase2.sh
-run_check "Database migrations 010-018" check_library_migrations
+run_check "Database migrations 010-019" check_library_migrations
 run_check "Backend unit and local render tests" docker compose run --rm --no-deps \
   -v "$project_root/services/core/tests:/app/tests:ro" \
   worker python -m unittest discover -s /app/tests -p 'test_*.py' -v
@@ -79,6 +79,7 @@ run_check "Reversible media-library organization" python3 scripts/verify-phase8.
 run_check "Complete job history and test classification" python3 scripts/verify-job-history.py
 run_check "Editorial workspace, brand kits, and presets" python3 scripts/verify-phase11.py
 run_check "Product controls, access roles, and safe retention" python3 scripts/verify-phase12.py
+run_check "Local story intelligence and source-backed moment retrieval" python3 scripts/verify-phase13.py
 
 if $include_render; then
   printf '\nThe opt-in lane creates/revises edit runs, performs GPU renders, and may use the connected ChatGPT plan.\n'

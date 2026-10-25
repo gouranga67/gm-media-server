@@ -9,7 +9,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
-EDIT_PLAN_SCHEMA_VERSION = "1.1"
+EDIT_PLAN_SCHEMA_VERSION = "1.2"
 MAX_PREVIEW_SECONDS = 60.0
 MAX_CLIPS = 24
 MAX_MONTAGE_CLIPS = 48
@@ -37,6 +37,8 @@ class EditClip(BaseModel):
         "slow_push_in",
         "slow_pull_out",
     ] = "standard"
+    story_role: Literal["hook", "context", "development", "payoff", "reaction", "ending"] = "development"
+    editorial_intent: str = Field(default="", max_length=180)
 
     @model_validator(mode="after")
     def source_range_is_forward(self) -> "EditClip":
@@ -48,7 +50,7 @@ class EditClip(BaseModel):
 class TalkingHeadEditPlan(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal["1.0", "1.1"]
+    schema_version: Literal["1.0", "1.1", "1.2"]
     recipe: Literal["talking_head"]
     clips: list[EditClip] = Field(min_length=1, max_length=MAX_CLIPS)
     caption_style: Literal["clean_blue_v1"]
@@ -78,12 +80,14 @@ class MontageClip(BaseModel):
     ] = "standard"
     include_source_audio: bool = False
     source_audio_gain_db: float = Field(default=0.0, ge=-12.0, le=12.0)
+    story_role: Literal["hook", "context", "development", "payoff", "reaction", "ending"] = "development"
+    editorial_intent: str = Field(default="", max_length=180)
 
 
 class MontageEditPlan(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal["1.0", "1.1"]
+    schema_version: Literal["1.0", "1.1", "1.2"]
     recipe: Literal["montage"]
     clips: list[MontageClip] = Field(min_length=2, max_length=MAX_MONTAGE_CLIPS)
     audio_preset: Literal["montage_mix_v1"]
@@ -206,6 +210,11 @@ EDIT_PLAN_JSON_SCHEMA: dict[str, Any] = {
                             "slow_pull_out",
                         ],
                     },
+                    "story_role": {
+                        "type": "string",
+                        "enum": ["hook", "context", "development", "payoff", "reaction", "ending"],
+                    },
+                    "editorial_intent": {"type": "string", "maxLength": 180},
                 },
                 "required": [
                     "asset_id",
@@ -214,6 +223,8 @@ EDIT_PLAN_JSON_SCHEMA: dict[str, Any] = {
                     "crop",
                     "transition",
                     "visual_preset",
+                    "story_role",
+                    "editorial_intent",
                 ],
                 "additionalProperties": False,
             },
@@ -245,7 +256,7 @@ EDIT_PLAN_JSON_SCHEMA: dict[str, Any] = {
 MONTAGE_EDIT_PLAN_JSON_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
-        "schema_version": {"type": "string", "enum": ["1.1"]},
+        "schema_version": {"type": "string", "enum": [EDIT_PLAN_SCHEMA_VERSION]},
         "recipe": {"type": "string", "enum": ["montage"]},
         "clips": {
             "type": "array",
@@ -271,6 +282,11 @@ MONTAGE_EDIT_PLAN_JSON_SCHEMA: dict[str, Any] = {
                         "minimum": -12,
                         "maximum": 12,
                     },
+                    "story_role": {
+                        "type": "string",
+                        "enum": ["hook", "context", "development", "payoff", "reaction", "ending"],
+                    },
+                    "editorial_intent": {"type": "string", "maxLength": 180},
                 },
                 "required": [
                     "asset_id",
@@ -283,6 +299,8 @@ MONTAGE_EDIT_PLAN_JSON_SCHEMA: dict[str, Any] = {
                     "visual_preset",
                     "include_source_audio",
                     "source_audio_gain_db",
+                    "story_role",
+                    "editorial_intent",
                 ],
                 "additionalProperties": False,
             },
@@ -593,6 +611,8 @@ def deterministic_plan(
                 crop="center_fill",
                 transition="cut",
                 visual_preset="standard",
+                story_role="hook",
+                editorial_intent="Open with the source and establish the subject.",
             ),
             EditClip(
                 asset_id=UUID(str(asset["asset_id"])),
@@ -601,6 +621,8 @@ def deterministic_plan(
                 crop="center_fill",
                 transition="dip_to_black",
                 visual_preset="punch_in",
+                story_role="ending",
+                editorial_intent="Finish the selected thought with visual emphasis.",
             ),
         ]
     else:
@@ -612,6 +634,8 @@ def deterministic_plan(
                 crop="center_fill",
                 transition="cut",
                 visual_preset="slow_push_in" if edit_style == "calm" and duration >= 2 else "standard",
+                story_role="hook",
+                editorial_intent="Carry the complete source thought from opening to finish.",
             )
         ]
     plan = TalkingHeadEditPlan(
@@ -720,9 +744,25 @@ def deterministic_montage_plan(
         total_duration += duration
     if len(clips) < 2:
         raise ValueError("the montage recipe needs enough source media for at least two shots")
+    for index, clip in enumerate(clips):
+        if index == 0:
+            clip.story_role = "hook"
+            clip.editorial_intent = "Open on a strong source-backed image or action."
+        elif index == len(clips) - 1:
+            clip.story_role = "ending"
+            clip.editorial_intent = "Resolve the sequence on a clear final source moment."
+        elif index >= max(1, len(clips) - 2):
+            clip.story_role = "payoff"
+            clip.editorial_intent = "Deliver or support the strongest moment in the sequence."
+        elif index == 1:
+            clip.story_role = "context"
+            clip.editorial_intent = "Orient the viewer after the opening beat."
+        else:
+            clip.story_role = "development"
+            clip.editorial_intent = "Build the visual sequence with new source evidence."
     selected_track = (music_tracks or [None])[0] if music_mode != "none" else None
     plan = MontageEditPlan(
-        schema_version="1.1",
+        schema_version=EDIT_PLAN_SCHEMA_VERSION,
         recipe="montage",
         clips=clips,
         audio_preset="montage_mix_v1",

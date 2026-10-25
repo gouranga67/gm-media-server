@@ -693,6 +693,10 @@ function NewJobFormContent() {
   const [musicMode, setMusicMode] = useState<MusicMode>("none");
   const [targetPlatform, setTargetPlatform] = useState<TargetPlatform>("all_social");
   const [mustInclude, setMustInclude] = useState("");
+  const [audience, setAudience] = useState("");
+  const [storyGoal, setStoryGoal] = useState("");
+  const [desiredFeeling, setDesiredFeeling] = useState("");
+  const [endingInstruction, setEndingInstruction] = useState("");
   const [editorModels, setEditorModels] = useState<readonly EditorModel[]>([]);
   const [editorModel, setEditorModel] = useState<string | null>(null);
   const [reasoningEffort, setReasoningEffort] = useState<ReasoningEffort>("medium");
@@ -1155,6 +1159,10 @@ function NewJobFormContent() {
           musicMode,
           targetPlatform,
           mustInclude: mustInclude.trim(),
+          audience: audience.trim(),
+          storyGoal: storyGoal.trim(),
+          desiredFeeling: desiredFeeling.trim(),
+          endingInstruction: endingInstruction.trim(),
           editorModel,
           reasoningEffort,
           outputAspect,
@@ -1434,6 +1442,32 @@ function NewJobFormContent() {
                 value={brief}
               />
             </div>
+            <fieldset className="rounded-md border border-[#D7D9D3] bg-[#EFF6FA] p-4" disabled={formLocked}>
+              <legend className="px-2 font-mono text-xs font-bold tracking-wide text-[#173F5F] uppercase">
+                Story direction
+              </legend>
+              <p className="mb-4 text-xs leading-relaxed text-[#53646F]">
+                Optional answers give the editor a clear hook, payoff and ending. They reuse local source analysis and do not add another model call.
+              </p>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="text-xs font-bold text-[#173F5F]" htmlFor="story-audience">
+                  WHO IS THIS FOR?
+                  <Input className="mt-2 h-11 bg-white" id="story-audience" maxLength={600} onChange={(event) => setAudience(event.currentTarget.value)} placeholder="e.g. First-time home buyers" value={audience} />
+                </label>
+                <label className="text-xs font-bold text-[#173F5F]" htmlFor="story-feeling">
+                  HOW SHOULD THEY FEEL?
+                  <Input className="mt-2 h-11 bg-white" id="story-feeling" maxLength={600} onChange={(event) => setDesiredFeeling(event.currentTarget.value)} placeholder="e.g. Curious, then reassured" value={desiredFeeling} />
+                </label>
+                <label className="text-xs font-bold text-[#173F5F] sm:col-span-2" htmlFor="story-goal">
+                  WHAT SHOULD THEY UNDERSTAND?
+                  <Textarea className="mt-2 min-h-20 bg-white" id="story-goal" maxLength={1200} onChange={(event) => setStoryGoal(event.currentTarget.value)} placeholder="The one idea the edit should make clear." value={storyGoal} />
+                </label>
+                <label className="text-xs font-bold text-[#173F5F] sm:col-span-2" htmlFor="story-ending">
+                  HOW SHOULD IT END?
+                  <Input className="mt-2 h-11 bg-white" id="story-ending" maxLength={600} onChange={(event) => setEndingInstruction(event.currentTarget.value)} placeholder="e.g. End on the laugh, then show the call to action" value={endingInstruction} />
+                </label>
+              </div>
+            </fieldset>
             <div className="space-y-2">
               <label className="text-xs font-bold text-[#173F5F]" htmlFor="must-include">
                 MUST-INCLUDE POINTS

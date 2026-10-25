@@ -6,6 +6,7 @@ from uuid import UUID
 from app.config import Settings, get_settings
 from app.database import connection
 from app.media_analysis import resolve_source
+from app.story_intelligence import STORY_INTELLIGENCE_VERSION, select_story_moments
 
 
 def _stream_types(manifest: dict[str, Any]) -> set[str]:
@@ -50,10 +51,14 @@ def build_editor_context(
             """
             SELECT assets.id, assets.source_name, assets.mime_type, assets.byte_size,
                    assets.sha256, assets.storage_key, assets.status AS asset_status,
-                   asset_ingests.status AS analysis_status, asset_ingests.manifest
+                   asset_ingests.status AS analysis_status, asset_ingests.manifest,
+                   asset_story_indexes.status AS story_status,
+                   asset_story_indexes.story_version,
+                   asset_story_indexes.moments AS story_moments
             FROM job_assets
             JOIN assets ON assets.id = job_assets.asset_id
             LEFT JOIN asset_ingests ON asset_ingests.asset_id = assets.id
+            LEFT JOIN asset_story_indexes ON asset_story_indexes.asset_id = assets.id
             WHERE job_assets.job_id = %s
             ORDER BY job_assets.created_at, assets.created_at
             """,
@@ -72,6 +77,14 @@ def build_editor_context(
                 "SELECT * FROM brand_kits WHERE id = %s", (job["brand_kit_id"],)
             ).fetchone()
 
+    story_query = " ".join(
+        str(value or "")
+        for value in (
+            job["brief"], job.get("must_include"), job.get("audience"),
+            job.get("story_goal"), job.get("desired_feeling"),
+            job.get("ending_instruction"),
+        )
+    )
     assets: list[dict[str, Any]] = []
     for row in rows:
         manifest = row.get("manifest") if isinstance(row.get("manifest"), dict) else {}
@@ -95,6 +108,14 @@ def build_editor_context(
             "visual_quality": manifest.get("derived", {}).get("visual_quality", {}),
             "loudness": manifest.get("derived", {}).get("loudness", {}),
             "transcript_segments": transcript,
+            "story_index": {
+                "status": row.get("story_status") or "pending",
+                "version": row.get("story_version") or STORY_INTELLIGENCE_VERSION,
+                "moments": select_story_moments(
+                    row.get("story_moments") if isinstance(row.get("story_moments"), list) else [],
+                    story_query,
+                ),
+            },
         }
         if include_internal_paths:
             asset["_storage_key"] = row["storage_key"]
@@ -153,6 +174,10 @@ def build_editor_context(
             "music_mode": job["music_mode"],
             "target_platform": job["target_platform"],
             "must_include": job["must_include"],
+            "audience": job.get("audience") or "",
+            "story_goal": job.get("story_goal") or "",
+            "desired_feeling": job.get("desired_feeling") or "",
+            "ending_instruction": job.get("ending_instruction") or "",
             "editor_model": job.get("editor_model"),
             "reasoning_effort": job.get("reasoning_effort") or "medium",
             "output_aspect": job.get("output_aspect") or "vertical",
@@ -165,6 +190,18 @@ def build_editor_context(
             "brief": job["brief"],
             "privacy_mode": job["privacy_mode"],
             "ai_copy_allowed": job["ai_copy_allowed"],
+        },
+        "story_spine": {
+            "audience": job.get("audience") or "",
+            "goal": job.get("story_goal") or job["brief"],
+            "desired_feeling": job.get("desired_feeling") or "",
+            "must_include": job["must_include"],
+            "ending": job.get("ending_instruction") or "",
+            "recommended_shape": (
+                ["tease", "establish", "build", "best_moment", "reaction", "finish"]
+                if job["recipe"] == "montage"
+                else ["hook", "context", "development", "payoff", "ending"]
+            ),
         },
         "ready_for_editing": ready,
         "assets": assets,

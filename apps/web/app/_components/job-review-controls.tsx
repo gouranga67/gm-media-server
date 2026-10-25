@@ -333,6 +333,7 @@ export function JobReviewControls({
                   <div className="min-w-0">
                     <p className="truncate text-sm font-bold text-[#173F5F]">{clip.clip_index + 1}. {clip.source_name}</p>
                     <p className="mt-1 font-mono text-[10px] text-[#666862]">{clip.source_in.toFixed(1)}–{clip.source_out.toFixed(1)}s · {clip.duration.toFixed(1)}s · {clip.transition.replaceAll("_", " ")}</p>
+                    <p className="mt-2 inline-flex rounded-full bg-[#EFF6FA] px-2 py-1 font-mono text-[9px] font-bold tracking-wide text-[#174D73] uppercase">{clip.story_role}</p>
                   </div>
                   <div className="flex shrink-0 gap-1">
                     <Button aria-label="Move clip earlier" disabled={timelineSubmitting !== undefined || clip.clip_index === 0} onClick={() => void adjustClip(clip, { action: "move_up" })} size="icon" type="button" variant="outline"><ArrowUpIcon /></Button>
@@ -341,6 +342,7 @@ export function JobReviewControls({
                   </div>
                 </div>
                 {clip.transcript_excerpt ? <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-[#666862]">“{clip.transcript_excerpt}”</p> : null}
+                {clip.editorial_intent ? <p className="mt-2 text-xs leading-relaxed text-[#53646F]">{clip.editorial_intent}</p> : null}
                 <div className="mt-3 grid grid-cols-2 gap-2">
                   <select
                     aria-label={`Framing for clip ${clip.clip_index + 1}`}

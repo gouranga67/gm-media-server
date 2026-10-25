@@ -94,6 +94,10 @@ class JobCreate(BaseModel):
     music_mode: MusicMode = MusicMode.NONE
     target_platform: TargetPlatform = TargetPlatform.ALL_SOCIAL
     must_include: str = Field(default="", max_length=2000)
+    audience: str = Field(default="", max_length=600)
+    story_goal: str = Field(default="", max_length=1200)
+    desired_feeling: str = Field(default="", max_length=600)
+    ending_instruction: str = Field(default="", max_length=600)
     editor_model: str | None = Field(default=None, min_length=1, max_length=160)
     reasoning_effort: ReasoningEffort = ReasoningEffort.MEDIUM
     output_aspect: OutputAspect = OutputAspect.VERTICAL
@@ -101,9 +105,11 @@ class JobCreate(BaseModel):
     brand_kit_id: UUID | None = None
     publishing_preset: PublishingPreset = PublishingPreset.CUSTOM
 
-    @field_validator("must_include")
+    @field_validator(
+        "must_include", "audience", "story_goal", "desired_feeling", "ending_instruction"
+    )
     @classmethod
-    def normalize_must_include(cls, value: str) -> str:
+    def normalize_story_direction(cls, value: str) -> str:
         return " ".join(value.split())
 
     @field_validator("editor_model")
@@ -131,6 +137,10 @@ class JobResponse(BaseModel):
     music_mode: MusicMode | None = None
     target_platform: TargetPlatform | None = None
     must_include: str = ""
+    audience: str = ""
+    story_goal: str = ""
+    desired_feeling: str = ""
+    ending_instruction: str = ""
     editor_model: str | None = None
     reasoning_effort: ReasoningEffort = ReasoningEffort.MEDIUM
     output_aspect: OutputAspect = OutputAspect.VERTICAL
@@ -230,6 +240,9 @@ class CatalogStatusResponse(BaseModel):
     transcript_segments: int = Field(ge=0)
     scene_segments: int = Field(ge=0)
     catalog_version: str
+    story_assets_ready: int = Field(default=0, ge=0)
+    story_moments: int = Field(default=0, ge=0)
+    story_version: str = "1.0"
 
 
 class VisualIndexStatusResponse(BaseModel):
@@ -767,6 +780,8 @@ class EditorialClipResponse(BaseModel):
     include_source_audio: bool = True
     source_audio_gain_db: float = 0.0
     transcript_excerpt: str = ""
+    story_role: Literal["hook", "context", "development", "payoff", "reaction", "ending"] = "development"
+    editorial_intent: str = ""
 
 
 class UsageModelSummary(BaseModel):

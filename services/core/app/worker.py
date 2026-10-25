@@ -28,6 +28,7 @@ from app.editor_provider import create_edit_plan, list_chatgpt_models
 from app.finalize_upload import finalize_original, upload_source_path
 from app.media_analysis import analyze_asset, resolve_source
 from app.productization import assert_ai_budget
+from app.story_intelligence import STORY_INTELLIGENCE_VERSION, build_story_moments
 from app.montage_renderer import render_montage_delivery, render_montage_preview
 from app.music_analysis import analyze_music_beats
 from app.visual_index import (
@@ -285,7 +286,7 @@ def analyze_one_asset(state: WorkerState) -> bool:
 
 def seed_pending_catalogs() -> int:
     with connection() as database:
-        result = database.execute(
+        inserted = database.execute(
             """
             INSERT INTO asset_catalogs (asset_id, status)
             SELECT asset_ingests.asset_id, 'pending'
@@ -296,7 +297,17 @@ def seed_pending_catalogs() -> int:
             ON CONFLICT (asset_id) DO NOTHING
             """
         )
-        return result.rowcount
+        refreshed = database.execute(
+            """
+            UPDATE asset_catalogs
+            SET status = 'pending', attempts = 0, lease_expires_at = NULL,
+                error = NULL, completed_at = NULL, updated_at = now()
+            WHERE catalog_version <> %s
+              AND status <> 'running'
+            """,
+            (CATALOG_VERSION,),
+        )
+        return inserted.rowcount + refreshed.rowcount
 
 
 def recover_interrupted_catalogs() -> int:
@@ -363,6 +374,7 @@ def catalog_one_asset(state: WorkerState) -> bool:
     try:
         manifest = asset.get("manifest") if isinstance(asset.get("manifest"), dict) else {}
         segments = build_catalog_segments(asset, manifest)
+        story_moments = build_story_moments(asset, manifest)
         transcript_count = sum(segment["segment_kind"] == "transcript" for segment in segments)
         scene_count = sum(segment["segment_kind"] == "scene" for segment in segments)
         with connection() as database:
@@ -395,6 +407,25 @@ def catalog_one_asset(state: WorkerState) -> bool:
                 )
             database.execute(
                 """
+                INSERT INTO asset_story_indexes (
+                    asset_id, status, story_version, moment_count, moments,
+                    error, completed_at, updated_at
+                )
+                VALUES (%s, 'ready', %s, %s, %s, NULL, now(), now())
+                ON CONFLICT (asset_id) DO UPDATE SET
+                    status = 'ready', story_version = EXCLUDED.story_version,
+                    moment_count = EXCLUDED.moment_count, moments = EXCLUDED.moments,
+                    error = NULL, completed_at = now(), updated_at = now()
+                """,
+                (
+                    asset["id"],
+                    STORY_INTELLIGENCE_VERSION,
+                    len(story_moments),
+                    Jsonb(story_moments),
+                ),
+            )
+            database.execute(
+                """
                 UPDATE asset_catalogs
                 SET status = 'ready', catalog_version = %s,
                     segment_count = %s, transcript_segment_count = %s,
@@ -413,6 +444,15 @@ def catalog_one_asset(state: WorkerState) -> bool:
         print(f"asset catalogue ready: {asset_id} segments={len(segments)}", flush=True)
     except Exception as error:
         with connection() as database:
+            database.execute(
+                """
+                INSERT INTO asset_story_indexes (asset_id, status, error, updated_at)
+                VALUES (%s, 'failed', %s, now())
+                ON CONFLICT (asset_id) DO UPDATE SET
+                    status = 'failed', error = EXCLUDED.error, updated_at = now()
+                """,
+                (asset["id"], str(error)[:1000]),
+            )
             database.execute(
                 """
                 UPDATE asset_catalogs

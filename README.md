@@ -27,7 +27,7 @@ Editor model ---> constrained JSON edit plan ---> validator ---> FFmpeg renderer
 - The model can reference only registered asset IDs, valid time ranges, and approved edit operations.
 - Trusted code validates the edit decision list and builds FFmpeg arguments. The agent receives no shell or Docker access.
 
-The detailed design is in [the architecture plan](docs/architecture-plan.md), current progress and exit criteria are in [the build phases](docs/build-phases.md), and the layered acceptance process is in [the testing plan](docs/testing-plan.md).
+Start with the illustrated [system architecture guide](docs/system-architecture-guide.md). The detailed design is in [the architecture plan](docs/architecture-plan.md), current progress and exit criteria are in [the build phases](docs/build-phases.md), and the layered acceptance process is in [the testing plan](docs/testing-plan.md).
 
 ## Requirements
 
@@ -157,9 +157,10 @@ python3 scripts/verify-phase6e.py
 python3 scripts/verify-phase10.py
 python3 scripts/verify-phase11.py
 python3 scripts/verify-phase12.py
+python3 scripts/verify-phase13.py
 ```
 
-The Phase 3 check exercises interrupted/resumed tus uploads, Phase 4 verifies real-media analysis, Phase 5 proves strict edit-plan validation plus a downloadable deterministic preview, and Phase 6 exercises revision, approval, and full delivery packaging. Phase 6B verifies a deployed montage plus its model catalogue and usage ledger. Phase 6C verifies zero-copy reuse and the non-destructive duplicate audit; Phase 6D verifies catalogue backfill and provenance-bearing text search; Phase 6E verifies local semantic visual search with source-frame evidence. Phase 9 verifies checksum-gated physical storage sharing while preserving every asset record and historical path. Phase 10 verifies reusable Creative Profiles and locally rendered square/vertical/landscape variants without another model call. Phase 11 verifies the clip-level editorial timeline, managed brand kits, publishing presets, and profile management without consuming model tokens. Phase 12 verifies the product dashboard, Tailscale-backed roles, job archive/restore, AI budgets, operator audit, and derived-file retention with a database-enforced zero-original guarantee.
+The Phase 3 check exercises interrupted/resumed tus uploads, Phase 4 verifies real-media analysis, Phase 5 proves strict edit-plan validation plus a downloadable deterministic preview, and Phase 6 exercises revision, approval, and full delivery packaging. Phase 6B verifies a deployed montage plus its model catalogue and usage ledger. Phase 6C verifies zero-copy reuse and the non-destructive duplicate audit; Phase 6D verifies catalogue backfill and provenance-bearing text search; Phase 6E verifies local semantic visual search with source-frame evidence. Phase 9 verifies checksum-gated physical storage sharing while preserving every asset record and historical path. Phase 10 verifies reusable Creative Profiles and locally rendered square/vertical/landscape variants without another model call. Phase 11 verifies the clip-level editorial timeline, managed brand kits, publishing presets, and profile management without consuming model tokens. Phase 12 verifies the product dashboard, Tailscale-backed roles, job archive/restore, AI budgets, operator audit, and derived-file retention with a database-enforced zero-original guarantee. Phase 13 verifies cached local story moments, explicit viewer intent, exact source ranges, and zero additional model usage.
 
 The root URL is the studio dashboard. `/welcome` explains initial setup, `/jobs` manages active and archived work, `/operations` controls workload and retention, and `/access` manages invited Tailscale identities. Owner/editor/viewer permissions reuse Tailscale authentication; GM Studio does not store passwords.
 
