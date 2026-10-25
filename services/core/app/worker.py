@@ -31,6 +31,7 @@ from app.productization import assert_ai_budget
 from app.story_intelligence import STORY_INTELLIGENCE_VERSION, build_story_moments
 from app.montage_renderer import render_montage_delivery, render_montage_preview
 from app.music_analysis import analyze_music_beats
+from app.revision_report import compare_revision
 from app.visual_index import (
     VISUAL_INDEX_VERSION,
     VISUAL_MODEL_ID,
@@ -926,6 +927,7 @@ def process_one_edit(state: WorkerState) -> bool:
                     raise RuntimeError("the revision's previous edit plan was not found")
                 context["revision"] = {
                     "instruction": run.get("revision_note") or "",
+                    "mode": run.get("revision_mode") or "targeted",
                     "based_on_version": previous["version"],
                     "previous_plan": previous["document"],
                     "caption_corrections": run.get("caption_corrections") or [],
@@ -1077,6 +1079,25 @@ def process_one_edit(state: WorkerState) -> bool:
             model = provenance["model"]
             reasoning_effort = provenance.get("reasoning_effort")
             _persist_generated_plan(run, plan, provenance)
+
+        if run.get("based_on_run_id"):
+            with connection() as database:
+                prior = database.execute(
+                    """SELECT document, caption_corrections FROM edit_plans JOIN edit_runs
+                       ON edit_runs.edit_plan_id = edit_plans.id
+                       WHERE edit_runs.id = %s AND edit_runs.job_id = %s""",
+                    (run["based_on_run_id"], run["job_id"]),
+                ).fetchone()
+            if prior is not None:
+                context["revision_report"] = compare_revision(
+                    prior["document"], plan.model_dump(mode="json")
+                )
+                context["revision_report"]["mode"] = run.get("revision_mode") or "targeted"
+                context["revision_report"]["instruction"] = run.get("revision_note") or ""
+                if (run.get("caption_corrections") or []) != (prior.get("caption_corrections") or []):
+                    context["revision_report"]["changes"].append("Caption text corrections changed.")
+                    context["revision_report"]["changed"] = True
+                    context["revision_report"]["notice"] = ""
 
         if isinstance(plan, MontageEditPlan):
             manifest = render_montage_preview(

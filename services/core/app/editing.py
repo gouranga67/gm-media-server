@@ -648,15 +648,15 @@ def request_revision(job_id: UUID, payload: RevisionCreate) -> dict[str, Any]:
             """
             INSERT INTO edit_runs (
                 job_id, version, based_on_run_id, revision_note, caption_corrections,
-                caption_settings, effects_enabled, clip_adjustments, locked_elements
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                caption_settings, effects_enabled, clip_adjustments, locked_elements, revision_mode
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING *
             """,
             (
                 job_id, version, based_on["id"], payload.note or None,
                 Jsonb(effective_corrections), Jsonb(effective_caption_settings),
                 payload.effects_enabled,
-                Jsonb(adjustments), Jsonb(payload.locked_elements),
+                Jsonb(adjustments), Jsonb(payload.locked_elements), payload.revision_mode,
             ),
         ).fetchone()
         database.execute(
@@ -675,6 +675,7 @@ def request_revision(job_id: UUID, payload: RevisionCreate) -> dict[str, Any]:
                         "version": version,
                         "based_on_version": based_on["version"],
                         "note": payload.note,
+                        "revision_mode": payload.revision_mode,
                         "caption_correction_count": len(effective_corrections),
                         "caption_settings": effective_caption_settings,
                         "effects_enabled": payload.effects_enabled,

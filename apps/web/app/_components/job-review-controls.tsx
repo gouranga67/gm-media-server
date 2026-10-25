@@ -109,6 +109,11 @@ export function JobReviewControls({
     readonly change: ClipChange;
   }>();
   const [lockedElements, setLockedElements] = useState<readonly string[]>([]);
+  const [revisionMode, setRevisionMode] = useState<"targeted" | "rebuild_story">("targeted");
+  const revisionReport = run.manifest.revision_report as {
+    changed?: boolean; changes?: readonly string[]; notice?: string;
+    editor_explanation?: string; instruction?: string;
+  } | undefined;
   const [coverTime, setCoverTime] = useState(initialCoverTime);
   const [captionPosition, setCaptionPosition] = useState<"lower_safe" | "middle" | "upper">(
     run.caption_settings.position ?? "lower_safe",
@@ -146,11 +151,14 @@ export function JobReviewControls({
     try {
       await requestRevision(jobId, {
         note: cleanNote,
+        revisionMode,
         captionCorrections:
           cleanOriginal && cleanReplacement
             ? [{ original_text: cleanOriginal, replacement_text: cleanReplacement }]
             : [],
-        lockedElements,
+        lockedElements: revisionMode === "rebuild_story"
+          ? lockedElements.filter((item) => item !== "clip order" && item !== "spoken phrases")
+          : lockedElements,
       });
       setNote("");
       setOriginalText("");
@@ -569,13 +577,26 @@ export function JobReviewControls({
 
       <form className="rounded-md border border-[#D7D9D3] bg-white p-5" onSubmit={(event) => void submitRevision(event)}>
         <p className="font-mono text-xs font-bold tracking-wide text-[#173F5F] uppercase">Request a revision</p>
-        <label className="mt-4 block text-sm font-bold text-[#20211F]" htmlFor="revision-note">Editing feedback</label>
+        {revisionReport ? <div className="mt-4 rounded-md bg-[#EFF6FA] p-4 text-sm text-[#173F5F]" role="status">
+          <p className="font-bold">What changed in version {run.version}</p>
+          {revisionReport.instruction ? <p className="mt-2">Your request: {revisionReport.instruction}</p> : null}
+          {revisionReport.changes?.length ? <ul className="mt-2 list-disc space-y-1 pl-5">{revisionReport.changes.map((change) => <li key={change}>{change}</li>)}</ul> : null}
+          {revisionReport.notice ? <p className="mt-2">{revisionReport.notice}</p> : null}
+          {revisionReport.editor_explanation ? <p className="mt-2">Editor explanation: {revisionReport.editor_explanation}</p> : null}
+        </div> : null}
+        <label className="mt-4 block text-sm font-bold text-[#20211F]" htmlFor="revision-mode">How much should change?</label>
+        <select className="mt-2 min-h-12 w-full rounded-md border border-[#C7CBD0] bg-white px-3 text-sm" disabled={submitting !== undefined} id="revision-mode" onChange={(event) => setRevisionMode(event.currentTarget.value as "targeted" | "rebuild_story")} value={revisionMode}>
+          <option value="targeted">Adjust this edit</option>
+          <option value="rebuild_story">Rebuild the story from the footage</option>
+        </select>
+        <p className="mt-2 text-xs leading-relaxed text-[#666862]">{revisionMode === "rebuild_story" ? "Reconsiders the source dialogue and your original brief. Clip order and spoken selections are unlocked; other protections stay active." : "Describe a specific change and the parts you want to keep."} This sends a new AI editing request only when you submit. Use the rating card below to teach future edits.</p>
+        <label className="mt-4 block text-sm font-bold text-[#20211F]" htmlFor="revision-note">What should the editor change?</label>
         <Textarea
           className="mt-2 min-h-28"
           id="revision-note"
           maxLength={1200}
           onChange={(event) => setNote(event.target.value)}
-          placeholder="For example: shorten the opening and reach the strongest point sooner."
+          placeholder={revisionMode === "rebuild_story" ? "For example: tell the story in the brief. Start with the problem, keep the explanation together, and finish with the result. Preserve complete sentences." : "For example: shorten the pause after ‘…’ to half a second. Keep the rest of the story."}
           value={note}
         />
         {recipe === "talking_head" ? (

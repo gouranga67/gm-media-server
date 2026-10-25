@@ -401,3 +401,9 @@ Edit plans now carry source-backed effect cues with an approved asset ID, timeli
 Pixabay integration is deliberately file-based for this checkpoint: download a chosen asset from its official page, then import it with that page URL. This avoids scraping or treating search results as proof of rights. A provider API can replace the manual download later without changing the catalogue, planning, rendering, or review contracts.
 
 Exit check: deploy migration 022, import one licensed music track and one licensed effect through `/creative`, create a Social-effects job, confirm every rendered cue appears in the manifest, remove the cues with the local review control, then run `python3 scripts/verify-phase16.py` and the full live suite.
+
+### Revision and story-context hardening
+
+Migration 023 persists a targeted or story-rebuild revision scope. The revision form distinguishes requests to adjust the existing cut from requests to reconsider all footage against the original brief. Rebuilding unlocks clip order and spoken selections while retaining other user protections. A new preview reports actual source, framing, audio, caption, and effect changes; descriptive prose changes alone do not count as an edit. If the editor returns the same executable plan, the review explicitly reports that result without automatically spending more tokens.
+
+The editor now retains complete source transcripts alongside local moment cards when they fit within the existing context cap. Larger contexts distribute transcript evidence across files and across each file's beginning, middle, and ending, with explicit truncation markers. Model instructions emphasize complete thoughts, connecting setup, and cause and effect. Source tests cover context coverage and no-op detection; live acceptance is one explicitly submitted story-rebuild request and inspection of its measured revision report.

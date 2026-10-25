@@ -218,10 +218,6 @@ def _public_context(context: dict[str, Any], max_characters: int) -> dict[str, A
             moments = story_index.get("moments")
             if isinstance(moments, list):
                 story_index["moments"] = moments[:24]
-                if moments and not isinstance(public.get("revision"), dict):
-                    asset["transcript_segment_count"] = len(simplified)
-                    asset["transcript_segments"] = []
-                    asset["transcript_represented_by_story_index"] = True
     for track in public.get("music_library", []):
         for key in list(track):
             if key.startswith("_"):
@@ -235,34 +231,57 @@ def _public_context(context: dict[str, Any], max_characters: int) -> dict[str, A
     if len(encoded) <= max_characters:
         return public
 
-    # Preserve inventory and timing facts while bounding long transcripts.
-    originals: list[list[dict[str, Any]]] = []
+    # Reduce duplicate highlight evidence before allocating transcript space.
+    for asset in public.get("assets", []):
+        story_index = asset.get("story_index")
+        if isinstance(story_index, dict) and isinstance(story_index.get("moments"), list):
+            moments = story_index["moments"]
+            story_index["moments"] = moments[:8]
+            story_index["moments_truncated"] = len(moments) > 8
+    if len(json.dumps(public, ensure_ascii=False, separators=(",", ":"))) <= max_characters:
+        return public
+
+    # Share the remaining budget across sources and across each source's
+    # beginning, middle and ending. Never silently retain only the first file.
+    originals = []
     for asset in public.get("assets", []):
         originals.append(asset.get("transcript_segments", []))
         asset["transcript_segments"] = []
         asset["transcript_truncated"] = True
+        asset["transcript_segment_count"] = len(originals[-1])
+    public["transcript_coverage"] = "sampled_across_sources_and_time"
     base_size = len(json.dumps(public, ensure_ascii=False, separators=(",", ":")))
-    remaining = max(0, max_characters - base_size)
-    for asset, original_segments in zip(public.get("assets", []), originals, strict=True):
-        retained: list[dict[str, Any]] = []
-        for segment in original_segments:
-            candidate = json.dumps(segment, ensure_ascii=False, separators=(",", ":"))
-            if len(candidate) > remaining:
-                break
-            retained.append(segment)
-            remaining -= len(candidate)
-        asset["transcript_segments"] = retained
-        asset["transcript_truncated"] = len(retained) < len(original_segments)
-    encoded = json.dumps(public, ensure_ascii=False, separators=(",", ":"))
-    if len(encoded) > max_characters:
-        for asset in public.get("assets", []):
-            story_index = asset.get("story_index")
-            if not isinstance(story_index, dict):
+    remaining = max_characters - base_size
+    if remaining < 0:
+        raise ProviderResponseError("editor inventory exceeds the context limit; use fewer sources")
+    queues = []
+    for segments in originals:
+        # Endpoints first, then recursively fill the largest temporal gaps.
+        pending = [(0, len(segments) - 1)] if segments else []
+        order = []
+        if segments:
+            order = [0] if len(segments) == 1 else [0, len(segments) - 1]
+        while pending:
+            left, right = pending.pop(0)
+            if right - left > 1:
+                middle = (left + right) // 2
+                order.append(middle)
+                pending.extend([(left, middle), (middle, right)])
+        queues.append(order)
+    retained = [set() for _ in originals]
+    while any(queues):
+        for index, queue in enumerate(queues):
+            if not queue:
                 continue
-            moments = story_index.get("moments")
-            if isinstance(moments, list):
-                story_index["moments"] = moments[:8]
-                story_index["moments_truncated"] = len(moments) > 8
+            segment_index = queue.pop(0)
+            segment = originals[index][segment_index]
+            cost = len(json.dumps(segment, ensure_ascii=False, separators=(",", ":"))) + 1
+            if cost <= remaining:
+                retained[index].add(segment_index)
+                remaining -= cost
+    for asset, segments, indexes in zip(public.get("assets", []), originals, retained):
+        asset["transcript_segments"] = [segments[index] for index in sorted(indexes)]
+        asset["transcript_truncated"] = len(indexes) < len(segments)
     return public
 
 
@@ -278,12 +297,24 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
             + "."
             if locked else ""
         )
+        scope_instruction = (
+            "Rebuild the story from all available source transcripts and the original brief. "
+            "The previous plan is a rejected draft, not a template: you may replace, reorder, "
+            "and retime unlocked clips. Identify the supported beginning, development, and payoff "
+            "before selecting cuts. Keep causal connections, complete thoughts, and necessary setup. "
+            if revision.get("mode") == "rebuild_story" else
+            "Make the requested changes to the previous plan while preserving unrelated strengths. "
+        )
         revision_instruction = (
-            "This is a revision of the supplied previous_plan. Follow the user's revision instruction "
-            "while preserving requested strengths and all source-led constraints. Caption corrections "
-            "are applied deterministically after planning; do not alter spoken words to simulate them."
-            + locked_instruction
-            + "\n\n"
+            "This is a revision. The current instruction is: "
+            + str(revision.get("instruction") or "")
+            + "\n" + scope_instruction
+            + "Use source passages outside the previous cut when needed. A response that merely "
+              "rewrites editorial_summary without changing the requested edit is insufficient. "
+              "In editorial_summary, explain the concrete changes and any request the available "
+              "footage cannot satisfy. Caption corrections are applied deterministically after planning; "
+              "do not alter spoken words to simulate them."
+            + locked_instruction + "\n\n"
         )
     learning = public.get("learning_preferences")
     learning_directives = learning.get("directives") if isinstance(learning, dict) else []
@@ -339,7 +370,9 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
             "Create one JSON edit plan from this trusted job context. The validator will reject invented "
             "asset IDs, out-of-range timecodes, overlapping ranges, unsupported effects, and previews longer "
             "than 60 seconds. Use story_spine and the locally retrieved story_index moments to build a coherent "
-            "15–60 second transcript-led story. Use story_spine.engagement_assessment to compare hook/payoff/ending "
+            "15–60 second transcript-led story. Read the supplied transcript in source order; moment cards "
+            "are retrieval hints. Preserve connecting dialogue, cause and effect, pronoun references, "
+            "necessary setup, and the speaker's conclusion. Use story_spine.engagement_assessment to compare hook/payoff/ending "
             "candidates, avoid repeated-idea groups, and prefer complete thoughts with clean edit points. Start with "
             "the strongest supported hook instead of routine setup, "
             "then give only the context needed to understand the point, develop it, deliver a payoff, and follow "

@@ -11,6 +11,19 @@ from app.schemas import DeliveryVariantCreate, JobAssetAttach, JobCreate, Librar
 
 
 class RevisionSchemaTests(unittest.TestCase):
+    def test_story_rebuild_requires_a_note_and_unlocked_selections(self) -> None:
+        with self.assertRaisesRegex(ValidationError, "describe the story"):
+            RevisionCreate(revision_mode="rebuild_story")
+        with self.assertRaisesRegex(ValidationError, "unlock clip order"):
+            RevisionCreate(note="Rebuild around the brief", revision_mode="rebuild_story",
+                           locked_elements=["clip order"])
+
+    def test_story_rebuild_preserves_other_protections(self) -> None:
+        revision = RevisionCreate(note="Keep the explanation together", revision_mode="rebuild_story",
+                                  locked_elements=["music", "effects"])
+        self.assertEqual(revision.revision_mode, "rebuild_story")
+        self.assertEqual(revision.locked_elements, ["music", "effects"])
+
     def test_caption_validation_matches_rendered_words_without_case_or_punctuation(self) -> None:
         context = {
             "assets": [{

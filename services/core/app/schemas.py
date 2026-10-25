@@ -572,6 +572,7 @@ class EditRunResponse(BaseModel):
     reasoning_effort: ReasoningEffort | None = None
     based_on_run_id: UUID | None = None
     revision_note: str | None = None
+    revision_mode: Literal["targeted", "rebuild_story"] = "targeted"
     caption_corrections: list[dict[str, str]] = Field(default_factory=list)
     caption_settings: dict[str, Any] = Field(default_factory=dict)
     effects_enabled: bool | None = None
@@ -631,6 +632,7 @@ class RevisionCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     note: str = Field(default="", max_length=1200)
+    revision_mode: Literal["targeted", "rebuild_story"] = "targeted"
     caption_corrections: list[CaptionCorrection] = Field(default_factory=list, max_length=50)
     clip_adjustments: list[ClipAdjustment] = Field(default_factory=list, max_length=48)
     caption_settings: CaptionSettings | None = None
@@ -644,6 +646,12 @@ class RevisionCreate(BaseModel):
 
     @model_validator(mode="after")
     def has_requested_change(self) -> "RevisionCreate":
+        if self.revision_mode == "rebuild_story" and not self.note:
+            raise ValueError("describe the story you want rebuilt")
+        if self.revision_mode == "rebuild_story" and any(
+            item in self.locked_elements for item in ("clip order", "spoken phrases")
+        ):
+            raise ValueError("unlock clip order and spoken phrases before rebuilding the story")
         if (
             not self.note
             and not self.caption_corrections

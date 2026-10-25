@@ -1062,6 +1062,7 @@ export function requestRevision(
   input: {
     readonly note: string;
     readonly captionCorrections: readonly CaptionCorrection[];
+    readonly revisionMode?: "targeted" | "rebuild_story";
     readonly clipAdjustments?: readonly {
       readonly clip_index: number;
       readonly action: "keep" | "remove" | "move_up" | "move_down";
@@ -1081,6 +1082,7 @@ export function requestRevision(
     method: "POST",
     body: JSON.stringify({
       note: input.note,
+      revision_mode: input.revisionMode ?? "targeted",
       caption_corrections: input.captionCorrections,
       clip_adjustments: input.clipAdjustments ?? [],
       caption_settings: input.captionSettings,
