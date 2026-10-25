@@ -386,7 +386,7 @@ class MontageFilterTests(unittest.TestCase):
             height=960,
             fps=30,
             music_input_index=2,
-            tone_map_inputs=[True, False],
+            hdr_modes=["hlg", None],
         )
         self.assertIn("sidechaincompress", graph_with_music)
         self.assertIn("asplit=2[source][key]", graph_with_music)
@@ -399,6 +399,7 @@ class MontageFilterTests(unittest.TestCase):
         )
         self.assertIn("threshold=0.080:ratio=4", graph_with_music)
         self.assertIn("tonemap=mobius", graph_with_music)
+        self.assertIn("npl=1000", graph_with_music)
         self.assertLess(
             graph_with_music.index("tonemap=mobius"),
             graph_with_music.index("scale=540:960"),

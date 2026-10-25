@@ -17,7 +17,7 @@ from app.media_analysis import (
     render_webvtt,
     resolve_source,
     run_command,
-    video_probe_is_hdr,
+    video_probe_hdr_mode,
 )
 
 
@@ -271,11 +271,11 @@ def _clip_video_filter(
     width: int,
     height: int,
     frames_per_second: int,
-    tone_map_to_sdr: bool = False,
+    hdr_mode: str | None = None,
 ) -> str:
     chain = f"[{index}:v:0]"
-    if tone_map_to_sdr:
-        chain += hdr_to_sdr_filter() + ","
+    if hdr_mode is not None:
+        chain += hdr_to_sdr_filter(hdr_mode) + ","
     chain += (
         f"scale={width}:{height}:force_original_aspect_ratio=increase,"
         f"crop={width}:{height},setsar=1,setpts=PTS-STARTPTS"
@@ -318,7 +318,7 @@ def _ffmpeg_filter(
     height: int,
     frames_per_second: int,
     music_input_index: int | None = None,
-    tone_map_inputs: list[bool] | None = None,
+    hdr_modes: list[str | None] | None = None,
 ) -> str:
     filters: list[str] = []
     concat_inputs: list[str] = []
@@ -336,7 +336,7 @@ def _ffmpeg_filter(
                 width=width,
                 height=height,
                 frames_per_second=frames_per_second,
-                tone_map_to_sdr=bool(tone_map_inputs and tone_map_inputs[index]),
+                hdr_mode=hdr_modes[index] if hdr_modes else None,
             )
         )
         audio = (
@@ -433,12 +433,12 @@ def _render_video(
         )
     if music_source is not None:
         common.extend(["-stream_loop", "-1", "-i", str(music_source)])
-    probe_cache: dict[Path, bool] = {}
-    tone_map_inputs: list[bool] = []
+    probe_cache: dict[Path, str | None] = {}
+    hdr_modes: list[str | None] = []
     for source, _, _ in sources:
         if source not in probe_cache:
-            probe_cache[source] = video_probe_is_hdr(probe_media(source, timeout))
-        tone_map_inputs.append(probe_cache[source])
+            probe_cache[source] = video_probe_hdr_mode(probe_media(source, timeout))
+        hdr_modes.append(probe_cache[source])
     common.extend(
         [
             "-filter_complex",
@@ -449,7 +449,7 @@ def _render_video(
                 height=height,
                 frames_per_second=frames_per_second,
                 music_input_index=len(sources) if music_source is not None else None,
-                tone_map_inputs=tone_map_inputs,
+                hdr_modes=hdr_modes,
             ),
             "-map",
             "[vout]",
@@ -622,6 +622,7 @@ def render_edit_preview(
             "video_encoder": encoder,
             "audio_preset": "spoken_voice_v1",
             "caption_style": "clean_blue_v1",
+            "color_pipeline": "transfer_aware_hdr_to_bt709_sdr_v2",
         },
         "sources": [
             {
@@ -845,6 +846,7 @@ def render_final_delivery(
             "video_encoder": encoder,
             "audio_preset": "spoken_voice_v1",
             "caption_style": "clean_blue_v1",
+            "color_pipeline": "transfer_aware_hdr_to_bt709_sdr_v2",
         },
         "caption_corrections": caption_corrections,
         "sources": [

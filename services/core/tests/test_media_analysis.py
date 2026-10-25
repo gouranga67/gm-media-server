@@ -10,6 +10,7 @@ from app.media_analysis import (
     normalize_probe,
     render_webvtt,
     resolve_source,
+    video_probe_hdr_mode,
     video_probe_is_hdr,
 )
 
@@ -85,7 +86,10 @@ class ProbeNormalizationTests(unittest.TestCase):
         self.assertEqual(result["streams"][0]["duration_seconds"], 12.467)
         self.assertEqual(result["streams"][0]["color_transfer"], "arib-std-b67")
         self.assertTrue(video_probe_is_hdr(result))
-        self.assertIn("tonemap=mobius", hdr_to_sdr_filter())
+        self.assertEqual(video_probe_hdr_mode(result), "hlg")
+        hlg_filter = hdr_to_sdr_filter("hlg")
+        self.assertIn("npl=1000", hlg_filter)
+        self.assertIn("desat=0:peak=1", hlg_filter)
         self.assertEqual(result["streams"][1]["duration_seconds"], 12.5)
         self.assertNotIn("tags", json.dumps(result))
         self.assertNotIn("private", json.dumps(result))
@@ -101,6 +105,19 @@ class ProbeNormalizationTests(unittest.TestCase):
                 }]}
             )
         )
+
+    def test_keeps_pq_on_the_high_dynamic_range_tonemap_path(self) -> None:
+        probe = {
+            "streams": [{
+                "type": "video",
+                "pixel_format": "yuv420p10le",
+                "color_transfer": "smpte2084",
+                "color_primaries": "bt2020",
+            }]
+        }
+
+        self.assertEqual(video_probe_hdr_mode(probe), "pq")
+        self.assertIn("npl=100", hdr_to_sdr_filter(video_probe_hdr_mode(probe) or "generic"))
 
 
 class TranscriptOutputTests(unittest.TestCase):

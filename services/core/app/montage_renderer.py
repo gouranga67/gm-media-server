@@ -27,7 +27,7 @@ from app.media_analysis import (
     render_webvtt,
     resolve_source,
     run_command,
-    video_probe_is_hdr,
+    video_probe_hdr_mode,
 )
 
 
@@ -80,11 +80,11 @@ def _video_filter(
     width: int,
     height: int,
     fps: int,
-    tone_map_to_sdr: bool = False,
+    hdr_mode: str | None = None,
 ) -> str:
     chain = f"[{index}:v:0]"
-    if tone_map_to_sdr:
-        chain += hdr_to_sdr_filter() + ","
+    if hdr_mode is not None:
+        chain += hdr_to_sdr_filter(hdr_mode) + ","
     chain += (
         f"scale={width}:{height}:force_original_aspect_ratio=increase,"
         f"crop={width}:{height},setsar=1"
@@ -141,7 +141,7 @@ def _filter_graph(
     fps: int,
     music_input_index: int | None,
     captions_path: Path | None = None,
-    tone_map_inputs: list[bool] | None = None,
+    hdr_modes: list[str | None] | None = None,
 ) -> str:
     filters: list[str] = []
     concat_inputs: list[str] = []
@@ -161,7 +161,7 @@ def _filter_graph(
                 width,
                 height,
                 fps,
-                tone_map_to_sdr=bool(tone_map_inputs and tone_map_inputs[index]),
+                hdr_mode=hdr_modes[index] if hdr_modes else None,
             )
         )
         asset = assets[str(clip.asset_id)]
@@ -316,17 +316,17 @@ def _render(
     music_source, _ = _selected_music(context, plan, settings)
     if music_source is not None:
         common.extend(["-stream_loop", "-1", "-i", str(music_source)])
-    probe_cache: dict[Path, bool] = {}
-    tone_map_inputs: list[bool] = []
+    probe_cache: dict[Path, str | None] = {}
+    hdr_modes: list[str | None] = []
     for source, clip in zip(render_sources, plan.clips, strict=True):
         if clip.media_kind == "image":
-            tone_map_inputs.append(False)
+            hdr_modes.append(None)
             continue
         if source not in probe_cache:
-            probe_cache[source] = video_probe_is_hdr(
+            probe_cache[source] = video_probe_hdr_mode(
                 probe_media(source, settings.analysis_command_timeout_seconds)
             )
-        tone_map_inputs.append(probe_cache[source])
+        hdr_modes.append(probe_cache[source])
     common.extend(
         [
             "-filter_complex",
@@ -338,7 +338,7 @@ def _render(
                 fps=30,
                 music_input_index=len(plan.clips) if music_source is not None else None,
                 captions_path=captions_path,
-                tone_map_inputs=tone_map_inputs,
+                hdr_modes=hdr_modes,
             ),
             "-map",
             "[vout]",
@@ -452,6 +452,7 @@ def _manifest(
             "frames_per_second": 30,
             "video_encoder": encoder,
             "audio_preset": "montage_mix_v1",
+            "color_pipeline": "transfer_aware_hdr_to_bt709_sdr_v2",
         },
         "sources": [
             {

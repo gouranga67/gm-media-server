@@ -160,8 +160,8 @@ def probe_media(source: Path, timeout: int) -> dict[str, Any]:
     return normalize_probe(json.loads(completed.stdout))
 
 
-def video_probe_is_hdr(probe: dict[str, Any]) -> bool:
-    """Identify common HDR10 and HLG video signals from normalized ffprobe data."""
+def video_probe_hdr_mode(probe: dict[str, Any]) -> str | None:
+    """Classify the HDR transfer so rendering can apply the correct luminance scale."""
 
     video = next(
         (stream for stream in probe.get("streams", []) if stream.get("type") == "video"),
@@ -170,15 +170,40 @@ def video_probe_is_hdr(probe: dict[str, Any]) -> bool:
     transfer = str(video.get("color_transfer") or "").lower()
     primaries = str(video.get("color_primaries") or "").lower()
     pixel_format = str(video.get("pixel_format") or "").lower()
-    return (
-        transfer in {"smpte2084", "arib-std-b67"}
-        or primaries in {"bt2020", "bt2020nc", "bt2020ncl"}
+    if transfer == "arib-std-b67":
+        return "hlg"
+    if transfer == "smpte2084":
+        return "pq"
+    if (
+        primaries in {"bt2020", "bt2020nc", "bt2020ncl"}
         or ("10" in pixel_format and transfer not in {"", "bt709"})
-    )
+    ):
+        return "generic"
+    return None
 
 
-def hdr_to_sdr_filter() -> str:
-    """Return a conservative BT.2020 HDR/HLG to BT.709 SDR tone-map chain."""
+def video_probe_is_hdr(probe: dict[str, Any]) -> bool:
+    """Identify common HDR10 and HLG video signals from normalized ffprobe data."""
+
+    return video_probe_hdr_mode(probe) is not None
+
+
+def hdr_to_sdr_filter(hdr_mode: str = "generic") -> str:
+    """Return a transfer-aware HDR to BT.709 SDR tone-map chain.
+
+    HLG is display-referred by zscale. Its linearization scale is 1000 / npl,
+    so using the 100-nit SDR target as npl expands the signal tenfold before
+    tone mapping and produces the pale, clipped result common in naive phone
+    HDR conversions. A 1000-nit HLG reference keeps the decoded signal in its
+    intended range. PQ and uncertain HDR retain the conservative legacy path.
+    """
+
+    if hdr_mode == "hlg":
+        return (
+            "zscale=t=linear:npl=1000,format=gbrpf32le,"
+            "tonemap=mobius:desat=0:peak=1,"
+            "zscale=p=bt709:t=bt709:m=bt709:r=tv,format=yuv420p"
+        )
 
     return (
         "zscale=t=linear:npl=100,format=gbrpf32le,"
@@ -219,11 +244,17 @@ def _has_stream(probe: dict[str, Any], stream_type: str) -> bool:
     return any(stream.get("type") == stream_type for stream in probe["streams"])
 
 
-def create_video_proxy(source: Path, destination: Path, timeout: int) -> str:
-    source_probe = probe_media(source, timeout)
+def create_video_proxy(
+    source: Path,
+    destination: Path,
+    timeout: int,
+    source_probe: dict[str, Any] | None = None,
+) -> str:
+    source_probe = source_probe or probe_media(source, timeout)
     video_filter = "scale='min(1920,iw)':-2"
-    if video_probe_is_hdr(source_probe):
-        video_filter = f"{hdr_to_sdr_filter()},{video_filter}"
+    hdr_mode = video_probe_hdr_mode(source_probe)
+    if hdr_mode is not None:
+        video_filter = f"{hdr_to_sdr_filter(hdr_mode)},{video_filter}"
     common = [
         "ffmpeg",
         "-hide_banner",
@@ -331,7 +362,10 @@ def create_video_thumbnails(
     contact_sheet: Path,
     duration: float,
     timeout: int,
+    source_probe: dict[str, Any] | None = None,
 ) -> None:
+    hdr_mode = video_probe_hdr_mode(source_probe or probe_media(source, timeout))
+    colour_filter = f"{hdr_to_sdr_filter(hdr_mode)}," if hdr_mode else ""
     seek = min(5.0, max(0.0, duration * 0.1))
     generate_file(
         [
@@ -348,7 +382,7 @@ def create_video_thumbnails(
             "-frames:v",
             "1",
             "-vf",
-            "scale='min(640,iw)':-2",
+            f"{colour_filter}scale='min(640,iw)':-2",
             "-q:v",
             "3",
         ],
@@ -369,7 +403,7 @@ def create_video_thumbnails(
             "-frames:v",
             "1",
             "-vf",
-            f"fps=1/{interval:.6f},scale=320:-2,tile=3x3:padding=4:margin=4",
+            f"fps=1/{interval:.6f},{colour_filter}scale=320:-2,tile=3x3:padding=4:margin=4",
             "-q:v",
             "4",
         ],
@@ -642,10 +676,17 @@ def analyze_asset(
 
     if has_video and not is_image:
         proxy = proxy_directory / "proxy.mp4"
-        encoder = create_video_proxy(source, proxy, timeout)
+        encoder = create_video_proxy(source, proxy, timeout, probe)
         thumbnail = preview_directory / "thumbnail.jpg"
         contact_sheet = preview_directory / "contact-sheet.jpg"
-        create_video_thumbnails(source, thumbnail, contact_sheet, duration, timeout)
+        create_video_thumbnails(
+            source,
+            thumbnail,
+            contact_sheet,
+            duration,
+            timeout,
+            probe,
+        )
         derived.update(
             {
                 "proxy": _relative(settings.media_root, proxy),

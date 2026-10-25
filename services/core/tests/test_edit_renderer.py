@@ -207,10 +207,12 @@ class CaptionMappingTests(unittest.TestCase):
             width=540,
             height=960,
             frames_per_second=30,
-            tone_map_to_sdr=True,
+            hdr_mode="hlg",
         )
 
         self.assertIn("tonemap=mobius", result)
+        self.assertIn("npl=1000", result)
+        self.assertIn("desat=0:peak=1", result)
         self.assertLess(result.index("tonemap=mobius"), result.index("scale=540:960"))
 
     def test_music_filter_ducks_approved_track_under_voice(self) -> None:
