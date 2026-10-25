@@ -6,7 +6,11 @@ from uuid import UUID
 from app.config import Settings, get_settings
 from app.database import connection
 from app.media_analysis import resolve_source
-from app.story_intelligence import STORY_INTELLIGENCE_VERSION, select_story_moments
+from app.story_intelligence import (
+    STORY_INTELLIGENCE_VERSION,
+    build_story_assessment,
+    select_story_moments,
+)
 
 
 def _stream_types(manifest: dict[str, Any]) -> set[str]:
@@ -86,11 +90,20 @@ def build_editor_context(
         )
     )
     assets: list[dict[str, Any]] = []
+    retrieved_story_moments: list[dict[str, Any]] = []
     for row in rows:
         manifest = row.get("manifest") if isinstance(row.get("manifest"), dict) else {}
         streams = _stream_types(manifest)
         probe_format = manifest.get("probe", {}).get("format", {})
         transcript = _read_transcript(settings, manifest) if row.get("analysis_status") == "ready" else []
+        story_moments = select_story_moments(
+            row.get("story_moments") if isinstance(row.get("story_moments"), list) else [],
+            story_query,
+        )
+        for moment in story_moments:
+            moment["asset_id"] = str(row["id"])
+            moment["source_name"] = row["source_name"]
+        retrieved_story_moments.extend(story_moments)
         asset: dict[str, Any] = {
             "asset_id": str(row["id"]),
             "source_name": row["source_name"],
@@ -111,10 +124,7 @@ def build_editor_context(
             "story_index": {
                 "status": row.get("story_status") or "pending",
                 "version": row.get("story_version") or STORY_INTELLIGENCE_VERSION,
-                "moments": select_story_moments(
-                    row.get("story_moments") if isinstance(row.get("story_moments"), list) else [],
-                    story_query,
-                ),
+                "moments": story_moments,
             },
         }
         if include_internal_paths:
@@ -162,6 +172,7 @@ def build_editor_context(
         if include_internal_paths:
             track["_storage_key"] = row["storage_key"]
         music_library.append(track)
+    story_assessment = build_story_assessment(retrieved_story_moments)
     return {
         "job": {
             "id": str(job["id"]),
@@ -202,6 +213,7 @@ def build_editor_context(
                 if job["recipe"] == "montage"
                 else ["hook", "context", "development", "payoff", "ending"]
             ),
+            "engagement_assessment": story_assessment,
         },
         "ready_for_editing": ready,
         "assets": assets,

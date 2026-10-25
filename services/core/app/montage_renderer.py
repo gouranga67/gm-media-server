@@ -427,6 +427,7 @@ def _manifest(
             "ending_instruction": context["job"].get("ending_instruction"),
             "cover_time_seconds": context["job"].get("cover_time_seconds"),
         },
+        "story_assessment": context.get("story_spine", {}).get("engagement_assessment", {}),
         "music": music,
         "render": {
             "width": width,

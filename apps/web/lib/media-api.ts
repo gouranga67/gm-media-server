@@ -348,6 +348,16 @@ export type JobReview = {
   readonly final_export: FinalExport | null;
   readonly delivery_variants: readonly DeliveryVariant[];
   readonly editorial_timeline: readonly EditorialClip[];
+  readonly story_assessment: {
+    readonly version: string;
+    readonly coverage: Readonly<Record<"hook" | "context" | "development" | "payoff" | "ending", boolean>>;
+    readonly gaps: readonly string[];
+    readonly clean_spoken_edit_points: number;
+    readonly duplicate_idea_groups: readonly (readonly { readonly text: string }[])[];
+    readonly recommendations: readonly string[];
+    readonly source_moments_considered: number;
+    readonly hosted_model_calls: number;
+  };
   readonly brand_kit: BrandKit | null;
   readonly events: readonly JobEvent[];
   readonly usage: JobUsage;

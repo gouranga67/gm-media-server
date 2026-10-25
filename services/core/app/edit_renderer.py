@@ -490,6 +490,7 @@ def render_edit_preview(
             "ending_instruction": context["job"].get("ending_instruction"),
             "cover_time_seconds": context["job"].get("cover_time_seconds"),
         },
+        "story_assessment": context.get("story_spine", {}).get("engagement_assessment", {}),
         "music": music_metadata,
         "brand_kit": context.get("brand_kit"),
         "caption_corrections": caption_corrections or [],
@@ -708,6 +709,7 @@ def render_final_delivery(
             "ending_instruction": context["job"].get("ending_instruction"),
             "cover_time_seconds": context["job"].get("cover_time_seconds"),
         },
+        "story_assessment": context.get("story_spine", {}).get("engagement_assessment", {}),
         "music": music_metadata,
         "brand_kit": context.get("brand_kit"),
         "tools": {

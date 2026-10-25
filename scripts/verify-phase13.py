@@ -52,7 +52,15 @@ def wait_for_story_backfill() -> dict:
         latest = request("catalog/status")
         ready = int(latest.get("assets_ready") or 0)
         story_ready = int(latest.get("story_assets_ready") or 0)
-        if ready > 0 and story_ready >= ready and int(latest.get("story_moments") or 0) > 0:
+        if (
+            ready > 0
+            and story_ready >= ready
+            and int(latest.get("story_moments") or 0) > 0
+            and latest.get("story_version") == "1.1"
+            and latest.get("catalog_version") == "1.2"
+            and int(latest.get("assets_pending") or 0) == 0
+            and int(latest.get("assets_failed") or 0) == 0
+        ):
             return latest
         time.sleep(2)
     raise RuntimeError(f"story-index backfill did not finish: {latest}")
@@ -112,9 +120,19 @@ def main() -> int:
         and isinstance(moment.get("end_seconds"), (int, float))
         and moment.get("evidence")
         and moment.get("suggested_roles")
+        and isinstance(moment.get("engagement_score"), (int, float))
+        and isinstance(moment.get("score_components"), dict)
+        and isinstance(moment.get("edit_guidance"), dict)
+        and moment.get("selection_reasons")
         for moment in moments
     ):
-        raise RuntimeError("story moments are missing source range, evidence, or narrative roles")
+        raise RuntimeError("story moments are missing engagement, edit-point, or source evidence")
+    assessment = spine.get("engagement_assessment") or {}
+    coverage = assessment.get("coverage") or {}
+    if assessment.get("version") != "1.1" or assessment.get("hosted_model_calls") != 0:
+        raise RuntimeError("the local engagement assessment is missing or stale")
+    if not all(role in coverage for role in ("hook", "context", "development", "payoff", "ending")):
+        raise RuntimeError("the local story coverage check is incomplete")
     request(f"jobs/{job['id']}/archive", "POST", {})
     print(
         json.dumps(
@@ -127,6 +145,10 @@ def main() -> int:
                 "retrieved_moments": len(moments),
                 "story_spine_round_trip": True,
                 "source_ranges_verified": True,
+                "engagement_signals_verified": True,
+                "story_coverage_roles": coverage,
+                "clean_spoken_edit_points": assessment.get("clean_spoken_edit_points"),
+                "duplicate_idea_groups": len(assessment.get("duplicate_idea_groups") or []),
                 "additional_model_tokens": 0,
             },
             indent=2,

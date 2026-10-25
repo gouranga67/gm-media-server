@@ -756,6 +756,7 @@ def job_review(job_id: UUID) -> dict[str, Any]:
         "final_export": _final_response(export) if export is not None else None,
         "delivery_variants": [_variant_response(row) for row in variants],
         "editorial_timeline": _editorial_timeline(plan_row["document"] if plan_row else None, context),
+        "story_assessment": context.get("story_spine", {}).get("engagement_assessment", {}),
         "brand_kit": brand_kit,
         "events": list(events),
         "usage": usage,

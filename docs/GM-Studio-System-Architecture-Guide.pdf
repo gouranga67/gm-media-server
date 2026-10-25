@@ -689,7 +689,7 @@ endobj
 << /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R /F4 6 0 R >> >> /Contents 25 0 R >>
 endobj
 27 0 obj
-<< /Length 5937 >>
+<< /Length 6738 >>
 stream
 q 0.930 0.970 0.980 rg 54.00 611.89 487.28 168.00 re f Q
 q 0.820 0.850 0.860 RG 0.70 w 54.00 611.89 487.28 168.00 re S Q
@@ -744,15 +744,20 @@ BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 452.49 Tm (Backups are encrypt
 q 0.270 0.720 0.780 rg 54.00 427.49 4.00 15.00 re f Q
 BT /F2 15.50 Tf 0.067 0.176 0.302 rg 1 0 0 1 66.00 423.49 Tm (Phase 13 story intelligence) Tj ET
 BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 398.49 Tm (Phase 13 adds a local story-intelligence layer. It turns existing transcripts and scene ranges into) Tj ET
-BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 385.09 Tm (reusable, source-timestamped moment cards. A compact local retrieval step chooses relevant and) Tj ET
-BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 371.69 Tm (structurally strong evidence for the editor. The job form records the audience, desired) Tj ET
-BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 358.29 Tm (understanding, intended feeling, and ending. The edit plan describes each clip's narrative role,) Tj ET
-BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 344.89 Tm (such as hook, context, development, payoff, reaction, or ending, plus its editorial intent.) Tj ET
-BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 325.49 Tm (This improves story quality without adding a model call per clip. Analysis is performed once and) Tj ET
-BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 312.09 Tm (cached, one bounded editorial request plans a new edit, and exact timeline refinements and delivery) Tj ET
-BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 298.69 Tm (variants continue locally without additional model usage. Later Phase 13 work can add locally) Tj ET
-BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 285.29 Tm (measured motion, faces, laughter, applause, shot scale, and continuity hints to the same evidence) Tj ET
-BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 271.89 Tm (contract.) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 385.09 Tm (reusable, source-timestamped moment cards. Each card records speech cadence, pauses, transcript) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 371.69 Tm (confidence, specificity, hook/payoff/reaction strength, scene pace, sharpness evidence, and clean) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 358.29 Tm (cut guidance. A compact local retrieval step favors relevant, engaging, editable evidence while) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 344.89 Tm (suppressing repeated ideas. The job form records the audience, desired understanding, intended) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 331.49 Tm (feeling, and ending. The edit plan describes each clip's narrative role, such as hook, context,) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 318.09 Tm (development, payoff, reaction, or ending, plus its editorial intent.) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 298.69 Tm (Before planning, a deterministic story check compares candidate hooks, payoffs, reactions, and) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 285.29 Tm (endings; reports missing roles; counts clean spoken edit points; and groups repeated ideas. The) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 271.89 Tm (result appears on the review screen and is included in the bounded editorial context. This improves) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 258.49 Tm (story quality without adding a model call per clip. Analysis is performed once and cached, one) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 245.09 Tm (bounded editorial request plans a new edit, and exact timeline refinements and delivery variants) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 231.69 Tm (continue locally without additional model usage. Later Phase 13 work can add locally measured) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 218.29 Tm (motion, faces, laughter, applause, shot scale, and finer continuity hints to the same evidence) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 204.89 Tm (contract.) Tj ET
 q 0.820 0.850 0.860 RG 0.50 w 54.00 35.00 m 541.28 35.00 l S Q
 BT /F1 7.20 Tf 0.340 0.390 0.420 rg 1 0 0 1 54.00 21.00 Tm (GM Studio System Architecture) Tj ET
 BT /F2 7.20 Tf 0.340 0.390 0.420 rg 1 0 0 1 507.28 21.00 Tm (11 / 11) Tj ET
@@ -791,9 +796,9 @@ xref
 0000050375 00000 n 
 0000055445 00000 n 
 0000055609 00000 n 
-0000061598 00000 n 
+0000062399 00000 n 
 trailer
 << /Size 29 /Root 1 0 R >>
 startxref
-61762
+62563
 %%EOF

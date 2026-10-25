@@ -822,6 +822,7 @@ class JobReviewResponse(BaseModel):
     final_export: FinalExportResponse | None = None
     delivery_variants: list[DeliveryVariantResponse] = Field(default_factory=list)
     editorial_timeline: list[EditorialClipResponse] = Field(default_factory=list)
+    story_assessment: dict[str, Any] = Field(default_factory=dict)
     brand_kit: BrandKitResponse | None = None
     events: list[JobEventResponse]
     usage: JobUsageSummary = Field(default_factory=JobUsageSummary)

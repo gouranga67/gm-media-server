@@ -79,7 +79,7 @@ run_check "Reversible media-library organization" python3 scripts/verify-phase8.
 run_check "Complete job history and test classification" python3 scripts/verify-job-history.py
 run_check "Editorial workspace, brand kits, and presets" python3 scripts/verify-phase11.py
 run_check "Product controls, access roles, and safe retention" python3 scripts/verify-phase12.py
-run_check "Local story intelligence and source-backed moment retrieval" python3 scripts/verify-phase13.py
+run_check "Local story intelligence, engagement, and edit guidance" python3 scripts/verify-phase13.py
 
 if $include_render; then
   printf '\nThe opt-in lane creates/revises edit runs, performs GPU renders, and may use the connected ChatGPT plan.\n'

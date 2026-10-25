@@ -30,6 +30,7 @@ import {
   type FinalExport,
   type OutputAspect,
   type Recipe,
+  type JobReview,
   type TargetDuration,
 } from "@/lib/media-api";
 
@@ -65,6 +66,7 @@ export function JobReviewControls({
   targetDuration,
   deliveryVariants,
   editorialTimeline,
+  storyAssessment,
   initialCoverTime,
   onUpdated,
 }: {
@@ -76,6 +78,7 @@ export function JobReviewControls({
   readonly targetDuration: TargetDuration;
   readonly deliveryVariants: readonly DeliveryVariant[];
   readonly editorialTimeline: readonly EditorialClip[];
+  readonly storyAssessment: JobReview["story_assessment"] | undefined;
   readonly initialCoverTime: number;
   readonly onUpdated: () => void;
 }) {
@@ -323,6 +326,32 @@ export function JobReviewControls({
       ) : null}
 
       <section className="rounded-md border border-[#D7D9D3] bg-white p-5">
+        {storyAssessment ? (
+          <div className="mb-5 rounded-md border border-[#BFE3FF] bg-[#EFF6FA] p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="font-mono text-[10px] font-bold tracking-wide text-[#174D73] uppercase">Local story check</p>
+                <p className="mt-1 text-xs leading-relaxed text-[#53646F]">
+                  {storyAssessment.source_moments_considered} source moments · {storyAssessment.clean_spoken_edit_points} clean speech edits · zero extra model calls
+                </p>
+              </div>
+              <span className="rounded-full bg-white px-2 py-1 font-mono text-[9px] font-bold text-[#174D73]">v{storyAssessment.version}</span>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {(["hook", "context", "development", "payoff", "ending"] as const).map((role) => (
+                <span className={`rounded-full px-2 py-1 font-mono text-[9px] font-bold uppercase ${storyAssessment.coverage[role] ? "bg-[#E4F1E9] text-[#307455]" : "bg-[#FFF0EC] text-[#A23B2A]"}`} key={role}>
+                  {storyAssessment.coverage[role] ? "✓" : "!"} {role}
+                </span>
+              ))}
+            </div>
+            {storyAssessment.recommendations.length ? (
+              <ul className="mt-3 space-y-1 text-xs leading-relaxed text-[#53646F]">
+                {storyAssessment.recommendations.map((recommendation) => <li key={recommendation}>• {recommendation}</li>)}
+              </ul>
+            ) : <p className="mt-3 text-xs font-bold text-[#307455]">The selected evidence can support a complete story shape.</p>}
+            {storyAssessment.duplicate_idea_groups.length ? <p className="mt-2 text-[11px] text-[#666862]">Repeated ideas detected: {storyAssessment.duplicate_idea_groups.length}. The editor was instructed to choose one strong version of each.</p> : null}
+          </div>
+        ) : null}
         <div className="mb-5">
           <p className="font-mono text-xs font-bold tracking-wide text-[#173F5F] uppercase">Edit breakdown</p>
           <p className="mt-2 text-sm text-[#666862]">Every change here makes a new local preview with zero additional model tokens.</p>

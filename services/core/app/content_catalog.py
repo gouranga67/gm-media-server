@@ -5,7 +5,7 @@ from app.config import Settings, get_settings
 from app.media_analysis import resolve_source
 
 
-CATALOG_VERSION = "1.1"
+CATALOG_VERSION = "1.2"
 
 
 def _number(value: Any, default: float = 0.0) -> float:
