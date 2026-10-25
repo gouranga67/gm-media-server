@@ -1541,6 +1541,7 @@ function NewJobFormContent() {
                   </label>
                 ))}
               </div>
+              <p className="text-xs leading-relaxed text-[#666862]">An approximate aim. The editor can finish sooner when the story is complete, without adding pauses to fill time.</p>
             </fieldset>
             <fieldset className="space-y-3" disabled={formLocked}>
               <legend className="text-xs font-bold text-[#173F5F]">OUTPUT SHAPE</legend>

@@ -156,6 +156,11 @@ class MontagePlanTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "zero source timecodes"):
             validate_edit_plan(self.document, self.assets)
 
+    def test_story_can_end_before_preferred_duration(self) -> None:
+        plan = validate_edit_plan(self.document, self.assets,
+                                  creative_direction={"target_duration_seconds": 45, "music_mode": "none"})
+        self.assertAlmostEqual(sum(clip.duration for clip in plan.clips), 15)
+
     def test_rejects_video_duration_mismatch(self) -> None:
         self.document["clips"][0]["duration"] = 6
 

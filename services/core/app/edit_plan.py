@@ -706,18 +706,7 @@ def validate_edit_plan(
     direction = creative_direction or {}
     target = direction.get("target_duration_seconds")
     if target in TARGET_DURATION_RANGES:
-        minimum, maximum = TARGET_DURATION_RANGES[target]
-        available = sum(
-            float(asset.get("duration_seconds") or 0)
-            for asset in assets
-            if asset.get("has_video") and asset.get("has_audio")
-        )
-        minimum = min(minimum, max(0.25, available - 0.5))
-        if total_duration < minimum - 0.01:
-            raise ValueError(
-                f"edit duration {total_duration:.3f}s is below the {minimum:.3f}s floor "
-                f"for a {target}s target"
-            )
+        _preferred_minimum, maximum = TARGET_DURATION_RANGES[target]
         if total_duration > maximum + 0.01:
             raise ValueError(
                 f"edit duration {total_duration:.3f}s exceeds the {maximum:.3f}s ceiling "
@@ -843,21 +832,11 @@ def validate_montage_plan(
     direction = creative_direction or {}
     target = direction.get("target_duration_seconds")
     if target in TARGET_DURATION_RANGES:
-        minimum, maximum = TARGET_DURATION_RANGES[target]
-        has_still = any(
-            str(asset.get("mime_type") or "").startswith("image/") for asset in assets
-        )
-        if not has_still:
-            available = sum(
-                float(asset.get("duration_seconds") or 0)
-                for asset in assets
-                if asset.get("has_video")
-            )
-            minimum = min(minimum, max(1.0, available - 0.5))
-        if total_duration < minimum - 0.01 or total_duration > maximum + 0.01:
+        _preferred_minimum, maximum = TARGET_DURATION_RANGES[target]
+        if total_duration > maximum + 0.01:
             raise ValueError(
-                f"montage duration {total_duration:.3f}s is outside the "
-                f"{minimum:.3f}–{maximum:.3f}s range for a {target}s target"
+                f"montage duration {total_duration:.3f}s exceeds the {maximum:.3f}s ceiling "
+                f"for a {target}s target"
             )
     for asset_id, ranges in used_ranges.items():
         ordered = sorted(ranges)

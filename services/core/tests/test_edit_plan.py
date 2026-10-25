@@ -98,14 +98,18 @@ class EditPlanValidationTests(unittest.TestCase):
         self.assertEqual(plan.clips[0].editorial_intent, "")
         self.assertEqual(plan.music_mix, "none")
 
-    def test_enforces_requested_duration_when_footage_is_available(self) -> None:
+    def test_complete_story_can_finish_below_preferred_duration(self) -> None:
         self.assets[0]["duration_seconds"] = 60.0
-        with self.assertRaisesRegex(ValueError, "below the 36.000s floor"):
-            validate_edit_plan(
-                self.document,
-                self.assets,
-                creative_direction={"target_duration_seconds": 45},
-            )
+        plan = validate_edit_plan(
+            self.document, self.assets, creative_direction={"target_duration_seconds": 45},
+        )
+        self.assertAlmostEqual(edit_plan_duration(plan), 7.5)
+
+    def test_preferred_duration_still_enforces_upper_limit(self) -> None:
+        self.document["clips"][0].update(source_in=0, source_out=30)
+        with self.assertRaisesRegex(ValueError, "ceiling"):
+            validate_edit_plan(self.document, self.assets,
+                               creative_direction={"target_duration_seconds": 20})
 
     def test_rejects_short_animated_zoom(self) -> None:
         self.document["clips"][0].update(

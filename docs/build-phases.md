@@ -411,3 +411,7 @@ The editor now retains complete source transcripts alongside local moment cards 
 ### Curated starter catalogue
 
 The repeatable `scripts/import-creative-starter-library.py` importer installs 16 Kenney CC0 sound effects, 20 Google Noto Emoji v2.047 PNGs under Apache-2.0, and two CC0 background tracks from their original OpenGameArt submissions. It checks both whole-download and selected-member hashes, uses only the reviewed file URLs, reads named archive members without extraction, skips exact duplicates, and keeps each source URL, author, purpose, tags, licence, and notice in the local catalogue. The API image includes FFprobe to validate imports. Creative upload forms retain their form element before asynchronous work so a completed upload can reset cleanly. Delivery packages carry third-party credits and the full Apache licence for Noto artwork.
+
+### Story-first duration and explicit pause evidence
+
+Target length is now an approximate aim with the existing upper duration limit; a complete shorter story is accepted rather than rejected for missing a minimum duration. This applies to talking-head and montage plans and to local pause corrections. New editor contexts expose up to 24 source-timed word gaps of at least 0.65 seconds, with a warning that absent speech may contain laughter or meaningful actions. Planning guidance favors complete thoughts over filling time and asks for short natural pauses and bounded comic beats. Existing review controls can tighten a measured pause without a new AI request.

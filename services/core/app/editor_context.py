@@ -6,6 +6,7 @@ from uuid import UUID
 
 from app.config import Settings, get_settings
 from app.database import connection
+from app.edit_plan import source_word_gaps
 from app.media_analysis import probe_media, resolve_source, video_probe_is_hdr
 from app.learning import learning_context_for_job
 from app.story_intelligence import (
@@ -136,6 +137,16 @@ def build_editor_context(
                 "moments": story_moments,
             },
         }
+        gaps = source_word_gaps(asset, 0, float(asset.get("duration_seconds") or 0))
+        longest = sorted((gap for gap in gaps if gap[2] >= 0.65),
+                         key=lambda gap: gap[2], reverse=True)[:24]
+        asset["speech_gaps"] = [
+            {"start": round(start, 3), "end": round(end, 3), "duration_seconds": round(length, 3)}
+            for start, end, length in sorted(longest)
+        ]
+        asset["speech_gap_note"] = (
+            "Word-timing gaps, not verified silence; may contain laughter, actions, or reactions."
+        )
         if include_internal_paths:
             asset["_storage_key"] = row["storage_key"]
             proxy = manifest.get("derived", {}).get("proxy")
