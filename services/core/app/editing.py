@@ -7,6 +7,7 @@ from fastapi.responses import FileResponse
 from psycopg.types.json import Jsonb
 from pydantic import ValidationError
 
+from app.caption_text import caption_phrase_exists
 from app.config import get_settings
 from app.database import connection
 from app.edit_plan import MontageEditPlan, TalkingHeadEditPlan, document_sha256, validate_edit_plan
@@ -547,15 +548,22 @@ def preview_file(
 def _validate_caption_corrections(
     context: dict[str, Any], corrections: list[dict[str, str]]
 ) -> None:
-    transcript_text = [
-        str(segment.get("text", ""))
-        for asset in context["assets"]
-        for segment in asset.get("transcript_segments", [])
-        if isinstance(segment, dict)
-    ]
+    transcript_text: list[str] = []
+    for asset in context["assets"]:
+        for segment in asset.get("transcript_segments", []):
+            if not isinstance(segment, dict):
+                continue
+            transcript_text.append(str(segment.get("text", "")))
+            word_text = " ".join(
+                str(word.get("text") or "")
+                for word in segment.get("words", [])
+                if isinstance(word, dict)
+            )
+            if word_text:
+                transcript_text.append(word_text)
     for correction in corrections:
         original = correction["original_text"]
-        if not any(original in text for text in transcript_text):
+        if not any(caption_phrase_exists(text, original) for text in transcript_text):
             raise HTTPException(
                 status_code=422,
                 detail=f"caption text was not found in this job transcript: {original}",

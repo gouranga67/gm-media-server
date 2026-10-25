@@ -930,16 +930,21 @@ def process_one_edit(state: WorkerState) -> bool:
                     "locked_elements": run.get("locked_elements") or [],
                 }
             adjustments = list(run.get("clip_adjustments") or [])
-            if adjustments and not run.get("revision_note"):
+            deterministic_revision = bool(run.get("based_on_run_id")) and not run.get("revision_note")
+            if deterministic_revision:
                 previous_plan = validate_edit_plan(
                     context["revision"]["previous_plan"],
                     context["assets"],
                     allow_post_copy=bool(context["project"]["ai_copy_allowed"]),
                     music_tracks=context["music_library"],
                 )
-                proposed = apply_timeline_adjustments(previous_plan, adjustments)
+                proposed = (
+                    apply_timeline_adjustments(previous_plan, adjustments)
+                    if adjustments
+                    else previous_plan
+                )
                 provenance = {
-                    "provider": "local_timeline",
+                    "provider": "local_timeline" if adjustments else "local_caption",
                     "model": "deterministic_editor_v1",
                     "reasoning_effort": None,
                 }
@@ -953,7 +958,7 @@ def process_one_edit(state: WorkerState) -> bool:
                     proposed.model_dump(mode="json"),
                     context["assets"],
                     allow_post_copy=bool(context["project"]["ai_copy_allowed"]),
-                    creative_direction=None if adjustments and not run.get("revision_note") else context["job"],
+                    creative_direction=None if deterministic_revision else context["job"],
                     music_tracks=context["music_library"],
                 )
             except (ValueError, ValidationError) as validation_error:

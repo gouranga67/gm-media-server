@@ -480,7 +480,10 @@ export function JobReviewControls({
         {recipe === "talking_head" ? (
           <fieldset className="mt-5 border-t border-[#D7D9D3] pt-5">
             <legend className="pr-2 text-sm font-bold text-[#20211F]">Optional caption correction</legend>
-            <label className="mt-2 block text-xs text-[#666862]" htmlFor="caption-original">Current transcript text</label>
+            <p className="mt-2 text-xs leading-relaxed text-[#666862]">
+              This changes only the matching on-screen words. Capitalization and trailing punctuation do not need to match.
+            </p>
+            <label className="mt-3 block text-xs text-[#666862]" htmlFor="caption-original">Current on-screen caption text</label>
             <Input id="caption-original" maxLength={300} onChange={(event) => setOriginalText(event.target.value)} placeholder="Incorrect name or phrase" value={originalText} />
             <label className="mt-3 block text-xs text-[#666862]" htmlFor="caption-replacement">Replace with</label>
             <Input id="caption-replacement" maxLength={300} onChange={(event) => setReplacementText(event.target.value)} placeholder="Correct text" value={replacementText} />

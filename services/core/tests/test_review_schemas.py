@@ -2,11 +2,30 @@ import unittest
 
 from pydantic import ValidationError
 
-from app.editing import _job_history_kind, _needs_montage_delivery_refresh
+from app.editing import (
+    _job_history_kind,
+    _needs_montage_delivery_refresh,
+    _validate_caption_corrections,
+)
 from app.schemas import DeliveryVariantCreate, JobAssetAttach, JobCreate, LibraryAssetUpdate, LibraryCollectionCreate, RevisionCreate
 
 
 class RevisionSchemaTests(unittest.TestCase):
+    def test_caption_validation_matches_rendered_words_without_case_or_punctuation(self) -> None:
+        context = {
+            "assets": [{
+                "transcript_segments": [{
+                    "text": "Different normalized segment text",
+                    "words": [{"text": "Costa"}, {"text": "Royal!"}],
+                }],
+            }],
+        }
+
+        _validate_caption_corrections(
+            context,
+            [{"original_text": "costa royal", "replacement_text": "castor oil"}],
+        )
+
     def test_labels_only_reserved_verification_project_names_as_tests(self) -> None:
         self.assertEqual(_job_history_kind("Phase 3 verification — 2026-10-24"), "verification")
         self.assertEqual(_job_history_kind("Phase 6C library verification"), "verification")

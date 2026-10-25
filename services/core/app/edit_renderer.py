@@ -5,6 +5,7 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
+from app.caption_text import replace_caption_phrase
 from app.config import Settings, get_settings
 from app.edit_plan import TalkingHeadEditPlan, document_sha256
 from app.editor_context import resolve_internal_asset_render_source
@@ -70,7 +71,8 @@ def _correct_caption_text(
     for correction in corrections or []:
         original_text = str(correction.get("original_text", ""))
         if original_text:
-            text = text.replace(
+            text = replace_caption_phrase(
+                text,
                 original_text,
                 str(correction.get("replacement_text", "")),
             )

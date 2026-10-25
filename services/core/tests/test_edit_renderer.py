@@ -114,6 +114,44 @@ class CaptionMappingTests(unittest.TestCase):
 
         self.assertEqual(events[0]["text"], "Welcome to Sydney today")
 
+    def test_caption_replacement_ignores_case_and_preserves_punctuation(self) -> None:
+        asset_id = uuid4()
+        plan = TalkingHeadEditPlan.model_validate(
+            {
+                "schema_version": "1.0",
+                "recipe": "talking_head",
+                "clips": [{
+                    "asset_id": str(asset_id),
+                    "source_in": 0,
+                    "source_out": 2,
+                    "crop": "center_fill",
+                    "transition": "cut",
+                }],
+                "caption_style": "clean_blue_v1",
+                "audio_preset": "spoken_voice_v1",
+                "end_card": "none",
+                "editorial_summary": "Caption case correction test.",
+            }
+        )
+        events = caption_events(
+            plan,
+            [{
+                "asset_id": str(asset_id),
+                "transcript_segments": [{
+                    "start": 0,
+                    "end": 2,
+                    "text": "Costa Royal!",
+                    "words": [
+                        {"start": 0, "end": 0.7, "text": "Costa"},
+                        {"start": 0.75, "end": 1.5, "text": "Royal!"},
+                    ],
+                }],
+            }],
+            [{"original_text": "costa royal", "replacement_text": "castor oil"}],
+        )
+
+        self.assertEqual(events[0]["text"], "castor oil!")
+
     def test_long_whisper_segment_becomes_progressive_caption_cards(self) -> None:
         asset_id = uuid4()
         words = [
