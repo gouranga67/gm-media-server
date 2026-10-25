@@ -533,6 +533,11 @@ def validate_edit_plan(
 
     tracks = {str(track["track_id"]): track for track in music_tracks or []}
     requested_music = direction.get("music_mode") or "none"
+    # The job setting is authoritative. Models and legacy saved plans may carry
+    # a stale track selection, but a voice-only job must always remain voice-only.
+    if requested_music == "none":
+        plan.music_track_id = None
+        plan.music_mix = "none"
     if plan.music_track_id is None:
         if plan.music_mix != "none":
             raise ValueError("a music mix requires an approved music track")
@@ -637,6 +642,11 @@ def validate_montage_plan(
 
     tracks = {str(track["track_id"]): track for track in music_tracks or []}
     requested_music = direction.get("music_mode") or "none"
+    # Enforce the same job-level invariant for montage plans, including older
+    # plans retried after the music preference changed.
+    if requested_music == "none":
+        plan.music_track_id = None
+        plan.music_mix = "none"
     if plan.music_track_id is None:
         if plan.music_mix != "none":
             raise ValueError("a music mix requires an approved music track")

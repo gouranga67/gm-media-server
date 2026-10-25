@@ -133,6 +133,23 @@ class MontagePlanTests(unittest.TestCase):
         self.assertEqual(repaired["music_track_id"], str(previous_track_id))
         self.assertEqual(repairs, ["preserved_previous_approved_music_track"])
 
+    def test_validator_enforces_voice_only_montage_for_stale_plans(self) -> None:
+        track_id = uuid4()
+        self.document.update(
+            music_track_id=str(track_id),
+            music_mix="present",
+        )
+
+        plan = validate_edit_plan(
+            self.document,
+            self.assets,
+            creative_direction={"target_duration_seconds": 15, "music_mode": "none"},
+            music_tracks=[{"track_id": str(track_id)}],
+        )
+
+        self.assertIsNone(plan.music_track_id)
+        self.assertEqual(plan.music_mix, "none")
+
     def test_rejects_image_source_timecodes(self) -> None:
         self.document["clips"][1]["source_out"] = 1
 

@@ -171,6 +171,23 @@ class EditPlanValidationTests(unittest.TestCase):
         self.assertEqual(repaired["music_mix"], "none")
         self.assertIn("removed_unrequested_music", repairs)
 
+    def test_validator_enforces_voice_only_job_for_stale_plans(self) -> None:
+        track_id = uuid4()
+        self.document.update(
+            music_track_id=str(track_id),
+            music_mix="subtle",
+        )
+
+        plan = validate_edit_plan(
+            self.document,
+            self.assets,
+            creative_direction={"music_mode": "none"},
+            music_tracks=[{"track_id": str(track_id)}],
+        )
+
+        self.assertIsNone(plan.music_track_id)
+        self.assertEqual(plan.music_mix, "none")
+
     def test_spoken_word_boundaries_receive_small_safety_handles(self) -> None:
         self.assets[0]["transcript_segments"] = [{
             "start": 1.0,
