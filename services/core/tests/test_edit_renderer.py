@@ -197,6 +197,22 @@ class CaptionMappingTests(unittest.TestCase):
         self.assertIn("format=yuv420p", result)
         self.assertIn("trim=duration=4.000", result)
 
+    def test_hdr_clip_is_tone_mapped_before_scaling(self) -> None:
+        result = _clip_video_filter(
+            index=0,
+            duration=4.0,
+            visual_preset="standard",
+            fade_in=False,
+            fade_out=False,
+            width=540,
+            height=960,
+            frames_per_second=30,
+            tone_map_to_sdr=True,
+        )
+
+        self.assertIn("tonemap=mobius", result)
+        self.assertLess(result.index("tonemap=mobius"), result.index("scale=540:960"))
+
     def test_music_filter_ducks_approved_track_under_voice(self) -> None:
         asset_id = uuid4()
         plan = TalkingHeadEditPlan.model_validate(
@@ -233,7 +249,9 @@ class CaptionMappingTests(unittest.TestCase):
         )
 
         self.assertIn("sidechaincompress", result)
-        self.assertIn("volume=-30dB", result)
+        self.assertIn("volume=-9dB", result)
+        self.assertIn("loudnorm=I=-18", result)
+        self.assertIn("threshold=0.080:ratio=4", result)
         self.assertGreaterEqual(result.count("channel_layouts=stereo"), 3)
         self.assertIn("apad=pad_dur=4.000", result)
 

@@ -1,11 +1,12 @@
 import json
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 from uuid import UUID
 
 from app.config import Settings, get_settings
 from app.database import connection
-from app.media_analysis import resolve_source
+from app.media_analysis import probe_media, resolve_source, video_probe_is_hdr
 from app.story_intelligence import (
     STORY_INTELLIGENCE_VERSION,
     build_story_assessment,
@@ -246,10 +247,24 @@ def resolve_internal_asset_source(settings: Settings, asset: dict[str, Any]) -> 
     return resolve_source(settings.media_root, storage_key)
 
 
+@lru_cache(maxsize=1024)
+def _source_is_hdr(source: str, timeout: int) -> bool:
+    return video_probe_is_hdr(probe_media(Path(source), timeout))
+
+
 def resolve_internal_asset_render_source(settings: Settings, asset: dict[str, Any]) -> Path:
     """Prefer the ingest-normalized video proxy for deterministic rendering."""
 
+    original = resolve_internal_asset_source(settings, asset)
+    try:
+        if _source_is_hdr(str(original), settings.analysis_command_timeout_seconds):
+            # Older proxies were created before tone mapping was available.
+            # Render HDR originals directly so existing library assets recover
+            # without destructive re-ingest or replacement.
+            return original
+    except (OSError, RuntimeError, ValueError):
+        pass
     proxy_key = asset.get("_proxy_key")
     if isinstance(proxy_key, str):
         return resolve_source(settings.media_root, proxy_key)
-    return resolve_internal_asset_source(settings, asset)
+    return original

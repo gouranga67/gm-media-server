@@ -6,9 +6,11 @@ from pathlib import Path
 from app.media_analysis import (
     atomic_write,
     format_vtt_timestamp,
+    hdr_to_sdr_filter,
     normalize_probe,
     render_webvtt,
     resolve_source,
+    video_probe_is_hdr,
 )
 
 
@@ -55,6 +57,11 @@ class ProbeNormalizationTests(unittest.TestCase):
                     "height": 1920,
                     "duration": "12.467",
                     "r_frame_rate": "30000/1001",
+                    "pix_fmt": "yuv420p10le",
+                    "color_range": "tv",
+                    "color_space": "bt2020nc",
+                    "color_transfer": "arib-std-b67",
+                    "color_primaries": "bt2020",
                     "side_data_list": [{"rotation": -90}],
                     "tags": {"title": "private"},
                 },
@@ -76,9 +83,24 @@ class ProbeNormalizationTests(unittest.TestCase):
         self.assertEqual(result["streams"][0]["frames_per_second"], 29.97)
         self.assertEqual(result["streams"][0]["rotation_degrees"], -90)
         self.assertEqual(result["streams"][0]["duration_seconds"], 12.467)
+        self.assertEqual(result["streams"][0]["color_transfer"], "arib-std-b67")
+        self.assertTrue(video_probe_is_hdr(result))
+        self.assertIn("tonemap=mobius", hdr_to_sdr_filter())
         self.assertEqual(result["streams"][1]["duration_seconds"], 12.5)
         self.assertNotIn("tags", json.dumps(result))
         self.assertNotIn("private", json.dumps(result))
+
+    def test_recognizes_ordinary_bt709_as_sdr(self) -> None:
+        self.assertFalse(
+            video_probe_is_hdr(
+                {"streams": [{
+                    "type": "video",
+                    "pixel_format": "yuv420p",
+                    "color_transfer": "bt709",
+                    "color_primaries": "bt709",
+                }]}
+            )
+        )
 
 
 class TranscriptOutputTests(unittest.TestCase):

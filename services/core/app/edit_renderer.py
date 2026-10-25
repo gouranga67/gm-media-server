@@ -12,10 +12,12 @@ from app.media_analysis import (
     READ_ONLY_MODE,
     ensure_capacity,
     generate_file,
+    hdr_to_sdr_filter,
     probe_media,
     render_webvtt,
     resolve_source,
     run_command,
+    video_probe_is_hdr,
 )
 
 
@@ -269,9 +271,13 @@ def _clip_video_filter(
     width: int,
     height: int,
     frames_per_second: int,
+    tone_map_to_sdr: bool = False,
 ) -> str:
-    chain = (
-        f"[{index}:v:0]scale={width}:{height}:force_original_aspect_ratio=increase,"
+    chain = f"[{index}:v:0]"
+    if tone_map_to_sdr:
+        chain += hdr_to_sdr_filter() + ","
+    chain += (
+        f"scale={width}:{height}:force_original_aspect_ratio=increase,"
         f"crop={width}:{height},setsar=1,setpts=PTS-STARTPTS"
     )
     total_frames = max(1, round(duration * frames_per_second) - 1)
@@ -312,6 +318,7 @@ def _ffmpeg_filter(
     height: int,
     frames_per_second: int,
     music_input_index: int | None = None,
+    tone_map_inputs: list[bool] | None = None,
 ) -> str:
     filters: list[str] = []
     concat_inputs: list[str] = []
@@ -329,6 +336,7 @@ def _ffmpeg_filter(
                 width=width,
                 height=height,
                 frames_per_second=frames_per_second,
+                tone_map_to_sdr=bool(tone_map_inputs and tone_map_inputs[index]),
             )
         )
         audio = (
@@ -357,7 +365,7 @@ def _ffmpeg_filter(
     else:
         total_duration = sum(float(clip.source_out - clip.source_in) for clip in plan.clips)
         fade_out_start = max(0.0, total_duration - 1.5)
-        volume = "-30dB" if plan.music_mix == "subtle" else "-24dB"
+        volume = "-9dB" if plan.music_mix == "subtle" else "-4dB"
         filters.append(
             "[acat]loudnorm=I=-16:LRA=11:TP=-1.5,aresample=48000,"
             "aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo,"
@@ -366,11 +374,12 @@ def _ffmpeg_filter(
         filters.append(
             f"[{music_input_index}:a:0]aresample=48000,atrim=0:{total_duration:.3f},"
             "aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo,"
+            "loudnorm=I=-18:LRA=11:TP=-1.5,"
             f"asetpts=PTS-STARTPTS,afade=t=in:st=0:d=1.000,"
             f"afade=t=out:st={fade_out_start:.3f}:d=1.500,volume={volume}[music]"
         )
         filters.append(
-            "[music][key]sidechaincompress=threshold=0.020:ratio=10:attack=15:release=350[ducked]"
+            "[music][key]sidechaincompress=threshold=0.080:ratio=4:attack=15:release=350[ducked]"
         )
         filters.append(
             "[voice][ducked]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]"
@@ -423,6 +432,12 @@ def _render_video(
         )
     if music_source is not None:
         common.extend(["-stream_loop", "-1", "-i", str(music_source)])
+    probe_cache: dict[Path, bool] = {}
+    tone_map_inputs: list[bool] = []
+    for source, _, _ in sources:
+        if source not in probe_cache:
+            probe_cache[source] = video_probe_is_hdr(probe_media(source, timeout))
+        tone_map_inputs.append(probe_cache[source])
     common.extend(
         [
             "-filter_complex",
@@ -433,6 +448,7 @@ def _render_video(
                 height=height,
                 frames_per_second=frames_per_second,
                 music_input_index=len(sources) if music_source is not None else None,
+                tone_map_inputs=tone_map_inputs,
             ),
             "-map",
             "[vout]",
@@ -482,6 +498,14 @@ def _render_video(
                 "aac",
                 "-b:a",
                 "192k" if final_quality else "128k",
+                "-color_primaries",
+                "bt709",
+                "-color_trc",
+                "bt709",
+                "-colorspace",
+                "bt709",
+                "-color_range",
+                "tv",
                 "-map_metadata",
                 "-1",
                 "-movflags",

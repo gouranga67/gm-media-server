@@ -896,6 +896,13 @@ export function requestPreview(jobId: string) {
   });
 }
 
+export function rebuildPreview(jobId: string) {
+  return apiRequest<EditRun>(`jobs/${jobId}/preview/rebuild`, {
+    method: "POST",
+    body: "{}",
+  });
+}
+
 export function getPreview(jobId: string) {
   return apiRequest<EditRun>(`jobs/${jobId}/preview`, { cache: "no-store" });
 }

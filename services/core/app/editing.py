@@ -346,6 +346,93 @@ def request_preview(job_id: UUID) -> dict[str, Any]:
 
 
 @router.post(
+    "/jobs/{job_id}/preview/rebuild",
+    response_model=EditRunResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def rebuild_preview(job_id: UUID) -> dict[str, Any]:
+    """Render the latest accepted plan again without another hosted model call."""
+
+    context = _context_or_http(job_id)
+    if not context["ready_for_editing"]:
+        raise HTTPException(status_code=409, detail="source analysis is not ready")
+    with connection() as database:
+        job = database.execute(
+            "SELECT id FROM jobs WHERE id = %s FOR UPDATE", (job_id,)
+        ).fetchone()
+        if job is None:
+            raise HTTPException(status_code=404, detail="job not found")
+        active = database.execute(
+            """
+            SELECT 1 FROM edit_runs
+            WHERE job_id = %s AND status IN ('pending', 'planning', 'rendering')
+            LIMIT 1
+            """,
+            (job_id,),
+        ).fetchone()
+        if active is not None:
+            raise HTTPException(status_code=409, detail="another edit version is still running")
+        based_on = database.execute(
+            """
+            SELECT * FROM edit_runs
+            WHERE job_id = %s AND status = 'ready' AND edit_plan_id IS NOT NULL
+            ORDER BY version DESC LIMIT 1
+            """,
+            (job_id,),
+        ).fetchone()
+        if based_on is None:
+            raise HTTPException(status_code=409, detail="a ready preview is required before rebuilding")
+        assert_job_capacity(database, job_id)
+        version = database.execute(
+            "SELECT COALESCE(max(version), 0) + 1 AS version FROM edit_runs WHERE job_id = %s",
+            (job_id,),
+        ).fetchone()["version"]
+        row = database.execute(
+            """
+            INSERT INTO edit_runs (
+                job_id, version, edit_plan_id, based_on_run_id, provider, model,
+                reasoning_effort, caption_corrections, locked_elements
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING *
+            """,
+            (
+                job_id,
+                version,
+                based_on["edit_plan_id"],
+                based_on["id"],
+                based_on.get("provider"),
+                based_on.get("model"),
+                based_on.get("reasoning_effort"),
+                Jsonb(based_on.get("caption_corrections") or []),
+                Jsonb(based_on.get("locked_elements") or []),
+            ),
+        ).fetchone()
+        database.execute(
+            "UPDATE jobs SET status = 'previewing', updated_at = now() WHERE id = %s",
+            (job_id,),
+        )
+        database.execute(
+            """
+            INSERT INTO job_events (job_id, event_type, payload)
+            VALUES (%s, 'preview_rebuild_requested', %s)
+            """,
+            (
+                job_id,
+                Jsonb(
+                    {
+                        "version": version,
+                        "based_on_version": based_on["version"],
+                        "reused_plan": True,
+                        "additional_model_calls": 0,
+                    }
+                ),
+            ),
+        )
+    assert row is not None
+    return _response(row)
+
+
+@router.post(
     "/jobs/{job_id}/edit-plans",
     response_model=EditRunResponse,
     status_code=status.HTTP_202_ACCEPTED,

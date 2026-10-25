@@ -375,7 +375,9 @@ class MontageFilterTests(unittest.TestCase):
         self.assertIn("volume=2.000dB", graph)
 
         graph_with_music = _filter_graph(
-            plan,
+            plan.model_copy(
+                update={"music_track_id": uuid4(), "music_mix": "subtle"}
+            ),
             {
                 str(video_id): {"has_audio": True},
                 str(image_id): {"has_audio": False},
@@ -384,9 +386,18 @@ class MontageFilterTests(unittest.TestCase):
             height=960,
             fps=30,
             music_input_index=2,
+            tone_map_inputs=[True, False],
         )
         self.assertIn("sidechaincompress", graph_with_music)
         self.assertIn("asplit=2[source][key]", graph_with_music)
+        self.assertIn("volume=-9dB", graph_with_music)
+        self.assertIn("loudnorm=I=-18", graph_with_music)
+        self.assertIn("threshold=0.080:ratio=4", graph_with_music)
+        self.assertIn("tonemap=mobius", graph_with_music)
+        self.assertLess(
+            graph_with_music.index("tonemap=mobius"),
+            graph_with_music.index("scale=540:960"),
+        )
         self.assertGreaterEqual(graph_with_music.count("channel_layouts=stereo"), 4)
         self.assertIn("[2:a:0]aresample=48000,atrim=0:4.000,aformat=", graph_with_music)
 

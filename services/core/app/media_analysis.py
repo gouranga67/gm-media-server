@@ -113,6 +113,11 @@ def normalize_probe(payload: dict[str, Any]) -> dict[str, Any]:
                     "height": _number(raw_stream.get("height"), int),
                     "frames_per_second": _frame_rate(raw_stream.get("r_frame_rate")),
                     "rotation_degrees": rotation,
+                    "pixel_format": raw_stream.get("pix_fmt"),
+                    "color_range": raw_stream.get("color_range"),
+                    "color_space": raw_stream.get("color_space"),
+                    "color_transfer": raw_stream.get("color_transfer"),
+                    "color_primaries": raw_stream.get("color_primaries"),
                 }
             )
         else:
@@ -155,6 +160,33 @@ def probe_media(source: Path, timeout: int) -> dict[str, Any]:
     return normalize_probe(json.loads(completed.stdout))
 
 
+def video_probe_is_hdr(probe: dict[str, Any]) -> bool:
+    """Identify common HDR10 and HLG video signals from normalized ffprobe data."""
+
+    video = next(
+        (stream for stream in probe.get("streams", []) if stream.get("type") == "video"),
+        {},
+    )
+    transfer = str(video.get("color_transfer") or "").lower()
+    primaries = str(video.get("color_primaries") or "").lower()
+    pixel_format = str(video.get("pixel_format") or "").lower()
+    return (
+        transfer in {"smpte2084", "arib-std-b67"}
+        or primaries in {"bt2020", "bt2020nc", "bt2020ncl"}
+        or ("10" in pixel_format and transfer not in {"", "bt709"})
+    )
+
+
+def hdr_to_sdr_filter() -> str:
+    """Return a conservative BT.2020 HDR/HLG to BT.709 SDR tone-map chain."""
+
+    return (
+        "zscale=t=linear:npl=100,format=gbrpf32le,"
+        "tonemap=mobius:desat=1,"
+        "zscale=p=bt709:t=bt709:m=bt709:r=tv,format=yuv420p"
+    )
+
+
 def _install_generated(temporary: Path, destination: Path) -> None:
     if not temporary.is_file() or temporary.stat().st_size == 0:
         raise RuntimeError(f"media command did not create {destination.name}")
@@ -188,6 +220,10 @@ def _has_stream(probe: dict[str, Any], stream_type: str) -> bool:
 
 
 def create_video_proxy(source: Path, destination: Path, timeout: int) -> str:
+    source_probe = probe_media(source, timeout)
+    video_filter = "scale='min(1920,iw)':-2"
+    if video_probe_is_hdr(source_probe):
+        video_filter = f"{hdr_to_sdr_filter()},{video_filter}"
     common = [
         "ffmpeg",
         "-hide_banner",
@@ -204,7 +240,7 @@ def create_video_proxy(source: Path, destination: Path, timeout: int) -> str:
         "-vf",
         # This proxy is also the deterministic render mezzanine. Preserve up
         # to 1080p landscape instead of reducing future exports to 720p.
-        "scale='min(1920,iw)':-2",
+        video_filter,
     ]
     nvenc = [
         *common,
@@ -220,6 +256,14 @@ def create_video_proxy(source: Path, destination: Path, timeout: int) -> str:
         "aac",
         "-b:a",
         "128k",
+        "-color_primaries",
+        "bt709",
+        "-color_trc",
+        "bt709",
+        "-colorspace",
+        "bt709",
+        "-color_range",
+        "tv",
         "-movflags",
         "+faststart",
     ]
@@ -241,6 +285,14 @@ def create_video_proxy(source: Path, destination: Path, timeout: int) -> str:
         "aac",
         "-b:a",
         "128k",
+        "-color_primaries",
+        "bt709",
+        "-color_trc",
+        "bt709",
+        "-colorspace",
+        "bt709",
+        "-color_range",
+        "tv",
         "-movflags",
         "+faststart",
     ]

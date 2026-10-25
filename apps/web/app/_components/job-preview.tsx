@@ -15,7 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { getJobReview, requestPreview, type JobReview } from "@/lib/media-api";
+import { getJobReview, rebuildPreview, requestPreview, type JobReview } from "@/lib/media-api";
 
 const POLL_INTERVAL_MS = 2_000;
 const PLAN_NOTICE_KEY = "gm-studio:chatgpt-plan-notice-v1";
@@ -32,6 +32,7 @@ export function JobPreview({ jobId }: { readonly jobId: string }) {
   const [review, setReview] = useState<JobReview>();
   const [error, setError] = useState<string>();
   const [retrying, setRetrying] = useState(false);
+  const [rebuilding, setRebuilding] = useState(false);
   const [pollGeneration, setPollGeneration] = useState(0);
   const [showPlanNotice, setShowPlanNotice] = useState(false);
 
@@ -90,6 +91,22 @@ export function JobPreview({ jobId }: { readonly jobId: string }) {
       setError(errorMessage(retryError));
     } finally {
       setRetrying(false);
+    }
+  };
+
+  const rebuild = async () => {
+    setRebuilding(true);
+    setError(undefined);
+    try {
+      const rebuiltRun = await rebuildPreview(jobId);
+      setReview((current) =>
+        current ? { ...current, latest_run: rebuiltRun } : current,
+      );
+      setPollGeneration((current) => current + 1);
+    } catch (rebuildError) {
+      setError(errorMessage(rebuildError));
+    } finally {
+      setRebuilding(false);
     }
   };
 
@@ -165,8 +182,21 @@ export function JobPreview({ jobId }: { readonly jobId: string }) {
                   <DownloadIcon aria-hidden="true" /> Download MP4
                 </a>
               </Button>
+              <Button
+                className="h-12 w-full"
+                disabled={rebuilding}
+                onClick={() => void rebuild()}
+                type="button"
+                variant="outline"
+              >
+                {rebuilding ? <LoaderCircleIcon aria-hidden="true" className="animate-spin" /> : <RefreshCwIcon aria-hidden="true" />}
+                Re-render exact edit
+              </Button>
+              <p className="text-center text-xs leading-relaxed text-[#666862]">
+                Keeps this cut and uses the latest local audio and colour processing · zero AI tokens
+              </p>
               <p className="text-center font-mono text-[10px] leading-relaxed text-[#666862]">
-                Version {run?.version} · {review?.job.target_duration_seconds ?? 60}s target · {review?.job.edit_style ?? "legacy"} style{retainedFinalAvailable ? " · final delivery playback" : ""}
+                Version {run?.version} · {review?.job.target_duration_seconds ?? 60}s target · {review?.job.edit_style ?? "legacy"} style · {review?.job.music_mode ?? "none"} music{retainedFinalAvailable ? " · final delivery playback" : ""}
               </p>
               {run ? (
                 <JobReviewControls

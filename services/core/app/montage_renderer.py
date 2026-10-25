@@ -22,10 +22,12 @@ from app.media_analysis import (
     READ_ONLY_MODE,
     ensure_capacity,
     generate_file,
+    hdr_to_sdr_filter,
     probe_media,
     render_webvtt,
     resolve_source,
     run_command,
+    video_probe_is_hdr,
 )
 
 
@@ -78,9 +80,13 @@ def _video_filter(
     width: int,
     height: int,
     fps: int,
+    tone_map_to_sdr: bool = False,
 ) -> str:
-    chain = (
-        f"[{index}:v:0]scale={width}:{height}:force_original_aspect_ratio=increase,"
+    chain = f"[{index}:v:0]"
+    if tone_map_to_sdr:
+        chain += hdr_to_sdr_filter() + ","
+    chain += (
+        f"scale={width}:{height}:force_original_aspect_ratio=increase,"
         f"crop={width}:{height},setsar=1"
     )
     frame_count = max(1, round(duration * fps))
@@ -135,6 +141,7 @@ def _filter_graph(
     fps: int,
     music_input_index: int | None,
     captions_path: Path | None = None,
+    tone_map_inputs: list[bool] | None = None,
 ) -> str:
     filters: list[str] = []
     concat_inputs: list[str] = []
@@ -154,6 +161,7 @@ def _filter_graph(
                 width,
                 height,
                 fps,
+                tone_map_to_sdr=bool(tone_map_inputs and tone_map_inputs[index]),
             )
         )
         asset = assets[str(clip.asset_id)]
@@ -199,7 +207,7 @@ def _filter_graph(
         )
     else:
         fade_out_start = max(0.0, total_duration - 1.5)
-        volume = "-24dB" if plan.music_mix == "subtle" else "-15dB"
+        volume = "-9dB" if plan.music_mix == "subtle" else "-4dB"
         filters.append(
             f"[acat]apad=pad_dur={total_duration:.3f},"
             f"atrim=0:{total_duration:.3f},asetpts=PTS-STARTPTS,"
@@ -209,11 +217,12 @@ def _filter_graph(
         filters.append(
             f"[{music_input_index}:a:0]aresample=48000,atrim=0:{total_duration:.3f},"
             "aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo,"
+            "loudnorm=I=-18:LRA=11:TP=-1.5,"
             f"asetpts=PTS-STARTPTS,afade=t=in:st=0:d=0.750,"
             f"afade=t=out:st={fade_out_start:.3f}:d=1.500,volume={volume}[music]"
         )
         filters.append(
-            "[music][key]sidechaincompress=threshold=0.020:ratio=10:attack=15:release=350[ducked]"
+            "[music][key]sidechaincompress=threshold=0.080:ratio=4:attack=15:release=350[ducked]"
         )
         filters.append(
             "[source][ducked]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,"
@@ -282,12 +291,14 @@ def _render(
 ) -> str:
     inventory = {str(asset["asset_id"]): asset for asset in context["assets"]}
     common = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-y"]
+    render_sources: list[Path] = []
     for clip in plan.clips:
         source = _render_source(
             settings,
             inventory[str(clip.asset_id)],
             media_kind=clip.media_kind,
         )
+        render_sources.append(source)
         if clip.media_kind == "image":
             common.extend(["-i", str(source)])
         else:
@@ -304,6 +315,17 @@ def _render(
     music_source, _ = _selected_music(context, plan, settings)
     if music_source is not None:
         common.extend(["-stream_loop", "-1", "-i", str(music_source)])
+    probe_cache: dict[Path, bool] = {}
+    tone_map_inputs: list[bool] = []
+    for source, clip in zip(render_sources, plan.clips, strict=True):
+        if clip.media_kind == "image":
+            tone_map_inputs.append(False)
+            continue
+        if source not in probe_cache:
+            probe_cache[source] = video_probe_is_hdr(
+                probe_media(source, settings.analysis_command_timeout_seconds)
+            )
+        tone_map_inputs.append(probe_cache[source])
     common.extend(
         [
             "-filter_complex",
@@ -315,6 +337,7 @@ def _render(
                 fps=30,
                 music_input_index=len(plan.clips) if music_source is not None else None,
                 captions_path=captions_path,
+                tone_map_inputs=tone_map_inputs,
             ),
             "-map",
             "[vout]",
@@ -350,6 +373,14 @@ def _render(
                     "aac",
                     "-b:a",
                     "192k" if final else "128k",
+                    "-color_primaries",
+                    "bt709",
+                    "-color_trc",
+                    "bt709",
+                    "-colorspace",
+                    "bt709",
+                    "-color_range",
+                    "tv",
                     "-map_metadata",
                     "-1",
                     "-movflags",
