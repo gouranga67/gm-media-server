@@ -875,13 +875,36 @@ def process_one_edit(state: WorkerState) -> bool:
                 ).fetchone()
             if plan_row is None:
                 raise RuntimeError("persisted edit plan was not found")
-            plan = validate_edit_plan(
+            persisted_document, persisted_repairs = repair_predictable_plan_defaults(
                 plan_row["document"],
+                creative_direction=context["job"],
+                music_tracks=context["music_library"],
+            )
+            plan = validate_edit_plan(
+                persisted_document,
                 context["assets"],
                 allow_post_copy=bool(context["project"]["ai_copy_allowed"]),
                 creative_direction=context["job"],
                 music_tracks=context["music_library"],
             )
+            if persisted_repairs:
+                with connection() as database:
+                    database.execute(
+                        """
+                        INSERT INTO job_events (job_id, event_type, payload)
+                        VALUES (%s, 'edit_plan_repaired_deterministically', %s)
+                        """,
+                        (
+                            run["job_id"],
+                            Jsonb(
+                                {
+                                    "version": run["version"],
+                                    "repairs": persisted_repairs,
+                                    "reused_plan": True,
+                                }
+                            ),
+                        ),
+                    )
             provider = str(plan_row["provider"])
             model = str(plan_row["model"])
             reasoning_effort = run.get("reasoning_effort")
@@ -952,7 +975,7 @@ def process_one_edit(state: WorkerState) -> bool:
                         creative_direction=context["job"],
                         music_tracks=context["music_library"],
                     )
-                except (ValueError, ValidationError):
+                except (ValueError, ValidationError) as deterministic_error:
                     with connection() as database:
                         database.execute(
                             """
@@ -970,19 +993,26 @@ def process_one_edit(state: WorkerState) -> bool:
                             ),
                         )
                     context["validation_correction"] = {
-                        "error": str(validation_error)[:1000],
-                        "rejected_plan": proposed.model_dump(mode="json"),
+                        "error": str(deterministic_error)[:1000],
+                        "rejected_plan": repaired_document,
                     }
                     assert_ai_budget()
                     proposed, provenance = create_edit_plan(context)
                     _record_plan_usage(run, provenance, "repair")
-                    plan = validate_edit_plan(
+                    final_document, final_repairs = repair_predictable_plan_defaults(
                         proposed.model_dump(mode="json"),
+                        creative_direction=context["job"],
+                        music_tracks=context["music_library"],
+                        previous_plan=(context.get("revision") or {}).get("previous_plan"),
+                    )
+                    plan = validate_edit_plan(
+                        final_document,
                         context["assets"],
                         allow_post_copy=bool(context["project"]["ai_copy_allowed"]),
                         creative_direction=context["job"],
                         music_tracks=context["music_library"],
                     )
+                    deterministic_repairs.extend(final_repairs)
                 else:
                     with connection() as database:
                         database.execute(
