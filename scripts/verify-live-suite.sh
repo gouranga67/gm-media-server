@@ -60,33 +60,41 @@ run_check() {
 
 check_library_migrations() {
   local count
-  count=$(docker compose exec -T postgres \
-    sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "SELECT COUNT(*) FROM schema_migrations WHERE version IN ('"'"'010_asset_library.sql'"'"','"'"'011_exact_duplicate_audit.sql'"'"','"'"'012_content_catalog.sql'"'"','"'"'013_visual_index.sql'"'"','"'"'014_library_management.sql'"'"','"'"'015_safe_duplicate_storage.sql'"'"','"'"'016_creative_profiles_and_variants.sql'"'"','"'"'017_editorial_workspace.sql'"'"','"'"'018_productization.sql'"'"','"'"'019_story_intelligence.sql'"'"');"') || return 1
+  count=$(timeout --foreground --kill-after=5s 30s \
+    docker compose exec -T postgres \
+      sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "SELECT COUNT(*) FROM schema_migrations WHERE version IN ('"'"'010_asset_library.sql'"'"','"'"'011_exact_duplicate_audit.sql'"'"','"'"'012_content_catalog.sql'"'"','"'"'013_visual_index.sql'"'"','"'"'014_library_management.sql'"'"','"'"'015_safe_duplicate_storage.sql'"'"','"'"'016_creative_profiles_and_variants.sql'"'"','"'"'017_editorial_workspace.sql'"'"','"'"'018_productization.sql'"'"','"'"'019_story_intelligence.sql'"'"');"') || {
+    local result=$?
+    if [[ $result -eq 124 || $result -eq 137 ]]; then
+      printf 'Database migration check timed out after 30 seconds.\n' >&2
+    fi
+    return "$result"
+  }
+  printf 'Applied library migrations: %s/10\n' "$count"
   [[ "$count" == "10" ]]
 }
 
-run_check "Service and container health" ./scripts/verify-phase2.sh
+run_check "Service and container health" timeout --foreground --kill-after=10s 120s ./scripts/verify-phase2.sh
 run_check "Database migrations 010-019" check_library_migrations
-run_check "Backend unit and local render tests" docker compose run --rm --no-deps \
+run_check "Backend unit and local render tests" timeout --foreground --kill-after=10s 300s docker compose run --rm --no-deps \
   -v "$project_root/services/core/tests:/app/tests:ro" \
   worker python -m unittest discover -s /app/tests -p 'test_*.py' -v
-run_check "Existing media analysis" python3 scripts/verify-phase4.py
-run_check "Reusable server-library references" python3 scripts/verify-phase6c.py
-run_check "Non-destructive exact-duplicate audit" python3 scripts/verify-phase6c2.py
-run_check "Source-evidence catalogue and search" python3 scripts/verify-phase6d.py
-run_check "Local semantic visual index and search" python3 scripts/verify-phase6e.py
-run_check "Reversible media-library organization" python3 scripts/verify-phase8.py
-run_check "Complete job history and test classification" python3 scripts/verify-job-history.py
-run_check "Editorial workspace, brand kits, and presets" python3 scripts/verify-phase11.py
-run_check "Product controls, access roles, and safe retention" python3 scripts/verify-phase12.py
-run_check "Local story intelligence, engagement, and edit guidance" python3 scripts/verify-phase13.py
+run_check "Existing media analysis" timeout --foreground --kill-after=10s 300s python3 scripts/verify-phase4.py
+run_check "Reusable server-library references" timeout --foreground --kill-after=10s 300s python3 scripts/verify-phase6c.py
+run_check "Non-destructive exact-duplicate audit" timeout --foreground --kill-after=10s 300s python3 scripts/verify-phase6c2.py
+run_check "Source-evidence catalogue and search" timeout --foreground --kill-after=10s 300s python3 scripts/verify-phase6d.py
+run_check "Local semantic visual index and search" timeout --foreground --kill-after=10s 300s python3 scripts/verify-phase6e.py
+run_check "Reversible media-library organization" timeout --foreground --kill-after=10s 300s python3 scripts/verify-phase8.py
+run_check "Complete job history and test classification" timeout --foreground --kill-after=10s 300s python3 scripts/verify-job-history.py
+run_check "Editorial workspace, brand kits, and presets" timeout --foreground --kill-after=10s 300s python3 scripts/verify-phase11.py
+run_check "Product controls, access roles, and safe retention" timeout --foreground --kill-after=10s 300s python3 scripts/verify-phase12.py
+run_check "Local story intelligence, engagement, and edit guidance" timeout --foreground --kill-after=10s 300s python3 scripts/verify-phase13.py
 
 if $include_render; then
   printf '\nThe opt-in lane creates/revises edit runs, performs GPU renders, and may use the connected ChatGPT plan.\n'
-  run_check "Deterministic preview renderer" python3 scripts/verify-phase5.py
-  run_check "Talking-head revision and final delivery" python3 scripts/verify-phase6.py
-  run_check "Montage delivery, captions, models, and usage" python3 scripts/verify-phase6b.py
-  run_check "Creative profiles and zero-AI delivery variants" python3 scripts/verify-phase10.py
+  run_check "Deterministic preview renderer" timeout --foreground --kill-after=30s 1800s python3 scripts/verify-phase5.py
+  run_check "Talking-head revision and final delivery" timeout --foreground --kill-after=30s 1800s python3 scripts/verify-phase6.py
+  run_check "Montage delivery, captions, models, and usage" timeout --foreground --kill-after=30s 1800s python3 scripts/verify-phase6b.py
+  run_check "Creative profiles and zero-AI delivery variants" timeout --foreground --kill-after=30s 1800s python3 scripts/verify-phase10.py
 else
   printf '\nSKIP  Render/AI lane (rerun with --confirm-render-and-ai after the core suite passes)\n'
 fi
