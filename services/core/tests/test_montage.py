@@ -404,7 +404,10 @@ class MontageFilterTests(unittest.TestCase):
             graph_with_music.index("scale=540:960"),
         )
         self.assertGreaterEqual(graph_with_music.count("channel_layouts=stereo"), 4)
-        self.assertIn("[2:a:0]aresample=48000,atrim=0:4.000,aformat=", graph_with_music)
+        self.assertIn(
+            "[2:a:0]aresample=48000,atrim=0:4.000,loudnorm=I=-18",
+            graph_with_music,
+        )
 
     def test_static_image_uses_one_decoded_frame(self) -> None:
         image_id = uuid4()
