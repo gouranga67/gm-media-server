@@ -365,3 +365,17 @@ Acceptance helper after deployment: `python3 scripts/verify-phase13.py` waits fo
 Next quality work: add local motion, shot-scale, face-presence, laughter/applause, and finer audio-energy signals to moment cards; then use those facts for cut-on-action, reaction cutaways, audio bridges, and visual hook alternatives.
 
 Exit check for this checkpoint: deploy migration 019, pass the Phase 13 helper and full live suite, then make one real edit using all four story-direction fields and confirm the review timeline explains the hook, development, payoff, and ending.
+
+## Phase 14 — local learning loop
+
+**Purpose:** let repeated real-world feedback improve future edit decisions without training a model, uploading private media, or adding another hosted request.
+
+Current source checkpoint (2026-10-25): migration 020 stores one editable rating against the exact edit-run version it evaluates. The review screen now asks for a 1–5 result, whether the edit is usable, optional notes, and bounded strengths or problems covering hook, story, pacing, captions, audio, visuals, colour, and ending. Saving is always explicit; opening or changing a control never starts a render or submits feedback.
+
+The local aggregator learns separately for talking-head edits and montages. It waits for at least three rated examples, requires a repeated signal across at least 34% of that recipe's samples with a minimum of two occurrences, and suppresses tied conflicting advice. Every resulting directive records its tag, dimension, evidence count, sample size, and confidence. Verification projects are excluded. The owner can increase the minimum sample threshold or pause application from `/learning` without removing history.
+
+Mature directives enter the next job's editor context as local preference evidence. The planning prompt may apply them only when compatible with the current brief and source evidence; explicit job instructions and source-only validation retain priority. Aggregation itself makes zero hosted model calls. The Learning dashboard also reports average rating, usable-edit count, delivered jobs, first-pass approval rate, recent teaching examples, and the evidence behind every active preference.
+
+Acceptance helper after deployment: `python3 scripts/verify-phase14.py` temporarily records feedback against a finished real edit, verifies its dashboard and future editor context, requires the three-sample safety floor and zero added model calls, then restores the prior feedback or removes the temporary record.
+
+Exit check: deploy migration 020, pass the Phase 14 helper and full live suite, rate at least three real edits of one recipe, confirm an explainable preference becomes active on `/learning`, and verify the next editor context contains that directive with its sample count and confidence.

@@ -7,6 +7,7 @@ from uuid import UUID
 from app.config import Settings, get_settings
 from app.database import connection
 from app.media_analysis import probe_media, resolve_source, video_probe_is_hdr
+from app.learning import learning_context_for_job
 from app.story_intelligence import (
     STORY_INTELLIGENCE_VERSION,
     build_story_assessment,
@@ -81,6 +82,7 @@ def build_editor_context(
             brand_kit = database.execute(
                 "SELECT * FROM brand_kits WHERE id = %s", (job["brand_kit_id"],)
             ).fetchone()
+        learning_preferences = learning_context_for_job(database, job)
 
     story_query = " ".join(
         str(value or "")
@@ -230,6 +232,7 @@ def build_editor_context(
             }
             if brand_kit is not None else None
         ),
+        "learning_preferences": learning_preferences,
         "content_policy": {
             "source_derived_only": True,
             "synthetic_image": False,

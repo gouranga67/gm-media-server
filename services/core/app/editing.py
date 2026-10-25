@@ -834,6 +834,12 @@ def job_review(job_id: UUID) -> dict[str, Any]:
         brand_kit = None
         if job.get("brand_kit_id") is not None:
             brand_kit = database.execute("SELECT * FROM brand_kits WHERE id=%s", (job["brand_kit_id"],)).fetchone()
+        latest_feedback = None
+        if runs:
+            latest_feedback = database.execute(
+                "SELECT * FROM edit_feedback WHERE edit_run_id=%s",
+                (runs[0]["id"],),
+            ).fetchone()
     context = _context_or_http(job_id)
     versions = [_response(row) for row in runs]
     return {
@@ -845,6 +851,7 @@ def job_review(job_id: UUID) -> dict[str, Any]:
         "editorial_timeline": _editorial_timeline(plan_row["document"] if plan_row else None, context),
         "story_assessment": context.get("story_spine", {}).get("engagement_assessment", {}),
         "brand_kit": brand_kit,
+        "latest_feedback": latest_feedback,
         "events": list(events),
         "usage": usage,
     }

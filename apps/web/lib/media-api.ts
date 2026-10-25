@@ -359,8 +359,68 @@ export type JobReview = {
     readonly hosted_model_calls: number;
   };
   readonly brand_kit: BrandKit | null;
+  readonly latest_feedback: EditFeedback | null;
   readonly events: readonly JobEvent[];
   readonly usage: JobUsage;
+};
+
+export type FeedbackTag =
+  | "strong_hook" | "weak_hook" | "clear_story" | "confusing_story"
+  | "pacing_too_slow" | "pacing_too_fast" | "clean_captions" | "caption_issue"
+  | "balanced_audio" | "audio_issue" | "good_visuals" | "visual_issue"
+  | "good_colour" | "colour_issue" | "strong_ending" | "weak_ending";
+
+export type EditFeedback = {
+  readonly id: string;
+  readonly job_id: string;
+  readonly edit_run_id: string;
+  readonly rating: number;
+  readonly tags: readonly FeedbackTag[];
+  readonly note: string;
+  readonly would_use_again: boolean;
+  readonly created_at: string;
+  readonly updated_at: string;
+};
+
+export type LearnedPreference = {
+  readonly tag: FeedbackTag;
+  readonly dimension: string;
+  readonly sentiment: "positive" | "negative";
+  readonly directive: string;
+  readonly evidence_count: number;
+  readonly sample_size: number;
+  readonly confidence: number;
+};
+
+export type LearningScope = {
+  readonly sample_size: number;
+  readonly minimum_samples: number;
+  readonly average_rating: number | null;
+  readonly feedback_needed: number;
+  readonly preferences: readonly LearnedPreference[];
+};
+
+export type LearningSummary = {
+  readonly settings: {
+    readonly id: number;
+    readonly enabled: boolean;
+    readonly minimum_samples: number;
+    readonly updated_at: string;
+  };
+  readonly feedback_count: number;
+  readonly average_rating: number | null;
+  readonly would_use_again_count: number;
+  readonly delivered_jobs: number;
+  readonly first_pass_approval_rate: number | null;
+  readonly scopes: Readonly<Record<string, LearningScope>>;
+  readonly recent_feedback: readonly (EditFeedback & {
+    readonly recipe: Recipe;
+    readonly edit_style: EditStyle | null;
+    readonly music_mode: MusicMode | null;
+    readonly version: number;
+    readonly project_name: string;
+  })[];
+  readonly hosted_model_calls: number;
 };
 
 export type EditorModel = {
@@ -940,6 +1000,39 @@ export function approveEdit(jobId: string, version: number) {
   return apiRequest<FinalExport>(`jobs/${jobId}/approval`, {
     method: "POST",
     body: JSON.stringify({ version, note: "Approved from the GM Studio phone review." }),
+  });
+}
+
+export function saveEditFeedback(
+  jobId: string,
+  input: {
+    readonly editRunId: string;
+    readonly rating: number;
+    readonly tags: readonly FeedbackTag[];
+    readonly note: string;
+    readonly wouldUseAgain: boolean;
+  },
+) {
+  return apiRequest<EditFeedback>(`jobs/${jobId}/feedback`, {
+    method: "POST",
+    body: JSON.stringify({
+      edit_run_id: input.editRunId,
+      rating: input.rating,
+      tags: input.tags,
+      note: input.note,
+      would_use_again: input.wouldUseAgain,
+    }),
+  });
+}
+
+export function getLearningSummary() {
+  return apiRequest<LearningSummary>("learning/summary", { cache: "no-store" });
+}
+
+export function updateLearningSettings(input: { readonly enabled: boolean; readonly minimumSamples: number }) {
+  return apiRequest<LearningSummary["settings"]>("learning/settings", {
+    method: "PUT",
+    body: JSON.stringify({ enabled: input.enabled, minimum_samples: input.minimumSamples }),
   });
 }
 

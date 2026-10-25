@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { EditFeedbackCard } from "@/app/_components/edit-feedback-card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -28,6 +29,7 @@ import {
   type EditRun,
   type EditorialClip,
   type FinalExport,
+  type EditFeedback,
   type OutputAspect,
   type Recipe,
   type JobReview,
@@ -74,6 +76,7 @@ export function JobReviewControls({
   editorialTimeline,
   storyAssessment,
   initialCoverTime,
+  initialFeedback,
   onUpdated,
 }: {
   readonly jobId: string;
@@ -86,6 +89,7 @@ export function JobReviewControls({
   readonly editorialTimeline: readonly EditorialClip[];
   readonly storyAssessment: JobReview["story_assessment"] | undefined;
   readonly initialCoverTime: number;
+  readonly initialFeedback: EditFeedback | null;
   readonly onUpdated: () => void;
 }) {
   const [note, setNote] = useState("");
@@ -220,6 +224,7 @@ export function JobReviewControls({
     const dimensions = outputAspect === "landscape" ? "1920 × 1080" : outputAspect === "square" ? "1080 × 1080" : "1080 × 1920";
     const deliverable = recipe === "montage" ? "montage" : "reel";
     return (
+      <div className="space-y-4">
       <section className="space-y-4 rounded-md border border-[#BFE3FF] bg-white p-5">
         <div>
           <p className="flex items-center gap-2 font-mono text-xs font-bold tracking-wide text-[#3A8F63] uppercase">
@@ -309,6 +314,8 @@ export function JobReviewControls({
         </div>
         {error ? <p className="text-xs text-[#A23B2A]" role="alert">{error}</p> : null}
       </section>
+      <EditFeedbackCard editRunId={run.id} initialFeedback={initialFeedback} jobId={jobId} key={run.id} onSaved={onUpdated} version={run.version} />
+      </div>
     );
   }
 
@@ -485,6 +492,7 @@ export function JobReviewControls({
           Create revised preview
         </Button>
       </form>
+      <EditFeedbackCard editRunId={run.id} initialFeedback={initialFeedback} jobId={jobId} key={run.id} onSaved={onUpdated} version={run.version} />
     </div>
   );
 }

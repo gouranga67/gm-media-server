@@ -75,7 +75,7 @@ check_migration_runner() {
 }
 
 run_check "Service and container health" timeout --foreground --kill-after=10s 120s ./scripts/verify-phase2.sh
-run_check "Database migrations 010-019" check_migration_runner
+run_check "Database migrations 010-020" check_migration_runner
 run_check "Backend unit and local render tests" timeout --foreground --kill-after=10s 300s docker compose run --rm --no-deps \
   -v "$project_root/services/core/tests:/app/tests:ro" \
   worker python -m unittest discover -s /app/tests -p 'test_*.py' -v
@@ -89,6 +89,7 @@ run_check "Complete job history and test classification" timeout --foreground --
 run_check "Editorial workspace, brand kits, and presets" timeout --foreground --kill-after=10s 300s python3 scripts/verify-phase11.py
 run_check "Product controls, access roles, and safe retention" timeout --foreground --kill-after=10s 300s python3 scripts/verify-phase12.py
 run_check "Local story intelligence, engagement, and edit guidance" timeout --foreground --kill-after=10s 300s python3 scripts/verify-phase13.py
+run_check "Local feedback learning loop" timeout --foreground --kill-after=10s 300s python3 scripts/verify-phase14.py
 
 if $include_render; then
   printf '\nThe opt-in lane creates/revises edit runs, performs GPU renders, and may use the connected ChatGPT plan.\n'

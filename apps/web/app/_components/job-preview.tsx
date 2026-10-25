@@ -212,6 +212,7 @@ export function JobPreview({ jobId }: { readonly jobId: string }) {
                   editorialTimeline={review?.editorial_timeline ?? []}
                   storyAssessment={review?.story_assessment}
                   initialCoverTime={review?.job.cover_time_seconds ?? 1}
+                  initialFeedback={review?.latest_feedback ?? null}
                   run={run}
                 />
               ) : null}

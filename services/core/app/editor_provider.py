@@ -281,6 +281,17 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
             + locked_instruction
             + "\n\n"
         )
+    learning = public.get("learning_preferences")
+    learning_directives = learning.get("directives") if isinstance(learning, dict) else []
+    learning_instruction = ""
+    if isinstance(learning_directives, list) and learning_directives:
+        learning_instruction = (
+            "These preferences were learned locally from repeated explicit user feedback for this recipe. "
+            "Apply them when compatible with the current brief and source evidence; never invent material or "
+            "override an explicit job instruction: "
+            + " ".join(str(item) for item in learning_directives[:8])
+            + "\n\n"
+        )
     correction = public.get("validation_correction")
     correction_instruction = ""
     if isinstance(correction, dict):
@@ -342,6 +353,7 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
             "text": (
                 task_instruction
                 + "\n\n"
+                + learning_instruction
                 + revision_instruction
                 + correction_instruction
                 + json.dumps(public, ensure_ascii=False)

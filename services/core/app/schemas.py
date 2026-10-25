@@ -66,6 +66,26 @@ class PublishingPreset(StringEnum):
     FACEBOOK_SQUARE = "facebook_square"
 
 
+FeedbackTag = Literal[
+    "strong_hook",
+    "weak_hook",
+    "clear_story",
+    "confusing_story",
+    "pacing_too_slow",
+    "pacing_too_fast",
+    "clean_captions",
+    "caption_issue",
+    "balanced_audio",
+    "audio_issue",
+    "good_visuals",
+    "visual_issue",
+    "good_colour",
+    "colour_issue",
+    "strong_ending",
+    "weak_ending",
+]
+
+
 class ProjectCreate(BaseModel):
     id: UUID | None = None
     name: str = Field(min_length=1, max_length=160)
@@ -589,6 +609,101 @@ class ApprovalCreate(BaseModel):
     note: str = Field(default="", max_length=1000)
 
 
+class EditFeedbackCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    edit_run_id: UUID
+    rating: int = Field(ge=1, le=5)
+    tags: list[FeedbackTag] = Field(default_factory=list, max_length=8)
+    note: str = Field(default="", max_length=1200)
+    would_use_again: bool = False
+
+    @field_validator("note")
+    @classmethod
+    def normalize_feedback_note(cls, value: str) -> str:
+        return " ".join(value.split())
+
+    @model_validator(mode="after")
+    def unique_tags(self) -> "EditFeedbackCreate":
+        if len(self.tags) != len(set(self.tags)):
+            raise ValueError("feedback tags cannot repeat")
+        conflicts = (
+            {"strong_hook", "weak_hook"},
+            {"clear_story", "confusing_story"},
+            {"pacing_too_slow", "pacing_too_fast"},
+            {"clean_captions", "caption_issue"},
+            {"balanced_audio", "audio_issue"},
+            {"good_visuals", "visual_issue"},
+            {"good_colour", "colour_issue"},
+            {"strong_ending", "weak_ending"},
+        )
+        selected = set(self.tags)
+        if any(pair <= selected for pair in conflicts):
+            raise ValueError("feedback cannot mark the same quality as both a strength and a problem")
+        return self
+
+
+class EditFeedbackResponse(EditFeedbackCreate):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    job_id: UUID
+    created_at: datetime
+    updated_at: datetime
+
+
+class LearningSettingsUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = True
+    minimum_samples: int = Field(default=3, ge=3, le=20)
+
+
+class LearningSettingsResponse(LearningSettingsUpdate):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    updated_at: datetime
+
+
+class LearnedPreferenceResponse(BaseModel):
+    tag: str
+    dimension: str
+    sentiment: Literal["positive", "negative"]
+    directive: str
+    evidence_count: int = Field(ge=0)
+    sample_size: int = Field(ge=0)
+    confidence: float = Field(ge=0, le=1)
+
+
+class LearningScopeResponse(BaseModel):
+    sample_size: int = Field(ge=0)
+    minimum_samples: int = Field(ge=3)
+    average_rating: float | None = Field(default=None, ge=1, le=5)
+    feedback_needed: int = Field(ge=0)
+    preferences: list[LearnedPreferenceResponse] = Field(default_factory=list)
+
+
+class LearningRecentFeedbackResponse(EditFeedbackResponse):
+    recipe: Recipe
+    edit_style: EditStyle | None = None
+    music_mode: MusicMode | None = None
+    version: int
+    project_name: str
+
+
+class LearningSummaryResponse(BaseModel):
+    settings: LearningSettingsResponse
+    feedback_count: int = Field(ge=0)
+    average_rating: float | None = Field(default=None, ge=1, le=5)
+    would_use_again_count: int = Field(ge=0)
+    delivered_jobs: int = Field(ge=0)
+    first_pass_approval_rate: float | None = Field(default=None, ge=0, le=1)
+    scopes: dict[str, LearningScopeResponse]
+    recent_feedback: list[LearningRecentFeedbackResponse] = Field(default_factory=list)
+    hosted_model_calls: int = Field(default=0, ge=0)
+
+
 class CoverFrameUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     time_seconds: float = Field(ge=0, le=3600)
@@ -824,5 +939,6 @@ class JobReviewResponse(BaseModel):
     editorial_timeline: list[EditorialClipResponse] = Field(default_factory=list)
     story_assessment: dict[str, Any] = Field(default_factory=dict)
     brand_kit: BrandKitResponse | None = None
+    latest_feedback: EditFeedbackResponse | None = None
     events: list[JobEventResponse]
     usage: JobUsageSummary = Field(default_factory=JobUsageSummary)
