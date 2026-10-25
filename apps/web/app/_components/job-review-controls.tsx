@@ -116,6 +116,17 @@ export function JobReviewControls({
   const [captionTiming, setCaptionTiming] = useState(
     run.caption_settings.timing_offset_seconds ?? 0,
   );
+  const plannedEffects = Array.isArray(run.manifest.creative_effects)
+    ? run.manifest.creative_effects as readonly Record<string, unknown>[]
+    : [];
+
+  const removeEffects = async () => {
+    setSubmitting("revision"); setError(undefined);
+    try {
+      await requestRevision(jobId, { note: "", captionCorrections: [], effectsEnabled: false });
+      onUpdated();
+    } catch (revisionError) { setError(message(revisionError)); } finally { setSubmitting(undefined); }
+  };
 
   const submitRevision = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -524,9 +535,13 @@ export function JobReviewControls({
           </Button>
         </div>
         <div className="mb-5 border-t border-[#D7D9D3] pt-4">
+          <p className="font-mono text-xs font-bold text-[#173F5F] uppercase">Creative effects</p>
+          {plannedEffects.length ? <><div className="mt-3 space-y-2">{plannedEffects.map((effect, index) => <div className="rounded-md bg-[#F7F7F5] px-3 py-2 text-xs text-[#53646F]" key={`${String(effect.asset_id)}-${index}`}><span className="font-bold text-[#173F5F]">{String(effect.title || effect.kind || "Effect")}</span> · {Number(effect.start_seconds || 0).toFixed(1)}s · {String(effect.purpose || "emphasis")}</div>)}</div><Button className="mt-3 h-10 w-full" disabled={submitting !== undefined} onClick={() => void removeEffects()} type="button" variant="outline"><Trash2Icon className="size-4" />Remove all effects &amp; render · zero AI</Button></> : <p className="mt-2 text-xs text-[#666862]">This version uses no creative effects.</p>}
+        </div>
+        <div className="mb-5 border-t border-[#D7D9D3] pt-4">
           <p className="font-mono text-xs font-bold text-[#173F5F] uppercase">Protect in AI revisions</p>
           <div className="mt-3 flex flex-wrap gap-2">
-            {["clip order", "spoken phrases", "captions", "music"].map((item) => (
+            {["clip order", "spoken phrases", "captions", "music", "effects"].map((item) => (
               <label className="flex items-center gap-2 rounded-full border border-[#D7D9D3] px-3 py-2 text-xs" key={item}>
                 <input checked={lockedElements.includes(item)} onChange={() => setLockedElements((current) => current.includes(item) ? current.filter((value) => value !== item) : [...current, item])} type="checkbox" />
                 Keep {item}

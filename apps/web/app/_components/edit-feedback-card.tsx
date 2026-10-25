@@ -23,6 +23,8 @@ const TAGS: readonly { readonly value: FeedbackTag; readonly label: string; read
   { value: "good_visuals", label: "Good visuals", kind: "strength" },
   { value: "good_colour", label: "Good colour", kind: "strength" },
   { value: "strong_ending", label: "Strong ending", kind: "strength" },
+  { value: "effects_worked", label: "Effects worked", kind: "strength" },
+  { value: "meme_worked", label: "Meme landed", kind: "strength" },
   { value: "weak_hook", label: "Hook needs work", kind: "improve" },
   { value: "confusing_story", label: "Story unclear", kind: "improve" },
   { value: "pacing_too_slow", label: "Too slow", kind: "improve" },
@@ -32,6 +34,10 @@ const TAGS: readonly { readonly value: FeedbackTag; readonly label: string; read
   { value: "visual_issue", label: "Visual issue", kind: "improve" },
   { value: "colour_issue", label: "Colour issue", kind: "improve" },
   { value: "weak_ending", label: "Ending needs work", kind: "improve" },
+  { value: "effects_too_much", label: "Too many effects", kind: "improve" },
+  { value: "effects_too_loud", label: "Effects too loud", kind: "improve" },
+  { value: "effect_timing_issue", label: "Effect timing issue", kind: "improve" },
+  { value: "meme_forced", label: "Meme felt forced", kind: "improve" },
 ];
 
 const OPPOSITES: Partial<Record<FeedbackTag, FeedbackTag>> = {
@@ -43,6 +49,8 @@ const OPPOSITES: Partial<Record<FeedbackTag, FeedbackTag>> = {
   good_visuals: "visual_issue", visual_issue: "good_visuals",
   good_colour: "colour_issue", colour_issue: "good_colour",
   strong_ending: "weak_ending", weak_ending: "strong_ending",
+  effects_worked: "effects_too_much", effects_too_much: "effects_worked",
+  meme_worked: "meme_forced", meme_forced: "meme_worked",
 };
 
 function errorMessage(error: unknown) {

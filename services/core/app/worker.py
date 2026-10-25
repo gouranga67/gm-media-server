@@ -879,6 +879,7 @@ def process_one_edit(state: WorkerState) -> bool:
                 plan_row["document"],
                 creative_direction=context["job"],
                 music_tracks=context["music_library"],
+                creative_effects=context["creative_effect_library"],
             )
             plan = validate_edit_plan(
                 persisted_document,
@@ -886,6 +887,7 @@ def process_one_edit(state: WorkerState) -> bool:
                 allow_post_copy=bool(context["project"]["ai_copy_allowed"]),
                 creative_direction=context["job"],
                 music_tracks=context["music_library"],
+                creative_effects=context["creative_effect_library"],
             )
             if persisted_repairs:
                 with connection() as database:
@@ -936,6 +938,7 @@ def process_one_edit(state: WorkerState) -> bool:
                     context["revision"]["previous_plan"],
                     creative_direction=context["job"],
                     music_tracks=context["music_library"],
+                    creative_effects=context["creative_effect_library"],
                 )
                 previous_plan = validate_edit_plan(
                     previous_document,
@@ -943,6 +946,7 @@ def process_one_edit(state: WorkerState) -> bool:
                     allow_post_copy=bool(context["project"]["ai_copy_allowed"]),
                     creative_direction=context["job"],
                     music_tracks=context["music_library"],
+                    creative_effects=context["creative_effect_library"],
                 )
                 proposed = (
                     apply_timeline_adjustments(previous_plan, adjustments, context["assets"])
@@ -963,12 +967,16 @@ def process_one_edit(state: WorkerState) -> bool:
                         },
                         deep=True,
                     )
+                if run.get("effects_enabled") is False:
+                    proposed = proposed.model_copy(update={"effects": []}, deep=True)
                 provenance = {
                     "provider": (
                         "local_timeline"
                         if adjustments
                         else "local_caption_layout"
                         if caption_settings
+                        else "local_effect_controls"
+                        if run.get("effects_enabled") is False
                         else "local_caption"
                     ),
                     "model": "deterministic_editor_v1",
@@ -986,6 +994,7 @@ def process_one_edit(state: WorkerState) -> bool:
                     allow_post_copy=bool(context["project"]["ai_copy_allowed"]),
                     creative_direction=context["job"],
                     music_tracks=context["music_library"],
+                    creative_effects=context["creative_effect_library"],
                 )
             except (ValueError, ValidationError) as validation_error:
                 if context["project"]["privacy_mode"] == "local_only":
@@ -1005,6 +1014,7 @@ def process_one_edit(state: WorkerState) -> bool:
                         allow_post_copy=bool(context["project"]["ai_copy_allowed"]),
                         creative_direction=context["job"],
                         music_tracks=context["music_library"],
+                        creative_effects=context["creative_effect_library"],
                     )
                 except (ValueError, ValidationError) as deterministic_error:
                     with connection() as database:
@@ -1034,6 +1044,7 @@ def process_one_edit(state: WorkerState) -> bool:
                         proposed.model_dump(mode="json"),
                         creative_direction=context["job"],
                         music_tracks=context["music_library"],
+                        creative_effects=context["creative_effect_library"],
                         previous_plan=(context.get("revision") or {}).get("previous_plan"),
                     )
                     plan = validate_edit_plan(
@@ -1042,6 +1053,7 @@ def process_one_edit(state: WorkerState) -> bool:
                         allow_post_copy=bool(context["project"]["ai_copy_allowed"]),
                         creative_direction=context["job"],
                         music_tracks=context["music_library"],
+                        creative_effects=context["creative_effect_library"],
                     )
                     deterministic_repairs.extend(final_repairs)
                 else:
@@ -1207,6 +1219,7 @@ def process_one_final_export(state: WorkerState) -> bool:
             plan_row["document"],
             creative_direction=context["job"],
             music_tracks=context["music_library"],
+            creative_effects=context["creative_effect_library"],
         )
         plan = validate_edit_plan(
             render_document,
@@ -1214,6 +1227,7 @@ def process_one_final_export(state: WorkerState) -> bool:
             allow_post_copy=bool(context["project"]["ai_copy_allowed"]),
             creative_direction=context["job"],
             music_tracks=context["music_library"],
+            creative_effects=context["creative_effect_library"],
         )
         approved_at = export.get("approved_at")
         if approved_at is None:
@@ -1370,6 +1384,7 @@ def process_one_delivery_variant(state: WorkerState) -> bool:
             plan_row["document"],
             creative_direction=context["job"],
             music_tracks=context["music_library"],
+            creative_effects=context["creative_effect_library"],
         )
         plan = validate_edit_plan(
             render_document,
@@ -1377,6 +1392,7 @@ def process_one_delivery_variant(state: WorkerState) -> bool:
             allow_post_copy=bool(context["project"]["ai_copy_allowed"]),
             creative_direction=context["job"],
             music_tracks=context["music_library"],
+            creative_effects=context["creative_effect_library"],
         )
         plan = derive_duration_variant(plan, int(variant["target_duration_seconds"]))
         context["job"] = {

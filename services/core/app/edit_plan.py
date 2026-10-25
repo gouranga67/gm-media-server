@@ -9,7 +9,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
-EDIT_PLAN_SCHEMA_VERSION = "1.2"
+EDIT_PLAN_SCHEMA_VERSION = "1.3"
 MAX_PREVIEW_SECONDS = 60.0
 MAX_CLIPS = 24
 MAX_MONTAGE_CLIPS = 48
@@ -47,10 +47,21 @@ class EditClip(BaseModel):
         return self
 
 
+class CreativeEffectCue(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    asset_id: UUID
+    start_seconds: float = Field(ge=0, le=60)
+    duration_seconds: float = Field(ge=0.1, le=8.0)
+    position: Literal["top", "center", "bottom", "full_frame"] = "bottom"
+    intensity: Literal["subtle", "standard", "strong"] = "subtle"
+    purpose: Literal["hook", "transition", "emphasis", "reveal", "reaction", "payoff"] = "emphasis"
+
+
 class TalkingHeadEditPlan(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal["1.0", "1.1", "1.2"]
+    schema_version: Literal["1.0", "1.1", "1.2", "1.3"]
     recipe: Literal["talking_head"]
     clips: list[EditClip] = Field(min_length=1, max_length=MAX_CLIPS)
     caption_style: Literal["clean_blue_v1"]
@@ -62,6 +73,7 @@ class TalkingHeadEditPlan(BaseModel):
     music_mix: Literal["none", "subtle", "present"] = "none"
     caption_position: Literal["lower_safe", "middle", "upper"] = "lower_safe"
     caption_timing_offset_seconds: float = Field(default=0.0, ge=-0.5, le=0.5)
+    effects: list[CreativeEffectCue] = Field(default_factory=list, max_length=8)
 
 
 class MontageClip(BaseModel):
@@ -89,7 +101,7 @@ class MontageClip(BaseModel):
 class MontageEditPlan(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal["1.0", "1.1", "1.2"]
+    schema_version: Literal["1.0", "1.1", "1.2", "1.3"]
     recipe: Literal["montage"]
     clips: list[MontageClip] = Field(min_length=2, max_length=MAX_MONTAGE_CLIPS)
     audio_preset: Literal["montage_mix_v1"]
@@ -100,6 +112,7 @@ class MontageEditPlan(BaseModel):
     music_mix: Literal["none", "subtle", "present"] = "none"
     caption_position: Literal["lower_safe", "middle", "upper"] = "lower_safe"
     caption_timing_offset_seconds: float = Field(default=0.0, ge=-0.5, le=0.5)
+    effects: list[CreativeEffectCue] = Field(default_factory=list, max_length=8)
 
 
 EditPlan: TypeAlias = TalkingHeadEditPlan | MontageEditPlan
@@ -144,7 +157,19 @@ def derive_duration_variant(plan: EditPlan, target_seconds: int) -> EditPlan:
         raise ValueError("a montage duration variant requires at least two source clips")
     if not clips:
         raise ValueError("the approved edit does not contain enough material for this duration")
-    return plan.model_copy(update={"clips": clips}, deep=True)
+    variant_duration = sum(
+        float(clip.duration) if isinstance(plan, MontageEditPlan) else float(clip.source_out - clip.source_in)
+        for clip in clips
+    )
+    effects = []
+    for source_cue in plan.effects:
+        if source_cue.start_seconds >= variant_duration:
+            continue
+        cue = source_cue.model_copy(deep=True)
+        cue.duration_seconds = min(cue.duration_seconds, variant_duration - cue.start_seconds)
+        if cue.duration_seconds >= 0.1:
+            effects.append(cue)
+    return plan.model_copy(update={"clips": clips, "effects": effects}, deep=True)
 
 
 def source_word_gaps(
@@ -291,6 +316,20 @@ def apply_timeline_adjustments(
 # This schema is intentionally small and contains only Structured Outputs
 # features supported by the Responses API. Every property is required and all
 # objects reject unknown keys.
+EFFECT_CUE_JSON_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "asset_id": {"type": "string", "format": "uuid"},
+        "start_seconds": {"type": "number", "minimum": 0, "maximum": 60},
+        "duration_seconds": {"type": "number", "minimum": 0.1, "maximum": 8},
+        "position": {"type": "string", "enum": ["top", "center", "bottom", "full_frame"]},
+        "intensity": {"type": "string", "enum": ["subtle", "standard", "strong"]},
+        "purpose": {"type": "string", "enum": ["hook", "transition", "emphasis", "reveal", "reaction", "payoff"]},
+    },
+    "required": ["asset_id", "start_seconds", "duration_seconds", "position", "intensity", "purpose"],
+    "additionalProperties": False,
+}
+
 EDIT_PLAN_JSON_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
@@ -344,6 +383,9 @@ EDIT_PLAN_JSON_SCHEMA: dict[str, Any] = {
         "post_copy": {"type": "string", "maxLength": 2200},
         "music_track_id": {"type": ["string", "null"], "format": "uuid"},
         "music_mix": {"type": "string", "enum": ["none", "subtle", "present"]},
+        "caption_position": {"type": "string", "enum": ["lower_safe", "middle", "upper"]},
+        "caption_timing_offset_seconds": {"type": "number", "minimum": -0.5, "maximum": 0.5},
+        "effects": {"type": "array", "maxItems": 8, "items": EFFECT_CUE_JSON_SCHEMA},
     },
     "required": [
         "schema_version",
@@ -356,6 +398,9 @@ EDIT_PLAN_JSON_SCHEMA: dict[str, Any] = {
         "post_copy",
         "music_track_id",
         "music_mix",
+        "caption_position",
+        "caption_timing_offset_seconds",
+        "effects",
     ],
     "additionalProperties": False,
 }
@@ -419,6 +464,9 @@ MONTAGE_EDIT_PLAN_JSON_SCHEMA: dict[str, Any] = {
         "post_copy": {"type": "string", "maxLength": 2200},
         "music_track_id": {"type": ["string", "null"], "format": "uuid"},
         "music_mix": {"type": "string", "enum": ["none", "subtle", "present"]},
+        "caption_position": {"type": "string", "enum": ["lower_safe", "middle", "upper"]},
+        "caption_timing_offset_seconds": {"type": "number", "minimum": -0.5, "maximum": 0.5},
+        "effects": {"type": "array", "maxItems": 8, "items": EFFECT_CUE_JSON_SCHEMA},
     },
     "required": [
         "schema_version",
@@ -430,6 +478,9 @@ MONTAGE_EDIT_PLAN_JSON_SCHEMA: dict[str, Any] = {
         "post_copy",
         "music_track_id",
         "music_mix",
+        "caption_position",
+        "caption_timing_offset_seconds",
+        "effects",
     ],
     "additionalProperties": False,
 }
@@ -451,6 +502,7 @@ def repair_predictable_plan_defaults(
     *,
     creative_direction: dict[str, Any] | None = None,
     music_tracks: list[dict[str, Any]] | None = None,
+    creative_effects: list[dict[str, Any]] | None = None,
     previous_plan: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], list[str]]:
     """Apply safe defaults that do not require another model decision."""
@@ -459,6 +511,11 @@ def repair_predictable_plan_defaults(
     repairs: list[str] = []
     requested_music = (creative_direction or {}).get("music_mode") or "none"
     tracks = music_tracks or []
+    if "effects" not in repaired:
+        repaired["effects"] = []
+    if (creative_direction or {}).get("effect_level", "off") == "off" and repaired.get("effects"):
+        repaired["effects"] = []
+        repairs.append("removed_unrequested_creative_effects")
     if requested_music == "none" and (
         repaired.get("music_track_id") is not None or repaired.get("music_mix") != "none"
     ):
@@ -468,10 +525,18 @@ def repair_predictable_plan_defaults(
     elif requested_music in {"subtle", "present"} and tracks:
         approved_ids = {str(track["track_id"]) for track in tracks if track.get("track_id")}
         selected_id = repaired.get("music_track_id")
+        preferred_track_id = (creative_direction or {}).get("selected_music_track_id")
+        if preferred_track_id is not None and str(preferred_track_id) in approved_ids and str(selected_id or "") != str(preferred_track_id):
+            repaired["music_track_id"] = str(preferred_track_id)
+            repaired["music_mix"] = requested_music
+            selected_id = str(preferred_track_id)
+            repairs.append("applied_specifically_selected_music_track")
         if selected_id is None:
             previous_track_id = (previous_plan or {}).get("music_track_id")
             track_id = (
-                previous_track_id
+                preferred_track_id
+                if preferred_track_id is not None and str(preferred_track_id) in approved_ids
+                else previous_track_id
                 if previous_track_id is not None and str(previous_track_id) in approved_ids
                 else tracks[0].get("track_id")
             )
@@ -553,6 +618,39 @@ def protect_spoken_boundaries(plan: EditPlan, assets: list[dict[str, Any]]) -> E
     return protected
 
 
+def _validate_effect_cues(
+    plan: EditPlan,
+    total_duration: float,
+    direction: dict[str, Any],
+    creative_effects: list[dict[str, Any]],
+) -> None:
+    level = str(direction.get("effect_level") or "off")
+    limits = {"off": 0, "subtle": 2, "social": 4, "meme_heavy": 8}
+    maximum = limits.get(level)
+    if maximum is None:
+        raise ValueError("the job contains an unsupported creative effect level")
+    if level == "off":
+        plan.effects = []
+        return
+    if len(plan.effects) > maximum:
+        raise ValueError(f"the {level} effect level permits at most {maximum} cues")
+    inventory = {str(item["asset_id"]): item for item in creative_effects}
+    previous_start = -10.0
+    for cue in sorted(plan.effects, key=lambda item: item.start_seconds):
+        item = inventory.get(str(cue.asset_id))
+        if item is None:
+            raise ValueError(f"creative asset {cue.asset_id} is not in the approved library")
+        if cue.start_seconds + cue.duration_seconds > total_duration + 0.01:
+            raise ValueError("a creative effect extends beyond the edit timeline")
+        if cue.purpose != item.get("purpose"):
+            raise ValueError("a creative effect cue must preserve its reviewed purpose")
+        if cue.start_seconds - previous_start < 0.5:
+            raise ValueError("creative effect cues must be at least 0.5 seconds apart")
+        if level == "subtle" and cue.intensity == "strong":
+            raise ValueError("strong creative effects are not allowed in subtle mode")
+        previous_start = cue.start_seconds
+
+
 def validate_edit_plan(
     document: dict[str, Any],
     assets: list[dict[str, Any]],
@@ -560,6 +658,7 @@ def validate_edit_plan(
     allow_post_copy: bool = False,
     creative_direction: dict[str, Any] | None = None,
     music_tracks: list[dict[str, Any]] | None = None,
+    creative_effects: list[dict[str, Any]] | None = None,
 ) -> EditPlan:
     if document.get("recipe") == "montage":
         return validate_montage_plan(
@@ -568,6 +667,7 @@ def validate_edit_plan(
             allow_post_copy=allow_post_copy,
             creative_direction=creative_direction,
             music_tracks=music_tracks,
+            creative_effects=creative_effects,
         )
     plan = protect_spoken_boundaries(TalkingHeadEditPlan.model_validate(document), assets)
     if plan.post_copy and not allow_post_copy:
@@ -659,6 +759,11 @@ def validate_edit_plan(
             raise ValueError(f"music track {track_id} is not in the approved library")
         if plan.music_mix != requested_music:
             raise ValueError("the music mix does not match the job's requested music level")
+        selected_track_id = direction.get("selected_music_track_id")
+        if selected_track_id and track_id != str(selected_track_id):
+            raise ValueError("the edit plan did not use the specifically selected music track")
+
+    _validate_effect_cues(plan, total_duration, direction, creative_effects or [])
 
     for asset_id, asset_ranges in ranges.items():
         ordered = sorted(asset_ranges)
@@ -676,6 +781,7 @@ def validate_montage_plan(
     allow_post_copy: bool = False,
     creative_direction: dict[str, Any] | None = None,
     music_tracks: list[dict[str, Any]] | None = None,
+    creative_effects: list[dict[str, Any]] | None = None,
 ) -> MontageEditPlan:
     parsed_plan = MontageEditPlan.model_validate(document)
     # Validate the model's declared source timing before adding speech handles.
@@ -779,6 +885,10 @@ def validate_montage_plan(
             raise ValueError(f"music track {track_id} is not in the approved library")
         if plan.music_mix != requested_music:
             raise ValueError("the music mix does not match the job's requested music level")
+        selected_track_id = direction.get("selected_music_track_id")
+        if selected_track_id and track_id != str(selected_track_id):
+            raise ValueError("the montage did not use the specifically selected music track")
+    _validate_effect_cues(plan, total_duration, direction, creative_effects or [])
     return plan
 
 

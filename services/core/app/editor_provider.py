@@ -226,6 +226,10 @@ def _public_context(context: dict[str, Any], max_characters: int) -> dict[str, A
         for key in list(track):
             if key.startswith("_"):
                 del track[key]
+    for effect in public.get("creative_effect_library", []):
+        for key in list(effect):
+            if key.startswith("_"):
+                del effect[key]
 
     encoded = json.dumps(public, ensure_ascii=False, separators=(",", ":"))
     if len(encoded) <= max_characters:
@@ -325,7 +329,10 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
             "or useful natural sound, never as arbitrary fragments. The renderer automatically ducks selected "
             "music beneath audible source clips. When no music is requested, favor a few "
             "coherent audio passages over rapid on/off audio switching. When a selected track has a beat grid, "
-            "prefer cumulative cut times near those beats."
+            "prefer cumulative cut times near those beats. Use creative_effect_library only when "
+            "job.effect_level is enabled. Every effect must support a real hook, transition, emphasis, reveal, "
+            "reaction, or payoff; match the asset's reviewed purpose, keep cues within the finished timeline, "
+            "and prefer restraint over decoration. Subtle permits at most 2 cues, social 4, and meme_heavy 8."
         )
     else:
         task_instruction = (
@@ -345,7 +352,10 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
             "punch-ins, keep complete phrases intact, and include a "
             "transition beat when the edit is at least 20 seconds. For clean edits, favor stable framing. For "
             "calm edits, favor longer clips and slow moves. Select music only from music_library and only when "
-            "job.music_mode requests it; otherwise return no music."
+            "job.music_mode requests it; otherwise return no music. Use creative_effect_library only when "
+            "job.effect_level is enabled. Every effect must support a real hook, transition, emphasis, reveal, "
+            "reaction, or payoff; match the asset's reviewed purpose, keep cues within the finished timeline, "
+            "and prefer restraint over decoration. Subtle permits at most 2 cues, social 4, and meme_heavy 8."
         )
     content: list[dict[str, Any]] = [
         {

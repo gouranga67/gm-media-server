@@ -31,6 +31,7 @@ import {
   createProject,
   createMediaJob,
   getCreativeProfiles,
+  getCreativeAssets,
   getBrandKits,
   getEditorModels,
   getAsset,
@@ -47,9 +48,11 @@ import {
   type Asset,
   type CatalogSearchResult,
   type CreativeProfile,
+  type CreativeAsset,
   type BrandKit,
   type PublishingPreset,
   type EditStyle,
+  type EffectLevel,
   type EditorModel,
   type MusicMode,
   type MusicTrack,
@@ -701,6 +704,8 @@ function NewJobFormContent() {
   const [targetDuration, setTargetDuration] = useState<TargetDuration>(45);
   const [editStyle, setEditStyle] = useState<EditStyle>("energetic");
   const [musicMode, setMusicMode] = useState<MusicMode>("none");
+  const [selectedMusicTrackId, setSelectedMusicTrackId] = useState<string | null>(null);
+  const [effectLevel, setEffectLevel] = useState<EffectLevel>("off");
   const [targetPlatform, setTargetPlatform] = useState<TargetPlatform>("all_social");
   const [mustInclude, setMustInclude] = useState("");
   const [audience, setAudience] = useState("");
@@ -717,6 +722,7 @@ function NewJobFormContent() {
   const [brandKitId, setBrandKitId] = useState<string | null>(null);
   const [publishingPreset, setPublishingPreset] = useState<PublishingPreset>("custom");
   const [musicTracks, setMusicTracks] = useState<readonly MusicTrack[]>([]);
+  const [creativeAssets, setCreativeAssets] = useState<readonly CreativeAsset[]>([]);
   const [entries, setEntries] = useState<UploadEntry[]>([]);
   const [sourcePanel, setSourcePanel] = useState<SourcePanel>("library");
   const [libraryAssets, setLibraryAssets] = useState<readonly LibraryAsset[]>([]);
@@ -745,10 +751,11 @@ function NewJobFormContent() {
   useEffect(() => {
     mountedRef.current = true;
     let cancelled = false;
-    void Promise.all([getSystemInformation(), getMusicTracks(), getEditorModels(), getCreativeProfiles(), getBrandKits()])
-      .then(([, tracks, models, profiles, kits]) => {
+    void Promise.all([getSystemInformation(), getMusicTracks(), getCreativeAssets(true), getEditorModels(), getCreativeProfiles(), getBrandKits()])
+      .then(([, tracks, effects, models, profiles, kits]) => {
         if (!cancelled) {
           setMusicTracks(tracks);
+          setCreativeAssets(effects);
           setEditorModels(models);
           setCreativeProfiles(profiles);
           setBrandKits(kits);
@@ -1179,6 +1186,8 @@ function NewJobFormContent() {
           targetDurationSeconds: targetDuration,
           editStyle,
           musicMode,
+          selectedMusicTrackId,
+          effectLevel,
           targetPlatform,
           mustInclude: mustInclude.trim(),
           audience: audience.trim(),
@@ -1365,7 +1374,9 @@ function NewJobFormContent() {
                       setTargetDuration(profile.target_duration_seconds);
                       setEditStyle(profile.edit_style);
                       setMusicMode(profile.music_mode);
+                      setSelectedMusicTrackId(null);
                       setTargetPlatform(profile.target_platform);
+                      if (!creativeAssets.some((asset) => asset.allowed_platforms.includes("all_social") || asset.allowed_platforms.includes(profile.target_platform))) setEffectLevel("off");
                       setOutputAspect(profile.output_aspect);
                       setReasoningEffort(profile.reasoning_effort);
                       setBrandKitId(profile.brand_kit_id);
@@ -1595,6 +1606,8 @@ function NewJobFormContent() {
                         || track.allowed_platforms.includes(selected),
                     );
                     if (!hasCompatibleTrack) setMusicMode("none");
+                    if (!hasCompatibleTrack || (selectedMusicTrackId && !musicTracks.some((track) => track.id === selectedMusicTrackId && (track.allowed_platforms.includes("all_social") || track.allowed_platforms.includes(selected))))) setSelectedMusicTrackId(null);
+                    if (!creativeAssets.some((asset) => asset.allowed_platforms.includes("all_social") || asset.allowed_platforms.includes(selected))) setEffectLevel("off");
                   }}
                   value={targetPlatform}
                 >
@@ -1611,7 +1624,7 @@ function NewJobFormContent() {
                     key={option.value}
                     label={option.label}
                     name="music-mode"
-                    onChange={() => setMusicMode(option.value)}
+                    onChange={() => { setMusicMode(option.value); if (option.value === "none") setSelectedMusicTrackId(null); }}
                     selected={musicMode === option.value}
                     value={option.value}
                   />
@@ -1622,6 +1635,26 @@ function NewJobFormContent() {
                   ? `${compatibleMusicCount} compatible rights-recorded ${compatibleMusicCount === 1 ? "track" : "tracks"} available.`
                   : "No compatible tracks are imported yet, so this job will remain voice-only."}
               </p>
+              {musicMode !== "none" && compatibleMusicCount > 0 ? (
+                <label className="block space-y-2 text-xs font-bold text-[#173F5F]">
+                  TRACK
+                  <select className="h-12 w-full rounded-md border border-[#D7D9D3] bg-white px-3 text-sm font-normal text-[#20211F]" onChange={(event) => setSelectedMusicTrackId(event.currentTarget.value || null)} value={selectedMusicTrackId ?? ""}>
+                    <option value="">Auto-select for the story</option>
+                    {musicTracks.filter((track) => track.allowed_platforms.includes("all_social") || track.allowed_platforms.includes(targetPlatform)).map((track) => <option key={track.id} value={track.id}>{track.title}{track.artist ? ` — ${track.artist}` : ""} · {track.mood}</option>)}
+                  </select>
+                </label>
+              ) : null}
+            </fieldset>
+            <fieldset className="space-y-3" disabled={formLocked}>
+              <legend className="text-xs font-bold text-[#173F5F]">CREATIVE EFFECTS</legend>
+              <p className="text-xs leading-relaxed text-[#666862]">Adds only reviewed SFX, stickers, GIFs, or meme assets when they support a real story beat.</p>
+              <div className="grid grid-cols-2 gap-2">
+                {([
+                  ["off", "Off", "Clean edit"], ["subtle", "Subtle", "Up to 2 cues"],
+                  ["social", "Social", "Up to 4 cues"], ["meme_heavy", "Meme-heavy", "Up to 8 cues"],
+                ] as const).map(([value, label, description]) => { const unavailable = value !== "off" && !creativeAssets.some((asset) => asset.allowed_platforms.includes("all_social") || asset.allowed_platforms.includes(targetPlatform)); return <label className={`rounded-md border p-3 ${unavailable ? "cursor-not-allowed opacity-45" : ""} ${effectLevel === value ? "border-[#173F5F] bg-[#EFF6FA]" : "border-[#D7D9D3] bg-white"}`} key={value}><input checked={effectLevel === value} className="sr-only" disabled={unavailable} name="effect-level" onChange={() => setEffectLevel(value)} type="radio" /><span className="block text-sm font-bold text-[#173F5F]">{label}</span><span className="mt-1 block text-[11px] text-[#666862]">{description}</span></label>; })}
+              </div>
+              <p className="text-xs text-[#666862]">{creativeAssets.filter((asset) => asset.allowed_platforms.includes("all_social") || asset.allowed_platforms.includes(targetPlatform)).length} compatible reviewed effects available.</p>
             </fieldset>
             <fieldset className="space-y-3" disabled={formLocked || privacyMode === "local_only"}>
               <legend className="text-xs font-bold text-[#173F5F]">EDITOR MODEL</legend>

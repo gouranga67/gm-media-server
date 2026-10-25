@@ -22,6 +22,12 @@ router = APIRouter(prefix="/api/v1", tags=["learning"])
 
 
 FEEDBACK_RULES: dict[str, dict[str, str]] = {
+    "effects_worked": {"dimension": "effects", "sentiment": "positive", "directive": "Keep creative effects sparse, purposeful, and synchronized to genuine story beats."},
+    "effects_too_much": {"dimension": "effects", "sentiment": "negative", "directive": "Use fewer creative effects and reserve them for the strongest hook, reveal, reaction, or payoff."},
+    "effects_too_loud": {"dimension": "effects_audio", "sentiment": "negative", "directive": "Reduce sound-effect intensity and protect speech intelligibility at every cue."},
+    "effect_timing_issue": {"dimension": "effects_timing", "sentiment": "negative", "directive": "Place creative effects precisely on the source-backed beat they explain or emphasize."},
+    "meme_worked": {"dimension": "memes", "sentiment": "positive", "directive": "Use a reviewed meme asset only when its meaning naturally reinforces the source moment."},
+    "meme_forced": {"dimension": "memes", "sentiment": "negative", "directive": "Avoid meme assets unless the source moment clearly earns the reference."},
     "strong_hook": {
         "dimension": "hook",
         "sentiment": "positive",

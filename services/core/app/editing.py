@@ -462,6 +462,7 @@ def submit_edit_plan(
             allow_post_copy=bool(context["project"]["ai_copy_allowed"]),
             creative_direction=context["job"],
             music_tracks=context["music_library"],
+            creative_effects=context["creative_effect_library"],
         )
     except (ValueError, ValidationError) as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
@@ -647,13 +648,14 @@ def request_revision(job_id: UUID, payload: RevisionCreate) -> dict[str, Any]:
             """
             INSERT INTO edit_runs (
                 job_id, version, based_on_run_id, revision_note, caption_corrections,
-                caption_settings, clip_adjustments, locked_elements
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                caption_settings, effects_enabled, clip_adjustments, locked_elements
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING *
             """,
             (
                 job_id, version, based_on["id"], payload.note or None,
                 Jsonb(effective_corrections), Jsonb(effective_caption_settings),
+                payload.effects_enabled,
                 Jsonb(adjustments), Jsonb(payload.locked_elements),
             ),
         ).fetchone()
@@ -675,6 +677,7 @@ def request_revision(job_id: UUID, payload: RevisionCreate) -> dict[str, Any]:
                         "note": payload.note,
                         "caption_correction_count": len(effective_corrections),
                         "caption_settings": effective_caption_settings,
+                        "effects_enabled": payload.effects_enabled,
                         "timeline_adjustment_count": len(adjustments),
                         "locked_elements": payload.locked_elements,
                     }

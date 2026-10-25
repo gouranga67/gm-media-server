@@ -1,6 +1,7 @@
 export type PrivacyMode = "hybrid" | "text_only" | "local_only";
 export type EditStyle = "clean" | "energetic" | "calm";
 export type MusicMode = "none" | "subtle" | "present";
+export type EffectLevel = "off" | "subtle" | "social" | "meme_heavy";
 export type TargetDuration = 15 | 20 | 30 | 45 | 60;
 export type Recipe = "talking_head" | "montage";
 export type ReasoningEffort = "low" | "medium" | "high";
@@ -27,6 +28,8 @@ export type MediaJob = {
   readonly target_duration_seconds: TargetDuration | null;
   readonly edit_style: EditStyle | null;
   readonly music_mode: MusicMode | null;
+  readonly selected_music_track_id: string | null;
+  readonly effect_level: EffectLevel;
   readonly target_platform: TargetPlatform | null;
   readonly must_include: string;
   readonly audience: string;
@@ -222,7 +225,28 @@ export type MusicTrack = {
   readonly license_source_url: string;
   readonly allowed_platforms: readonly TargetPlatform[];
   readonly attribution: string;
+  readonly active: boolean;
   readonly created_at: string;
+};
+
+export type CreativeAsset = {
+  readonly id: string;
+  readonly kind: "sound_effect" | "meme_sound" | "sticker" | "gif" | "meme_image";
+  readonly title: string;
+  readonly creator: string;
+  readonly source_name: string;
+  readonly mime_type: string;
+  readonly byte_size: number;
+  readonly duration_seconds: number | null;
+  readonly tags: readonly string[];
+  readonly purpose: "hook" | "transition" | "emphasis" | "reveal" | "reaction" | "payoff";
+  readonly license_name: string;
+  readonly license_source_url: string;
+  readonly allowed_platforms: readonly TargetPlatform[];
+  readonly attribution: string;
+  readonly active: boolean;
+  readonly created_at: string;
+  readonly updated_at: string;
 };
 
 export type EditRun = {
@@ -241,6 +265,7 @@ export type EditRun = {
     position?: "lower_safe" | "middle" | "upper";
     timing_offset_seconds?: number;
   }>;
+  readonly effects_enabled: boolean | null;
   readonly approved_at: string | null;
   readonly preview_available: boolean;
   readonly manifest: Record<string, unknown>;
@@ -373,7 +398,9 @@ export type FeedbackTag =
   | "strong_hook" | "weak_hook" | "clear_story" | "confusing_story"
   | "pacing_too_slow" | "pacing_too_fast" | "clean_captions" | "caption_issue"
   | "balanced_audio" | "audio_issue" | "good_visuals" | "visual_issue"
-  | "good_colour" | "colour_issue" | "strong_ending" | "weak_ending";
+  | "good_colour" | "colour_issue" | "strong_ending" | "weak_ending"
+  | "effects_worked" | "effects_too_much" | "effects_too_loud" | "effect_timing_issue"
+  | "meme_worked" | "meme_forced";
 
 export type EditFeedback = {
   readonly id: string;
@@ -648,6 +675,8 @@ export function createMediaJob(
     readonly targetDurationSeconds: TargetDuration;
     readonly editStyle: EditStyle;
     readonly musicMode: MusicMode;
+    readonly selectedMusicTrackId?: string | null;
+    readonly effectLevel?: EffectLevel;
     readonly targetPlatform: TargetPlatform;
     readonly mustInclude: string;
     readonly audience?: string;
@@ -670,6 +699,8 @@ export function createMediaJob(
       target_duration_seconds: input.targetDurationSeconds,
       edit_style: input.editStyle,
       music_mode: input.musicMode,
+      selected_music_track_id: input.selectedMusicTrackId ?? null,
+      effect_level: input.effectLevel ?? "off",
       target_platform: input.targetPlatform,
       must_include: input.mustInclude,
       audience: input.audience ?? "",
@@ -892,6 +923,56 @@ export function getMusicTracks() {
   return apiRequest<readonly MusicTrack[]>("music-tracks", { cache: "no-store" });
 }
 
+export async function getAllMusicTracks() {
+  const [active, archived] = await Promise.all([
+    apiRequest<readonly MusicTrack[]>("music-tracks?active=true", { cache: "no-store" }),
+    apiRequest<readonly MusicTrack[]>("music-tracks?active=false", { cache: "no-store" }),
+  ]);
+  return [...active, ...archived];
+}
+
+export function musicTrackMediaUrl(trackId: string) {
+  return `/api/media/music-tracks/${encodeURIComponent(trackId)}/media`;
+}
+
+export function setMusicTrackActive(trackId: string, active: boolean) {
+  return apiRequest<MusicTrack>(`music-tracks/${encodeURIComponent(trackId)}?active=${String(active)}`, {
+    method: "PATCH", body: "{}",
+  });
+}
+
+export function getCreativeAssets(active?: boolean) {
+  const query = active === undefined ? "" : `?active=${String(active)}`;
+  return apiRequest<readonly CreativeAsset[]>(`creative-assets${query}`, { cache: "no-store" });
+}
+
+export function creativeAssetMediaUrl(assetId: string) {
+  return `/api/media/creative-assets/${encodeURIComponent(assetId)}/media`;
+}
+
+export function setCreativeAssetActive(assetId: string, active: boolean) {
+  return apiRequest<CreativeAsset>(`creative-assets/${encodeURIComponent(assetId)}?active=${String(active)}`, {
+    method: "PATCH",
+    body: "{}",
+  });
+}
+
+export async function importCreativeAsset(file: File, metadata: Readonly<Record<string, string | boolean>>) {
+  const query = new URLSearchParams();
+  query.set("filename", file.name);
+  for (const [key, value] of Object.entries(metadata)) query.set(key, String(value));
+  const response = await fetch(`/api/media/creative-assets/import?${query.toString()}`, {
+    method: "POST",
+    headers: { "content-type": file.type || "application/octet-stream" },
+    body: file,
+  });
+  if (!response.ok) {
+    const detail = await response.json().catch(() => null) as { detail?: string } | null;
+    throw new Error(detail?.detail ?? `Import failed with status ${response.status}`);
+  }
+  return await response.json() as { readonly kind: string; readonly asset: MusicTrack | CreativeAsset };
+}
+
 export function getEditorModels() {
   return apiRequest<readonly EditorModel[]>("editor/models", { cache: "no-store" });
 }
@@ -993,6 +1074,7 @@ export function requestRevision(
       readonly timing_offset_seconds: number;
     };
     readonly lockedElements?: readonly string[];
+    readonly effectsEnabled?: boolean;
   },
 ) {
   return apiRequest<EditRun>(`jobs/${jobId}/revisions`, {
@@ -1003,6 +1085,7 @@ export function requestRevision(
       clip_adjustments: input.clipAdjustments ?? [],
       caption_settings: input.captionSettings,
       locked_elements: input.lockedElements ?? [],
+      effects_enabled: input.effectsEnabled,
     }),
   });
 }

@@ -93,6 +93,8 @@ For the upstream requirements, see OpenAI's [open-source token sharing guide](ht
 
 GM Studio never searches for or downloads music. An operator must supply a local, non-synthetic audio file and record its licence, commercial-use confirmation, attribution, and permitted platforms. After deployment, inspect the importer options:
 
+The normal workflow is the **Creative** page at `/creative`. Download a track from its official Pixabay page, upload the file there, and paste the same page URL into the rights record. The page also accepts licensed sound effects, meme sounds, PNG/JPEG/WebP stickers, GIFs, and meme images. The command below remains available for server-side music imports.
+
 ```bash
 ./scripts/import-music.sh /absolute/path/to/track.mp3 --help
 ```
@@ -158,9 +160,11 @@ python3 scripts/verify-phase10.py
 python3 scripts/verify-phase11.py
 python3 scripts/verify-phase12.py
 python3 scripts/verify-phase13.py
+python3 scripts/verify-phase14.py
+python3 scripts/verify-phase16.py
 ```
 
-The Phase 3 check exercises interrupted/resumed tus uploads, Phase 4 verifies real-media analysis, Phase 5 proves strict edit-plan validation plus a downloadable deterministic preview, and Phase 6 exercises revision, approval, and full delivery packaging. Phase 6B verifies a deployed montage plus its model catalogue and usage ledger. Phase 6C verifies zero-copy reuse and the non-destructive duplicate audit; Phase 6D verifies catalogue backfill and provenance-bearing text search; Phase 6E verifies local semantic visual search with source-frame evidence. Phase 9 verifies checksum-gated physical storage sharing while preserving every asset record and historical path. Phase 10 verifies reusable Creative Profiles and locally rendered square/vertical/landscape variants without another model call. Phase 11 verifies the clip-level editorial timeline, managed brand kits, publishing presets, and profile management without consuming model tokens. Phase 12 verifies the product dashboard, Tailscale-backed roles, job archive/restore, AI budgets, operator audit, and derived-file retention with a database-enforced zero-original guarantee. Phase 13 verifies cached local story moments, explicit viewer intent, engagement signals, clean edit guidance, progressive word-timed captions, protected speech boundaries, story coverage, exact source ranges, and zero additional model usage.
+The Phase 3 check exercises interrupted/resumed tus uploads, Phase 4 verifies real-media analysis, Phase 5 proves strict edit-plan validation plus a downloadable deterministic preview, and Phase 6 exercises revision, approval, and full delivery packaging. Phase 6B verifies a deployed montage plus its model catalogue and usage ledger. Phase 6C verifies zero-copy reuse and the non-destructive duplicate audit; Phase 6D verifies catalogue backfill and provenance-bearing text search; Phase 6E verifies local semantic visual search with source-frame evidence. Phase 9 verifies checksum-gated physical storage sharing while preserving every asset record and historical path. Phase 10 verifies reusable Creative Profiles and locally rendered square/vertical/landscape variants without another model call. Phase 11 verifies the clip-level editorial timeline, managed brand kits, publishing presets, and profile management without consuming model tokens. Phase 12 verifies the product dashboard, Tailscale-backed roles, job archive/restore, AI budgets, operator audit, and derived-file retention with a database-enforced zero-original guarantee. Phase 13 verifies cached local story moments and source-backed engagement guidance. Phase 14 verifies the local learning loop. Phase 16 verifies rights-aware creative libraries, platform filtering, effect controls, and zero additional model usage.
 
 The root URL is the studio dashboard. `/welcome` explains initial setup, `/jobs` manages active and archived work, `/operations` controls workload and retention, and `/access` manages invited Tailscale identities. Owner/editor/viewer permissions reuse Tailscale authentication; GM Studio does not store passwords.
 

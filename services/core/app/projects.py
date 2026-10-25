@@ -190,18 +190,21 @@ def list_editor_models() -> list[dict[str, Any]]:
 
 
 @router.get("/music-tracks", response_model=list[MusicTrackResponse])
-def list_music_tracks() -> list[dict[str, Any]]:
+def list_music_tracks(active: bool | None = Query(default=True)) -> list[dict[str, Any]]:
+    active_clause = "" if active is None else "AND active = %s"
+    parameters: tuple[Any, ...] = () if active is None else (active,)
     with connection() as database:
         rows = database.execute(
-            """
+            f"""
             SELECT id, title, artist, duration_seconds, mood, energy, bpm,
                    beat_grid_seconds,
                    license_name, license_source_url, allowed_platforms,
-                   attribution, created_at
+                   attribution, active, created_at
             FROM music_tracks
-            WHERE active = true AND commercial_use = true AND synthetic_media = false
+            WHERE commercial_use = true AND synthetic_media = false {active_clause}
             ORDER BY mood, energy, title
-            """
+            """,
+            parameters,
         ).fetchall()
     return list(rows)
 
@@ -961,6 +964,19 @@ def create_job(
     job_id = payload.id or uuid4()
     try:
         with connection() as database:
+            if payload.music_mode.value == "none" and payload.selected_music_track_id is not None:
+                raise HTTPException(status_code=422, detail="a voice-only job cannot select a music track")
+            if payload.selected_music_track_id is not None:
+                selected_track = database.execute(
+                    """SELECT allowed_platforms FROM music_tracks
+                       WHERE id=%s AND active=true AND commercial_use=true AND synthetic_media=false""",
+                    (payload.selected_music_track_id,),
+                ).fetchone()
+                if selected_track is None:
+                    raise HTTPException(status_code=422, detail="the selected music track is unavailable")
+                allowed = selected_track["allowed_platforms"] or []
+                if "all_social" not in allowed and payload.target_platform.value not in allowed:
+                    raise HTTPException(status_code=422, detail="the selected music track is not licensed for this platform")
             if payload.editor_model is not None:
                 available_model = database.execute(
                     "SELECT 1 FROM editor_models WHERE slug = %s AND available = true",
@@ -978,13 +994,14 @@ def create_job(
                 """
                 INSERT INTO jobs (
                     id, project_id, recipe, target_duration_seconds,
-                    edit_style, music_mode, target_platform, must_include,
+                    edit_style, music_mode, selected_music_track_id, effect_level,
+                    target_platform, must_include,
                     audience, story_goal, desired_feeling, ending_instruction,
                     editor_model, reasoning_effort, output_aspect, creative_profile_id,
                     brand_kit_id, publishing_preset, created_by_login
                 )
                 VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                 )
                 RETURNING *
@@ -996,6 +1013,8 @@ def create_job(
                     payload.target_duration_seconds,
                     payload.edit_style.value,
                     payload.music_mode.value,
+                    payload.selected_music_track_id,
+                    payload.effect_level.value,
                     payload.target_platform.value,
                     payload.must_include,
                     payload.audience,
@@ -1022,6 +1041,8 @@ def create_job(
             or row["target_duration_seconds"] != payload.target_duration_seconds
             or row["edit_style"] != payload.edit_style.value
             or row["music_mode"] != payload.music_mode.value
+            or row["selected_music_track_id"] != payload.selected_music_track_id
+            or row["effect_level"] != payload.effect_level.value
             or row["target_platform"] != payload.target_platform.value
             or row["must_include"] != payload.must_include
             or row["audience"] != payload.audience

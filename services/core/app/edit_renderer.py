@@ -9,6 +9,12 @@ from app.caption_text import replace_caption_phrase
 from app.config import Settings, get_settings
 from app.edit_plan import TalkingHeadEditPlan, document_sha256
 from app.editor_context import resolve_internal_asset_render_source
+from app.effect_renderer import (
+    append_effect_filters,
+    effect_input_arguments,
+    public_effect_manifest,
+    selected_effects,
+)
 from app.media_analysis import (
     READ_ONLY_MODE,
     ensure_capacity,
@@ -462,6 +468,7 @@ def _render_video(
     frames_per_second: int = PREVIEW_FPS,
     final_quality: bool = False,
     music_source: Path | None = None,
+    effect_sources: list[dict[str, Any]] | None = None,
 ) -> str:
     common = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-y"]
     for source, source_in, source_out in sources:
@@ -470,6 +477,8 @@ def _render_video(
         )
     if music_source is not None:
         common.extend(["-stream_loop", "-1", "-i", str(music_source)])
+    effects = effect_sources or []
+    common.extend(effect_input_arguments(effects))
     probe_cache: dict[Path, str | None] = {}
     hdr_modes: list[str | None] = []
     for source, _, _ in sources:
@@ -479,7 +488,7 @@ def _render_video(
     common.extend(
         [
             "-filter_complex",
-            _ffmpeg_filter(
+            append_effect_filters(_ffmpeg_filter(
                 plan,
                 captions_path,
                 width=width,
@@ -487,7 +496,8 @@ def _render_video(
                 frames_per_second=frames_per_second,
                 music_input_index=len(sources) if music_source is not None else None,
                 hdr_modes=hdr_modes,
-            ),
+            ), effects, width=width, height=height,
+                total_duration=sum(float(clip.source_out - clip.source_in) for clip in plan.clips)),
             "-map",
             "[vout]",
             "-map",
@@ -607,6 +617,9 @@ def render_edit_preview(
         for clip in plan.clips
     ]
     music_source, music_metadata = _selected_music(context, plan, settings)
+    effect_sources = selected_effects(
+        context, plan, settings, len(sources) + (1 if music_source is not None else 0)
+    )
     project_id = str(context["job"]["project_id"])
     job_id = str(context["job"]["id"])
     output_directory = settings.media_root / "exports" / project_id / job_id / f"v{version}"
@@ -639,6 +652,7 @@ def render_edit_preview(
         width=width,
         height=height,
         music_source=music_source,
+        effect_sources=effect_sources,
     )
 
     document = plan.model_dump(mode="json")
@@ -653,6 +667,8 @@ def render_edit_preview(
             "target_duration_seconds": context["job"].get("target_duration_seconds"),
             "edit_style": context["job"].get("edit_style"),
             "music_mode": context["job"].get("music_mode"),
+            "selected_music_track_id": context["job"].get("selected_music_track_id"),
+            "effect_level": context["job"].get("effect_level"),
             "target_platform": context["job"].get("target_platform"),
             "must_include": context["job"].get("must_include"),
             "audience": context["job"].get("audience"),
@@ -663,6 +679,7 @@ def render_edit_preview(
         },
         "story_assessment": context.get("story_spine", {}).get("engagement_assessment", {}),
         "music": music_metadata,
+        "creative_effects": public_effect_manifest(effect_sources),
         "brand_kit": context.get("brand_kit"),
         "caption_corrections": caption_corrections or [],
         "captions": {
@@ -705,8 +722,9 @@ def render_edit_preview(
         },
         "capacity_at_start": capacity,
         "content_policy": {
-            "source_derived_only": music_metadata is None,
+            "source_derived_only": music_metadata is None and not effect_sources,
             "approved_library_music": music_metadata is not None,
+            "approved_library_effects": bool(effect_sources),
             "synthetic_image": False,
             "synthetic_video": False,
             "synthetic_voice": False,
@@ -787,6 +805,9 @@ def render_final_delivery(
         for clip in plan.clips
     ]
     music_source, music_metadata = _selected_music(context, plan, settings)
+    effect_sources = selected_effects(
+        context, plan, settings, len(sources) + (1 if music_source is not None else 0)
+    )
     project_id = str(context["job"]["project_id"])
     job_id = str(context["job"]["id"])
     output_directory = settings.media_root / "deliveries" / project_id / job_id / f"v{version}"
@@ -828,6 +849,7 @@ def render_final_delivery(
         frames_per_second=FINAL_FPS,
         final_quality=True,
         music_source=music_source,
+        effect_sources=effect_sources,
     )
     technical_probe = probe_media(video_path, settings.analysis_command_timeout_seconds)
     video_stream = next(
@@ -890,6 +912,8 @@ def render_final_delivery(
             "target_duration_seconds": context["job"].get("target_duration_seconds"),
             "edit_style": context["job"].get("edit_style"),
             "music_mode": context["job"].get("music_mode"),
+            "selected_music_track_id": context["job"].get("selected_music_track_id"),
+            "effect_level": context["job"].get("effect_level"),
             "target_platform": context["job"].get("target_platform"),
             "must_include": context["job"].get("must_include"),
             "audience": context["job"].get("audience"),
@@ -900,6 +924,7 @@ def render_final_delivery(
         },
         "story_assessment": context.get("story_spine", {}).get("engagement_assessment", {}),
         "music": music_metadata,
+        "creative_effects": public_effect_manifest(effect_sources),
         "brand_kit": context.get("brand_kit"),
         "tools": {
             "gm_studio_core": "0.1.0",
@@ -950,8 +975,9 @@ def render_final_delivery(
         },
         "capacity_at_start": capacity,
         "content_policy": {
-            "source_derived_only": music_metadata is None,
+            "source_derived_only": music_metadata is None and not effect_sources,
             "approved_library_music": music_metadata is not None,
+            "approved_library_effects": bool(effect_sources),
             "synthetic_image": False,
             "synthetic_video": False,
             "synthetic_voice": False,

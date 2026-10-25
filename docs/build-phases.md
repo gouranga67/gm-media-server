@@ -389,3 +389,15 @@ Current source checkpoint (2026-10-25): migration 021 persists caption layout ch
 The editorial timeline measures pauses from local word timestamps. Clips containing a pause of at least 0.65 seconds expose explicit tight, short-comic, and long-comic beat controls. Applying one splits only the selected source range at word-safe boundaries, caps excessive silence at the chosen length, preserves the surrounding story, and creates a deterministic preview without asking the agent to reinterpret the request.
 
 Exit check: deploy migration 021, tighten one measured pause, change a vertical edit to the lower app-safe caption position, confirm both previews retain the same surrounding clips and existing caption corrections, and pass the full live suite.
+
+## Phase 16 — rights-aware music and creative effects
+
+**Purpose:** add production polish with licensed music, sound effects, stickers, GIFs, and meme images while keeping the editor controllable and commercially safe.
+
+Current source checkpoint (2026-10-25): migration 022 adds a licensed creative-asset catalogue, exact per-job music selection, bounded effect levels, and deterministic effect removal. The owner-facing **Creative** workspace imports files downloaded from a legitimate source such as Pixabay and records the creator, licence name, source page, proof note, attribution, allowed platforms, SHA-256, and commercial-use confirmation. Files remain local; archiving is reversible.
+
+Edit plans now carry source-backed effect cues with an approved asset ID, timeline position, duration, screen position, intensity, and editorial purpose. Subtle, Social, and Meme-heavy modes permit at most 2, 4, and 8 cues. Validation rejects unknown assets, cues outside the edit, mismatched purposes, crowded timing, and strong cues in Subtle mode. FFmpeg mixes audio cues through bounded gain and a limiter, overlays reviewed visual assets, and records every cue plus its licence in the preview and delivery manifests. Reviewers can remove all cues and re-render the exact edit locally with zero AI tokens. The learning loop records whether effects landed, felt excessive, were too loud or mistimed, and whether a meme felt natural or forced.
+
+Pixabay integration is deliberately file-based for this checkpoint: download a chosen asset from its official page, then import it with that page URL. This avoids scraping or treating search results as proof of rights. A provider API can replace the manual download later without changing the catalogue, planning, rendering, or review contracts.
+
+Exit check: deploy migration 022, import one licensed music track and one licensed effect through `/creative`, create a Social-effects job, confirm every rendered cue appears in the manifest, remove the cues with the local review control, then run `python3 scripts/verify-phase16.py` and the full live suite.

@@ -36,6 +36,13 @@ class MusicMode(StringEnum):
     PRESENT = "present"
 
 
+class EffectLevel(StringEnum):
+    OFF = "off"
+    SUBTLE = "subtle"
+    SOCIAL = "social"
+    MEME_HEAVY = "meme_heavy"
+
+
 class TargetPlatform(StringEnum):
     ALL_SOCIAL = "all_social"
     FACEBOOK = "facebook"
@@ -83,6 +90,12 @@ FeedbackTag = Literal[
     "colour_issue",
     "strong_ending",
     "weak_ending",
+    "effects_worked",
+    "effects_too_much",
+    "effects_too_loud",
+    "effect_timing_issue",
+    "meme_worked",
+    "meme_forced",
 ]
 
 
@@ -112,6 +125,8 @@ class JobCreate(BaseModel):
     target_duration_seconds: Literal[15, 20, 30, 45, 60] = 45
     edit_style: EditStyle = EditStyle.ENERGETIC
     music_mode: MusicMode = MusicMode.NONE
+    selected_music_track_id: UUID | None = None
+    effect_level: EffectLevel = EffectLevel.OFF
     target_platform: TargetPlatform = TargetPlatform.ALL_SOCIAL
     must_include: str = Field(default="", max_length=2000)
     audience: str = Field(default="", max_length=600)
@@ -155,6 +170,8 @@ class JobResponse(BaseModel):
     target_duration_seconds: int | None = None
     edit_style: EditStyle | None = None
     music_mode: MusicMode | None = None
+    selected_music_track_id: UUID | None = None
+    effect_level: EffectLevel = EffectLevel.OFF
     target_platform: TargetPlatform | None = None
     must_include: str = ""
     audience: str = ""
@@ -515,7 +532,31 @@ class MusicTrackResponse(BaseModel):
     license_source_url: str
     allowed_platforms: list[str] = Field(default_factory=list)
     attribution: str
+    active: bool = True
     created_at: datetime
+
+
+class CreativeAssetResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    kind: Literal["sound_effect", "meme_sound", "sticker", "gif", "meme_image"]
+    title: str
+    creator: str
+    source_name: str
+    mime_type: str
+    byte_size: int
+    duration_seconds: float | None = None
+    tags: list[str] = Field(default_factory=list)
+    purpose: Literal["hook", "transition", "emphasis", "reveal", "reaction", "payoff"]
+    license_name: str
+    license_source_url: str
+    allowed_platforms: list[str] = Field(default_factory=list)
+    attribution: str
+    synthetic_media: bool = False
+    active: bool = True
+    created_at: datetime
+    updated_at: datetime
 
 
 class EditRunResponse(BaseModel):
@@ -533,6 +574,7 @@ class EditRunResponse(BaseModel):
     revision_note: str | None = None
     caption_corrections: list[dict[str, str]] = Field(default_factory=list)
     caption_settings: dict[str, Any] = Field(default_factory=dict)
+    effects_enabled: bool | None = None
     clip_adjustments: list[dict[str, Any]] = Field(default_factory=list)
     locked_elements: list[str] = Field(default_factory=list)
     approved_at: datetime | None = None
@@ -592,7 +634,8 @@ class RevisionCreate(BaseModel):
     caption_corrections: list[CaptionCorrection] = Field(default_factory=list, max_length=50)
     clip_adjustments: list[ClipAdjustment] = Field(default_factory=list, max_length=48)
     caption_settings: CaptionSettings | None = None
-    locked_elements: list[Literal["clip order", "spoken phrases", "captions", "music"]] = Field(default_factory=list, max_length=4)
+    effects_enabled: bool | None = None
+    locked_elements: list[Literal["clip order", "spoken phrases", "captions", "music", "effects"]] = Field(default_factory=list, max_length=5)
 
     @field_validator("note")
     @classmethod
@@ -606,6 +649,7 @@ class RevisionCreate(BaseModel):
             and not self.caption_corrections
             and not self.clip_adjustments
             and self.caption_settings is None
+            and self.effects_enabled is None
         ):
             raise ValueError(
                 "provide a revision note, caption correction, timeline adjustment, or caption layout"
@@ -653,6 +697,8 @@ class EditFeedbackCreate(BaseModel):
             {"good_visuals", "visual_issue"},
             {"good_colour", "colour_issue"},
             {"strong_ending", "weak_ending"},
+            {"effects_worked", "effects_too_much"},
+            {"meme_worked", "meme_forced"},
         )
         selected = set(self.tags)
         if any(pair <= selected for pair in conflicts):

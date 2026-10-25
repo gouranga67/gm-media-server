@@ -74,8 +74,14 @@ def build_editor_context(
             """
             SELECT * FROM music_tracks
             WHERE active = true AND commercial_use = true
-            ORDER BY mood, energy, title
-            """
+            ORDER BY (id = %s) DESC, mood, energy, title
+            """,
+            (job.get("selected_music_track_id"),),
+        ).fetchall()
+        creative_rows = database.execute(
+            """SELECT * FROM creative_assets
+               WHERE active=true AND commercial_use=true AND synthetic_media=false
+               ORDER BY purpose, kind, title"""
         ).fetchall()
         brand_kit = None
         if job.get("brand_kit_id") is not None:
@@ -176,6 +182,21 @@ def build_editor_context(
             track["_storage_key"] = row["storage_key"]
         music_library.append(track)
     story_assessment = build_story_assessment(retrieved_story_moments)
+    creative_library: list[dict[str, Any]] = []
+    for row in creative_rows:
+        allowed_platforms = row.get("allowed_platforms") or []
+        if "all_social" not in allowed_platforms and target_platform not in allowed_platforms:
+            continue
+        item = {
+            "asset_id": str(row["id"]), "kind": row["kind"], "title": row["title"],
+            "creator": row["creator"], "duration_seconds": row["duration_seconds"],
+            "tags": row["tags"], "purpose": row["purpose"],
+            "allowed_platforms": allowed_platforms, "attribution": row["attribution"],
+            "license_name": row["license_name"], "license_source_url": row["license_source_url"],
+        }
+        if include_internal_paths:
+            item["_storage_key"] = row["storage_key"]
+        creative_library.append(item)
     return {
         "job": {
             "id": str(job["id"]),
@@ -186,6 +207,10 @@ def build_editor_context(
             "target_duration_seconds": job["target_duration_seconds"],
             "edit_style": job["edit_style"],
             "music_mode": job["music_mode"],
+            "selected_music_track_id": (
+                str(job["selected_music_track_id"]) if job.get("selected_music_track_id") else None
+            ),
+            "effect_level": job.get("effect_level") or "off",
             "target_platform": job["target_platform"],
             "must_include": job["must_include"],
             "audience": job.get("audience") or "",
@@ -221,6 +246,7 @@ def build_editor_context(
         "ready_for_editing": ready,
         "assets": assets,
         "music_library": music_library,
+        "creative_effect_library": creative_library,
         "brand_kit": (
             {
                 "id": str(brand_kit["id"]),
@@ -234,7 +260,9 @@ def build_editor_context(
         ),
         "learning_preferences": learning_preferences,
         "content_policy": {
-            "source_derived_only": True,
+            "source_derived_only": not music_library and not creative_library,
+            "approved_library_music": bool(music_library),
+            "approved_library_effects": bool(creative_library),
             "synthetic_image": False,
             "synthetic_video": False,
             "synthetic_voice": False,

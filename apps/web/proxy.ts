@@ -52,7 +52,7 @@ export async function proxy(request: NextRequest) {
     if (role === "viewer" && !["GET", "HEAD", "OPTIONS"].includes(request.method.toUpperCase())) {
       return new NextResponse("Viewer access is read-only.", { status: 403, headers: { "cache-control": "no-store" } });
     }
-    if (role !== "owner" && ["/access", "/operations", "/learning", "/api/media/learning/"].some((path) => request.nextUrl.pathname.startsWith(path))) {
+    if (role !== "owner" && ["/access", "/operations", "/learning", "/creative", "/api/media/learning/", "/api/media/creative-assets/", "/api/media/music-tracks/"].some((path) => request.nextUrl.pathname.startsWith(path))) {
       return new NextResponse("Owner access is required.", { status: 403, headers: { "cache-control": "no-store" } });
     }
     const authenticatedHeaders = new Headers(request.headers);

@@ -19,6 +19,12 @@ from app.editor_context import (
     resolve_internal_asset_render_source,
     resolve_internal_asset_source,
 )
+from app.effect_renderer import (
+    append_effect_filters,
+    effect_input_arguments,
+    public_effect_manifest,
+    selected_effects,
+)
 from app.media_analysis import (
     READ_ONLY_MODE,
     ensure_capacity,
@@ -317,6 +323,10 @@ def _render(
     music_source, _ = _selected_music(context, plan, settings)
     if music_source is not None:
         common.extend(["-stream_loop", "-1", "-i", str(music_source)])
+    effect_sources = selected_effects(
+        context, plan, settings, len(plan.clips) + (1 if music_source is not None else 0)
+    )
+    common.extend(effect_input_arguments(effect_sources))
     probe_cache: dict[Path, str | None] = {}
     hdr_modes: list[str | None] = []
     for source, clip in zip(render_sources, plan.clips, strict=True):
@@ -331,7 +341,7 @@ def _render(
     common.extend(
         [
             "-filter_complex",
-            _filter_graph(
+            append_effect_filters(_filter_graph(
                 plan,
                 inventory,
                 width=width,
@@ -340,7 +350,8 @@ def _render(
                 music_input_index=len(plan.clips) if music_source is not None else None,
                 captions_path=captions_path,
                 hdr_modes=hdr_modes,
-            ),
+            ), effect_sources, width=width, height=height,
+                total_duration=sum(float(clip.duration) for clip in plan.clips)),
             "-map",
             "[vout]",
             "-map",
@@ -424,6 +435,7 @@ def _manifest(
 ) -> dict[str, Any]:
     inventory = {str(asset["asset_id"]): asset for asset in context["assets"]}
     _, music = _selected_music(context, plan, settings)
+    effects = selected_effects(context, plan, settings, 0)
     document = plan.model_dump(mode="json")
     return {
         "schema_version": "1.0",
@@ -436,6 +448,8 @@ def _manifest(
             "target_duration_seconds": context["job"].get("target_duration_seconds"),
             "edit_style": context["job"].get("edit_style"),
             "music_mode": context["job"].get("music_mode"),
+            "selected_music_track_id": context["job"].get("selected_music_track_id"),
+            "effect_level": context["job"].get("effect_level"),
             "target_platform": context["job"].get("target_platform"),
             "output_aspect": context["job"].get("output_aspect"),
             "must_include": context["job"].get("must_include"),
@@ -447,6 +461,7 @@ def _manifest(
         },
         "story_assessment": context.get("story_spine", {}).get("engagement_assessment", {}),
         "music": music,
+        "creative_effects": public_effect_manifest(effects),
         "render": {
             "width": width,
             "height": height,
@@ -482,8 +497,9 @@ def _manifest(
         "outputs": outputs,
         "capacity_at_start": capacity,
         "content_policy": {
-            "source_derived_only": music is None,
+            "source_derived_only": music is None and not effects,
             "approved_library_music": music is not None,
+            "approved_library_effects": bool(effects),
             "synthetic_image": False,
             "synthetic_video": False,
             "synthetic_voice": False,
