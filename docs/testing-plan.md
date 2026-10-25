@@ -15,6 +15,14 @@ cd gm-media-server
 
 This validates Compose, Python syntax, public-release safety, both TypeScript surfaces, the production Next.js build, and patch integrity. It does not touch production data, call a model, or render media.
 
+### Editing input cost regression — 2026-10-26
+
+The provider-context checks preserve every transcript segment, all retained story cards, editorial scores and cut guidance, revision locks, and learned instructions. Only duplicate scores/parent identities, transport bookkeeping, and server-side licensing metadata are omitted from the model input. Full rights records remain available to validation and rendering. Enabled effects retain the entire compatible inventory; an explicitly selected music track takes precedence over alternatives. JSON is serialized without formatting whitespace. The editor model, reasoning settings, source images, renderer, and context ceiling are unchanged.
+
+Comparing identical captured live contexts with the previous implementation reduced text prompt size from 77,755 to 59,496 characters for the latest three-source job and from 77,700 to 59,445 for the highly rated three-source job (23.5% in both cases). These are character measurements, not billed-token estimates or evidence of equivalent model output. Confirm actual token usage and editorial quality on the next fresh job after deployment.
+
+A worker regression also checks that a newly generated energetic talking-head plan missing its required transition receives one bounded transition at an existing clip boundary and renders after one planner call. Its source ranges, order, duration, framing, and audio selections remain unchanged. Saved plans and deterministic revisions do not opt into this completion step; existing transitions and single-clip plans are preserved. Genuine story failures still reach the AI repair path.
+
 ## Gate 2 — deploy and live core
 
 Status: **Passed on 2026-10-24.** All 10 live core gates passed, including 61 backend tests. The deployed catalogue, exact-duplicate audit, local visual index, managed library, and complete job history were verified without deleting an original.

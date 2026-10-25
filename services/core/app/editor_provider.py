@@ -199,7 +199,7 @@ def _public_context(context: dict[str, Any], max_characters: int) -> dict[str, A
     public = deepcopy(context)
     for asset in public.get("assets", []):
         for key in list(asset):
-            if key.startswith("_"):
+            if key.startswith("_") or key in {"sha256", "byte_size", "asset_status", "analysis_status"}:
                 del asset[key]
         simplified: list[dict[str, Any]] = []
         for segment in asset.get("transcript_segments", []):
@@ -218,14 +218,42 @@ def _public_context(context: dict[str, Any], max_characters: int) -> dict[str, A
             moments = story_index.get("moments")
             if isinstance(moments, list):
                 story_index["moments"] = moments[:24]
-    for track in public.get("music_library", []):
-        for key in list(track):
-            if key.startswith("_"):
-                del track[key]
-    for effect in public.get("creative_effect_library", []):
-        for key in list(effect):
-            if key.startswith("_"):
-                del effect[key]
+                for moment in story_index["moments"]:
+                    if not isinstance(moment, dict):
+                        continue
+                    # Parent identity and duplicate scores do not add editorial
+                    # evidence. Keep every card, utterance, role, and cut hint.
+                    for key in ("asset_id", "source_name"):
+                        if moment.get(key) == asset.get(key):
+                            moment.pop(key, None)
+                    roles = moment.get("role_scores")
+                    components = moment.get("score_components")
+                    if isinstance(roles, dict) and isinstance(components, dict):
+                        moment["score_components"] = {
+                            key: value for key, value in components.items()
+                            if key not in roles or roles[key] != value
+                        }
+
+    # Rights are enforced against the full server-side inventory and retained
+    # in delivery credits. The planner needs creative descriptors, not repeated
+    # license URLs, platform lists, attribution paragraphs, or storage paths.
+    for library_name in ("music_library", "creative_effect_library"):
+        for item in public.get(library_name, []):
+            for key in list(item):
+                if key.startswith("_") or key in {
+                    "license_source_url", "license_proof_recorded", "allowed_platforms", "attribution",
+                }:
+                    del item[key]
+    direction = public.get("job") or {}
+    if direction.get("music_mode") == "none":
+        public["music_library"] = []
+    elif direction.get("selected_music_track_id"):
+        selected = [track for track in public.get("music_library", [])
+                    if str(track.get("track_id")) == str(direction["selected_music_track_id"])]
+        if selected:
+            public["music_library"] = selected
+    if direction.get("effect_level") == "off":
+        public["creative_effect_library"] = []
 
     encoded = json.dumps(public, ensure_ascii=False, separators=(",", ":"))
     if len(encoded) <= max_characters:
@@ -424,7 +452,7 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
                 + learning_instruction
                 + revision_instruction
                 + correction_instruction
-                + json.dumps(public, ensure_ascii=False)
+                + json.dumps(public, ensure_ascii=False, separators=(",", ":"))
             ),
         }
     ]

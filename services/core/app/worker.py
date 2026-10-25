@@ -1018,6 +1018,7 @@ def process_one_edit(state: WorkerState) -> bool:
                     music_tracks=context["music_library"],
                     creative_effects=context["creative_effect_library"],
                     previous_plan=(context.get("revision") or {}).get("previous_plan"),
+                    complete_creative_defaults=not deterministic_revision,
                 )
                 try:
                     if not deterministic_repairs:
@@ -1061,6 +1062,7 @@ def process_one_edit(state: WorkerState) -> bool:
                         music_tracks=context["music_library"],
                         creative_effects=context["creative_effect_library"],
                         previous_plan=(context.get("revision") or {}).get("previous_plan"),
+                        complete_creative_defaults=True,
                     )
                     plan = validate_edit_plan(
                         final_document,

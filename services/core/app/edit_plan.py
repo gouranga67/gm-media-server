@@ -545,11 +545,30 @@ def repair_predictable_plan_defaults(
     music_tracks: list[dict[str, Any]] | None = None,
     creative_effects: list[dict[str, Any]] | None = None,
     previous_plan: dict[str, Any] | None = None,
+    complete_creative_defaults: bool = False,
 ) -> tuple[dict[str, Any], list[str]]:
     """Apply safe defaults that do not require another model decision."""
 
     repaired = deepcopy(document)
     repairs: list[str] = []
+    if complete_creative_defaults and (creative_direction or {}).get("edit_style") == "energetic":
+        # Only complete newly generated plans. Exact re-renders and local
+        # revisions keep their saved transitions. Never split or retime a cut.
+        if repaired.get("recipe") == "talking_head":
+            parsed = TalkingHeadEditPlan.model_validate(repaired)
+            if edit_plan_duration(parsed) >= 20 and len(parsed.clips) > 1 and all(
+                clip.transition == "cut" for clip in parsed.clips
+            ):
+                boundaries = list(range(1, len(parsed.clips)))
+                role_changes = [index for index in boundaries
+                                if parsed.clips[index].story_role != parsed.clips[index - 1].story_role]
+                candidates = role_changes or boundaries
+                midpoint = edit_plan_duration(parsed) / 2
+                boundary_times = [sum(clip.source_out - clip.source_in for clip in parsed.clips[:index])
+                                  for index in candidates]
+                chosen = min(zip(candidates, boundary_times), key=lambda item: abs(item[1] - midpoint))[0]
+                repaired["clips"][chosen]["transition"] = "dip_to_black"
+                repairs.append("added_required_transition_at_existing_story_boundary")
     requested_music = (creative_direction or {}).get("music_mode") or "none"
     tracks = music_tracks or []
     if "effects" not in repaired:

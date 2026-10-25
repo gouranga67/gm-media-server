@@ -160,6 +160,50 @@ class EditPlanValidationTests(unittest.TestCase):
                 music_tracks=[],
             )
 
+    def test_new_ai_plan_missing_transition_is_completed_without_recutting(self) -> None:
+        from copy import deepcopy
+
+        self.document["clips"] = [
+            {**self.document["clips"][0], "source_in": 0, "source_out": 10,
+             "story_role": "hook", "visual_preset": "punch_in"},
+            {**self.document["clips"][0], "source_in": 10, "source_out": 16, "story_role": "payoff"},
+            {**self.document["clips"][0], "source_in": 16, "source_out": 23, "story_role": "payoff"},
+        ]
+        original = deepcopy(self.document)
+        direction = {"edit_style": "energetic"}
+        repaired, repairs = repair_predictable_plan_defaults(self.document,
+            creative_direction=direction, complete_creative_defaults=True)
+        plan = validate_edit_plan(repaired, self.assets, creative_direction=direction)
+        self.assertIn("added_required_transition_at_existing_story_boundary", repairs)
+        self.assertEqual(plan.clips[1].transition, "dip_to_black")
+        self.assertEqual(plan.clips[0].transition, "cut")
+        for before, after in zip(original["clips"], repaired["clips"]):
+            self.assertEqual({k: v for k, v in before.items() if k != "transition"},
+                             {k: v for k, v in after.items() if k != "transition"})
+        self.assertEqual(self.document, original)
+        rerender, rerender_repairs = repair_predictable_plan_defaults(original, creative_direction=direction)
+        self.assertEqual(rerender["clips"], original["clips"])
+        self.assertNotIn("added_required_transition_at_existing_story_boundary", rerender_repairs)
+        repeated, repeated_repairs = repair_predictable_plan_defaults(repaired,
+            creative_direction=direction, complete_creative_defaults=True)
+        self.assertEqual(repeated, repaired)
+        self.assertEqual(repeated_repairs, [])
+
+    def test_transition_completion_keeps_existing_and_single_clip_choices(self) -> None:
+        self.document["clips"][0].update(source_in=0, source_out=23, visual_preset="punch_in")
+        direction = {"edit_style": "energetic"}
+        repaired, repairs = repair_predictable_plan_defaults(self.document,
+            creative_direction=direction, complete_creative_defaults=True)
+        self.assertEqual(repaired["clips"], self.document["clips"])
+        self.assertNotIn("added_required_transition_at_existing_story_boundary", repairs)
+        self.document["clips"] = [
+            {**self.document["clips"][0], "source_out": 10},
+            {**self.document["clips"][0], "source_in": 10, "transition": "dip_to_black"},
+        ]
+        repaired, _ = repair_predictable_plan_defaults(self.document,
+            creative_direction=direction, complete_creative_defaults=True)
+        self.assertEqual(repaired["clips"], self.document["clips"])
+
     def test_revision_repair_removes_music_when_job_is_voice_only(self) -> None:
         track_id = uuid4()
         proposed = {**self.document, "music_track_id": str(track_id), "music_mix": "subtle"}
