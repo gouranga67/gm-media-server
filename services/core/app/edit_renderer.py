@@ -373,8 +373,9 @@ def _ffmpeg_filter(
         )
         filters.append(
             f"[{music_input_index}:a:0]aresample=48000,atrim=0:{total_duration:.3f},"
-            "aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo,"
             "loudnorm=I=-18:LRA=11:TP=-1.5,"
+            "aresample=48000,"
+            "aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo,"
             f"asetpts=PTS-STARTPTS,afade=t=in:st=0:d=1.000,"
             f"afade=t=out:st={fade_out_start:.3f}:d=1.500,volume={volume}[music]"
         )

@@ -569,7 +569,18 @@ def validate_montage_plan(
     creative_direction: dict[str, Any] | None = None,
     music_tracks: list[dict[str, Any]] | None = None,
 ) -> MontageEditPlan:
-    plan = protect_spoken_boundaries(MontageEditPlan.model_validate(document), assets)
+    parsed_plan = MontageEditPlan.model_validate(document)
+    # Validate the model's declared source timing before adding speech handles.
+    # The handle pass deliberately keeps duration aligned with its adjusted
+    # source range, so performing this check afterwards would silently repair
+    # an invalid plan instead of rejecting it for bounded plan repair.
+    for clip in parsed_plan.clips:
+        if clip.media_kind != "video":
+            continue
+        source_duration = float(clip.source_out - clip.source_in)
+        if abs(source_duration - float(clip.duration)) > 0.05:
+            raise ValueError("video montage duration must match its source time range")
+    plan = protect_spoken_boundaries(parsed_plan, assets)
     if plan.post_copy and not allow_post_copy:
         raise ValueError("AI-written post copy was not enabled for this project")
     inventory = {str(asset["asset_id"]): asset for asset in assets}

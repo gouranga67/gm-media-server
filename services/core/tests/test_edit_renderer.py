@@ -251,6 +251,11 @@ class CaptionMappingTests(unittest.TestCase):
         self.assertIn("sidechaincompress", result)
         self.assertIn("volume=-9dB", result)
         self.assertIn("loudnorm=I=-18", result)
+        self.assertIn(
+            "loudnorm=I=-18:LRA=11:TP=-1.5,aresample=48000,"
+            "aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo",
+            result,
+        )
         self.assertIn("threshold=0.080:ratio=4", result)
         self.assertGreaterEqual(result.count("channel_layouts=stereo"), 3)
         self.assertIn("apad=pad_dur=4.000", result)

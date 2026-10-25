@@ -392,6 +392,11 @@ class MontageFilterTests(unittest.TestCase):
         self.assertIn("asplit=2[source][key]", graph_with_music)
         self.assertIn("volume=-9dB", graph_with_music)
         self.assertIn("loudnorm=I=-18", graph_with_music)
+        self.assertIn(
+            "loudnorm=I=-18:LRA=11:TP=-1.5,aresample=48000,"
+            "aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo",
+            graph_with_music,
+        )
         self.assertIn("threshold=0.080:ratio=4", graph_with_music)
         self.assertIn("tonemap=mobius", graph_with_music)
         self.assertLess(
