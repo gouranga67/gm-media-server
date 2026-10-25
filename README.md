@@ -91,7 +91,15 @@ For the upstream requirements, see OpenAI's [open-source token sharing guide](ht
 
 ## Import rights-approved music
 
-GM Studio never searches for or downloads music. An operator must supply a local, non-synthetic audio file and record its licence, commercial-use confirmation, attribution, and permitted platforms. After deployment, inspect the importer options:
+GM Studio can install the reviewed starter catalogue or accept your own non-synthetic audio files with recorded licence, commercial-use confirmation, attribution, and permitted platforms.
+
+To install the curated starter library without uploading files individually:
+
+```bash
+python3 scripts/import-creative-starter-library.py
+```
+
+It imports 16 Kenney CC0 sound effects, 20 Google Noto emoji PNGs under Apache-2.0, and two CC0 instrumental tracks (Revelation and Happy Lullaby). Existing music is retained. Downloads and archive members are SHA-256 pinned in `docs/creative-starter-library.json`; repeated runs skip exact duplicates, including archived records. `--download-only` checks the files without changing the server. The importer uses the existing private owner connection, makes no model calls, and saves downloads in the system temporary cache. Delivery ZIPs include asset credits and the Apache licence when Noto artwork is used. Third-party media stays outside Git.
 
 The normal workflow is the **Creative** page at `/creative`. Download a track from its official Pixabay page, upload the file there, and paste the same page URL into the rights record. The page also accepts licensed sound effects, meme sounds, PNG/JPEG/WebP stickers, GIFs, and meme images. The command below remains available for server-side music imports.
 

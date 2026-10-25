@@ -32,7 +32,8 @@ export function CreativeAssetsManager() {
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault(); setSaving(true); setError(undefined); setNotice(undefined);
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const file = form.get("file");
     if (!(file instanceof File) || file.size === 0) { setError("Choose a downloaded media file first."); setSaving(false); return; }
     try {
@@ -44,7 +45,7 @@ export function CreativeAssetsManager() {
         attribution: String(form.get("attribution")), allowed_platforms: String(form.get("allowed_platforms")),
         commercial_use_confirmed: form.get("commercial_use_confirmed") === "on",
       });
-      event.currentTarget.reset(); setNotice("Imported with its rights record. It is ready for future edits."); await load();
+      formElement.reset(); setNotice("Imported with its rights record. It is ready for future edits."); await load();
     } catch (reason) { setError(message(reason)); } finally { setSaving(false); }
   };
 

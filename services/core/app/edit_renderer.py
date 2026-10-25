@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from app.caption_text import replace_caption_phrase
+from app.asset_credits import delivery_asset_credits
 from app.config import Settings, get_settings
 from app.edit_plan import TalkingHeadEditPlan, document_sha256
 from app.editor_context import resolve_internal_asset_render_source
@@ -773,6 +774,10 @@ def _create_delivery_package(
             archive.write(captions_path, "gm-studio-captions.vtt", compress_type=zipfile.ZIP_DEFLATED)
             archive.write(cover_path, "gm-studio-cover.jpg", compress_type=zipfile.ZIP_STORED)
             archive.write(manifest_path, "gm-studio-manifest.json", compress_type=zipfile.ZIP_DEFLATED)
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            if manifest.get("music") or manifest.get("creative_effects"):
+                archive.writestr("gm-studio-asset-credits.txt", delivery_asset_credits(manifest),
+                                 compress_type=zipfile.ZIP_DEFLATED)
             if post_copy_path is not None:
                 archive.write(post_copy_path, "gm-studio-post-copy.txt", compress_type=zipfile.ZIP_DEFLATED)
         temporary.chmod(READ_ONLY_MODE)

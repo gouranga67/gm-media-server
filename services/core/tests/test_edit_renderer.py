@@ -332,7 +332,7 @@ class CaptionMappingTests(unittest.TestCase):
                 "manifest_path": root / "manifest.json",
             }
             for name, path in files.items():
-                path.write_bytes(name.encode("utf-8"))
+                path.write_bytes(b"{}" if name == "manifest_path" else name.encode("utf-8"))
             destination = root / "delivery.zip"
 
             _create_delivery_package(destination, **files)
@@ -360,7 +360,7 @@ class CaptionMappingTests(unittest.TestCase):
                 "post_copy_path": root / "post-copy.txt",
             }
             for name, path in files.items():
-                path.write_bytes(name.encode("utf-8"))
+                path.write_bytes(b"{}" if name == "manifest_path" else name.encode("utf-8"))
             destination = root / "delivery.zip"
 
             _create_delivery_package(destination, **files)
