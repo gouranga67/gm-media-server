@@ -932,10 +932,16 @@ def process_one_edit(state: WorkerState) -> bool:
             adjustments = list(run.get("clip_adjustments") or [])
             deterministic_revision = bool(run.get("based_on_run_id")) and not run.get("revision_note")
             if deterministic_revision:
-                previous_plan = validate_edit_plan(
+                previous_document, _ = repair_predictable_plan_defaults(
                     context["revision"]["previous_plan"],
+                    creative_direction=context["job"],
+                    music_tracks=context["music_library"],
+                )
+                previous_plan = validate_edit_plan(
+                    previous_document,
                     context["assets"],
                     allow_post_copy=bool(context["project"]["ai_copy_allowed"]),
+                    creative_direction=context["job"],
                     music_tracks=context["music_library"],
                 )
                 proposed = (
@@ -978,7 +984,7 @@ def process_one_edit(state: WorkerState) -> bool:
                     proposed.model_dump(mode="json"),
                     context["assets"],
                     allow_post_copy=bool(context["project"]["ai_copy_allowed"]),
-                    creative_direction=None if deterministic_revision else context["job"],
+                    creative_direction=context["job"],
                     music_tracks=context["music_library"],
                 )
             except (ValueError, ValidationError) as validation_error:
@@ -1197,8 +1203,13 @@ def process_one_final_export(state: WorkerState) -> bool:
         if plan_row is None:
             raise RuntimeError("the approved edit plan was not found")
         context = build_editor_context(export["job_id"], include_internal_paths=True)
-        plan = validate_edit_plan(
+        render_document, _ = repair_predictable_plan_defaults(
             plan_row["document"],
+            creative_direction=context["job"],
+            music_tracks=context["music_library"],
+        )
+        plan = validate_edit_plan(
+            render_document,
             context["assets"],
             allow_post_copy=bool(context["project"]["ai_copy_allowed"]),
             creative_direction=context["job"],
@@ -1355,8 +1366,13 @@ def process_one_delivery_variant(state: WorkerState) -> bool:
         if plan_row is None:
             raise RuntimeError("the approved edit plan was not found")
         context = build_editor_context(variant["job_id"], include_internal_paths=True)
-        plan = validate_edit_plan(
+        render_document, _ = repair_predictable_plan_defaults(
             plan_row["document"],
+            creative_direction=context["job"],
+            music_tracks=context["music_library"],
+        )
+        plan = validate_edit_plan(
+            render_document,
             context["assets"],
             allow_post_copy=bool(context["project"]["ai_copy_allowed"]),
             creative_direction=context["job"],
