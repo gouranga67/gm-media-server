@@ -38,6 +38,12 @@ function message(error: unknown) {
   return error instanceof Error ? error.message : "The review request could not be completed";
 }
 
+type ClipChange = {
+  readonly action: "keep" | "remove" | "move_up" | "move_down";
+  readonly visual_preset?: EditorialClip["visual_preset"];
+  readonly source_audio_gain_db?: number;
+};
+
 function DownloadButton({
   href,
   label,
@@ -93,6 +99,10 @@ export function JobReviewControls({
   const [variantDuration, setVariantDuration] = useState<TargetDuration>(targetDuration >= 30 ? 15 : targetDuration);
   const [toolSubmitting, setToolSubmitting] = useState<"profile" | "variant">();
   const [timelineSubmitting, setTimelineSubmitting] = useState<number>();
+  const [pendingClipChange, setPendingClipChange] = useState<{
+    readonly clip: EditorialClip;
+    readonly change: ClipChange;
+  }>();
   const [lockedElements, setLockedElements] = useState<readonly string[]>([]);
   const [coverTime, setCoverTime] = useState(initialCoverTime);
 
@@ -133,7 +143,7 @@ export function JobReviewControls({
 
   const adjustClip = async (
     clip: EditorialClip,
-    change: { readonly action: "keep" | "remove" | "move_up" | "move_down"; readonly visual_preset?: EditorialClip["visual_preset"]; readonly source_audio_gain_db?: number },
+    change: ClipChange,
   ) => {
     setTimelineSubmitting(clip.clip_index);
     setError(undefined);
@@ -144,6 +154,7 @@ export function JobReviewControls({
         clipAdjustments: [{ clip_index: clip.clip_index, ...change }],
         lockedElements,
       });
+      setPendingClipChange(undefined);
       onUpdated();
     } catch (timelineError) {
       setError(message(timelineError));
@@ -365,9 +376,9 @@ export function JobReviewControls({
                     <p className="mt-2 inline-flex rounded-full bg-[#EFF6FA] px-2 py-1 font-mono text-[9px] font-bold tracking-wide text-[#174D73] uppercase">{clip.story_role}</p>
                   </div>
                   <div className="flex shrink-0 gap-1">
-                    <Button aria-label="Move clip earlier" disabled={timelineSubmitting !== undefined || clip.clip_index === 0} onClick={() => void adjustClip(clip, { action: "move_up" })} size="icon" type="button" variant="outline"><ArrowUpIcon /></Button>
-                    <Button aria-label="Move clip later" disabled={timelineSubmitting !== undefined || clip.clip_index === editorialTimeline.length - 1} onClick={() => void adjustClip(clip, { action: "move_down" })} size="icon" type="button" variant="outline"><ArrowDownIcon /></Button>
-                    <Button aria-label="Remove clip" disabled={timelineSubmitting !== undefined || editorialTimeline.length <= (recipe === "montage" ? 2 : 1)} onClick={() => void adjustClip(clip, { action: "remove" })} size="icon" type="button" variant="outline"><Trash2Icon /></Button>
+                    <Button aria-label="Move clip earlier" disabled={timelineSubmitting !== undefined || clip.clip_index === 0} onClick={() => setPendingClipChange({ clip, change: { action: "move_up" } })} size="icon" type="button" variant="outline"><ArrowUpIcon /></Button>
+                    <Button aria-label="Move clip later" disabled={timelineSubmitting !== undefined || clip.clip_index === editorialTimeline.length - 1} onClick={() => setPendingClipChange({ clip, change: { action: "move_down" } })} size="icon" type="button" variant="outline"><ArrowDownIcon /></Button>
+                    <Button aria-label="Remove clip" disabled={timelineSubmitting !== undefined || editorialTimeline.length <= (recipe === "montage" ? 2 : 1)} onClick={() => setPendingClipChange({ clip, change: { action: "remove" } })} size="icon" type="button" variant="outline"><Trash2Icon /></Button>
                   </div>
                 </div>
                 {clip.transcript_excerpt ? <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-[#666862]">“{clip.transcript_excerpt}”</p> : null}
@@ -377,8 +388,8 @@ export function JobReviewControls({
                     aria-label={`Framing for clip ${clip.clip_index + 1}`}
                     className="h-10 rounded-md border border-[#D7D9D3] bg-white px-2 text-xs"
                     disabled={timelineSubmitting !== undefined}
-                    onChange={(event) => void adjustClip(clip, { action: "keep", visual_preset: event.currentTarget.value as EditorialClip["visual_preset"] })}
-                    value={clip.visual_preset}
+                    onChange={(event) => setPendingClipChange({ clip, change: { action: "keep", visual_preset: event.currentTarget.value as EditorialClip["visual_preset"] } })}
+                    value={pendingClipChange?.clip.clip_index === clip.clip_index && pendingClipChange.change.visual_preset ? pendingClipChange.change.visual_preset : clip.visual_preset}
                   >
                     <option value="standard">Standard frame</option>
                     <option value="punch_in">Punch in</option>
@@ -391,8 +402,8 @@ export function JobReviewControls({
                       aria-label={`Source volume for clip ${clip.clip_index + 1}`}
                       className="h-10 rounded-md border border-[#D7D9D3] bg-white px-2 text-xs"
                       disabled={timelineSubmitting !== undefined}
-                      onChange={(event) => void adjustClip(clip, { action: "keep", source_audio_gain_db: Number(event.currentTarget.value) })}
-                      value={clip.source_audio_gain_db}
+                      onChange={(event) => setPendingClipChange({ clip, change: { action: "keep", source_audio_gain_db: Number(event.currentTarget.value) } })}
+                      value={pendingClipChange?.clip.clip_index === clip.clip_index && pendingClipChange.change.source_audio_gain_db !== undefined ? pendingClipChange.change.source_audio_gain_db : clip.source_audio_gain_db}
                     >
                       <option value={-6}>Quiet source</option><option value={0}>Normal source</option><option value={4}>Louder source</option><option value={8}>Feature source</option>
                     </select>
@@ -401,6 +412,23 @@ export function JobReviewControls({
               </article>
             ))}
           </div>
+          {pendingClipChange ? (
+            <div className="mt-4 rounded-md border border-[#BFD2DE] bg-[#EFF6FA] p-3">
+              <p className="text-xs font-bold text-[#173F5F]">Timeline change ready</p>
+              <p className="mt-1 text-xs text-[#53646F]">
+                Clip {pendingClipChange.clip.clip_index + 1}: {pendingClipChange.change.action.replaceAll("_", " ")}
+                {pendingClipChange.change.visual_preset ? ` · ${pendingClipChange.change.visual_preset.replaceAll("_", " ")}` : ""}
+                {pendingClipChange.change.source_audio_gain_db !== undefined ? ` · ${pendingClipChange.change.source_audio_gain_db > 0 ? "+" : ""}${pendingClipChange.change.source_audio_gain_db} dB` : ""}
+              </p>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <Button disabled={timelineSubmitting !== undefined} onClick={() => setPendingClipChange(undefined)} type="button" variant="outline">Cancel</Button>
+                <Button disabled={timelineSubmitting !== undefined} onClick={() => void adjustClip(pendingClipChange.clip, pendingClipChange.change)} type="button">
+                  {timelineSubmitting !== undefined ? <LoaderCircleIcon aria-hidden="true" className="animate-spin" /> : <CheckIcon aria-hidden="true" />}
+                  Apply &amp; render preview
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </div>
         <div className="mb-5 border-t border-[#D7D9D3] pt-4">
           <p className="font-mono text-xs font-bold text-[#173F5F] uppercase">Protect in AI revisions</p>

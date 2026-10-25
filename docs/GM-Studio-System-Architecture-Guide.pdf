@@ -689,7 +689,7 @@ endobj
 << /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R /F4 6 0 R >> >> /Contents 25 0 R >>
 endobj
 27 0 obj
-<< /Length 6738 >>
+<< /Length 7538 >>
 stream
 q 0.930 0.970 0.980 rg 54.00 611.89 487.28 168.00 re f Q
 q 0.820 0.850 0.860 RG 0.70 w 54.00 611.89 487.28 168.00 re S Q
@@ -758,6 +758,11 @@ BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 245.09 Tm (bounded editorial r
 BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 231.69 Tm (continue locally without additional model usage. Later Phase 13 work can add locally measured) Tj ET
 BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 218.29 Tm (motion, faces, laughter, applause, shot scale, and finer continuity hints to the same evidence) Tj ET
 BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 204.89 Tm (contract.) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 185.49 Tm (The renderer then protects the selected speech with small timestamped handles so a cut does not) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 172.09 Tm (shear the first or last word. Whisper word timestamps are grouped into short caption cards that) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 158.69 Tm (appear as the words are spoken rather than displaying an entire transcript segment at once. These) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 145.29 Tm (transformations are deterministic and local. Review-screen timeline changes are staged for) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 131.89 Tm (confirmation, and a voice-only job cannot acquire music during an AI revision.) Tj ET
 q 0.820 0.850 0.860 RG 0.50 w 54.00 35.00 m 541.28 35.00 l S Q
 BT /F1 7.20 Tf 0.340 0.390 0.420 rg 1 0 0 1 54.00 21.00 Tm (GM Studio System Architecture) Tj ET
 BT /F2 7.20 Tf 0.340 0.390 0.420 rg 1 0 0 1 507.28 21.00 Tm (11 / 11) Tj ET
@@ -796,9 +801,9 @@ xref
 0000050375 00000 n 
 0000055445 00000 n 
 0000055609 00000 n 
-0000062399 00000 n 
+0000063199 00000 n 
 trailer
 << /Size 29 /Root 1 0 R >>
 startxref
-62563
+63363
 %%EOF

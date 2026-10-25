@@ -25,6 +25,9 @@ PREVIEW_FPS = 30
 FINAL_WIDTH = 1080
 FINAL_HEIGHT = 1920
 FINAL_FPS = 30
+CAPTION_MAX_WORDS = 7
+CAPTION_MAX_CHARACTERS = 44
+CAPTION_MAX_SECONDS = 2.6
 
 
 def _delivery_dimensions(aspect: str) -> tuple[int, int]:
@@ -59,12 +62,127 @@ def _ass_text(value: str) -> str:
     )
 
 
+def _correct_caption_text(
+    text: str, corrections: list[dict[str, str]] | None
+) -> str:
+    for correction in corrections or []:
+        original_text = str(correction.get("original_text", ""))
+        if original_text:
+            text = text.replace(
+                original_text,
+                str(correction.get("replacement_text", "")),
+            )
+    return " ".join(text.split())
+
+
+def clip_caption_events(
+    asset: dict[str, Any],
+    source_in: float,
+    source_out: float,
+    timeline_start: float,
+    corrections: list[dict[str, str]] | None = None,
+) -> list[dict[str, Any]]:
+    """Create short, source-timed caption cards for one assembled clip."""
+
+    events: list[dict[str, Any]] = []
+    for segment in asset.get("transcript_segments", []):
+        try:
+            segment_start = float(segment["start"])
+            segment_end = float(segment["end"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        visible_start = max(segment_start, source_in)
+        visible_end = min(segment_end, source_out)
+        if visible_end - visible_start < 0.08:
+            continue
+
+        words: list[dict[str, Any]] = []
+        for raw_word in segment.get("words", []):
+            if not isinstance(raw_word, dict):
+                continue
+            try:
+                word_start = float(raw_word["start"])
+                word_end = float(raw_word["end"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            text = " ".join(str(raw_word.get("text") or "").split())
+            if text and word_end > source_in and word_start < source_out:
+                words.append({"start": max(word_start, source_in), "end": min(word_end, source_out), "text": text})
+
+        groups: list[list[dict[str, Any]]] = []
+        current: list[dict[str, Any]] = []
+        for word in words:
+            candidate_text = " ".join([*(item["text"] for item in current), word["text"]])
+            pause = float(word["start"]) - float(current[-1]["end"]) if current else 0.0
+            span = float(word["end"]) - float(current[0]["start"]) if current else 0.0
+            if current and (
+                len(current) >= CAPTION_MAX_WORDS
+                or len(candidate_text) > CAPTION_MAX_CHARACTERS
+                or span > CAPTION_MAX_SECONDS
+                or pause >= 0.38
+            ):
+                groups.append(current)
+                current = []
+            current.append(word)
+        if current:
+            groups.append(current)
+
+        if not groups:
+            # Older imported transcripts may not have word timestamps. Divide the
+            # segment into readable cards and distribute them across its duration.
+            tokens = str(segment.get("text") or "").split()
+            if tokens and segment_end > segment_start:
+                first = max(
+                    0,
+                    min(
+                        len(tokens) - 1,
+                        int((visible_start - segment_start) / (segment_end - segment_start) * len(tokens)),
+                    ),
+                )
+                last = max(
+                    first + 1,
+                    min(
+                        len(tokens),
+                        int((visible_end - segment_start) / (segment_end - segment_start) * len(tokens) + 0.999),
+                    ),
+                )
+                tokens = tokens[first:last]
+            cards = [tokens[index:index + CAPTION_MAX_WORDS] for index in range(0, len(tokens), CAPTION_MAX_WORDS)]
+            if not cards:
+                continue
+            card_duration = (visible_end - visible_start) / len(cards)
+            groups = [
+                [{
+                    "start": visible_start + index * card_duration,
+                    "end": visible_start + (index + 1) * card_duration,
+                    "text": " ".join(card),
+                }]
+                for index, card in enumerate(cards)
+            ]
+
+        for group in groups:
+            text = _correct_caption_text(
+                " ".join(str(word["text"]) for word in group), corrections
+            )
+            start = max(source_in, float(group[0]["start"]))
+            end = min(source_out, float(group[-1]["end"]))
+            if text and end - start >= 0.08:
+                events.append(
+                    {
+                        "start": timeline_start + start - source_in,
+                        "end": timeline_start + end - source_in,
+                        "text": text,
+                    }
+                )
+    return events
+
+
 def caption_events(
     plan: TalkingHeadEditPlan,
     assets: list[dict[str, Any]],
     corrections: list[dict[str, str]] | None = None,
 ) -> list[dict[str, Any]]:
-    """Map source transcript time to the assembled preview timeline."""
+    """Map short source transcript cards to the assembled preview timeline."""
 
     inventory = {str(asset["asset_id"]): asset for asset in assets}
     events: list[dict[str, Any]] = []
@@ -73,31 +191,9 @@ def caption_events(
         source_in = float(clip.source_in)
         source_out = float(clip.source_out)
         asset = inventory[str(clip.asset_id)]
-        for segment in asset.get("transcript_segments", []):
-            try:
-                segment_start = float(segment["start"])
-                segment_end = float(segment["end"])
-            except (KeyError, TypeError, ValueError):
-                continue
-            visible_start = max(segment_start, source_in)
-            visible_end = min(segment_end, source_out)
-            text = str(segment.get("text", "")).strip()
-            for correction in corrections or []:
-                original_text = str(correction.get("original_text", ""))
-                if original_text:
-                    text = text.replace(
-                        original_text,
-                        str(correction.get("replacement_text", "")),
-                    )
-            if visible_end - visible_start < 0.08 or not text:
-                continue
-            events.append(
-                {
-                    "start": timeline_start + visible_start - source_in,
-                    "end": timeline_start + visible_end - source_in,
-                    "text": text,
-                }
-            )
+        events.extend(
+            clip_caption_events(asset, source_in, source_out, timeline_start, corrections)
+        )
         timeline_start += source_out - source_in
     return events
 

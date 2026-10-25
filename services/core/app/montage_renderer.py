@@ -11,6 +11,7 @@ from app.edit_renderer import (
     _ffmpeg_version,
     _file_sha256,
     _selected_music,
+    clip_caption_events,
     render_ass,
 )
 from app.editor_context import (
@@ -42,31 +43,15 @@ def montage_caption_events(
         if clip.media_kind == "video" and clip.include_source_audio:
             source_in = float(clip.source_in)
             source_out = float(clip.source_out)
-            for segment in inventory[str(clip.asset_id)].get("transcript_segments", []):
-                try:
-                    segment_start = float(segment["start"])
-                    segment_end = float(segment["end"])
-                except (KeyError, TypeError, ValueError):
-                    continue
-                visible_start = max(segment_start, source_in)
-                visible_end = min(segment_end, source_out)
-                text = str(segment.get("text", "")).strip()
-                for correction in corrections or []:
-                    original_text = str(correction.get("original_text", ""))
-                    if original_text:
-                        text = text.replace(
-                            original_text,
-                            str(correction.get("replacement_text", "")),
-                        )
-                if visible_end - visible_start < 0.08 or not text:
-                    continue
-                events.append(
-                    {
-                        "start": timeline_start + visible_start - source_in,
-                        "end": timeline_start + visible_end - source_in,
-                        "text": text,
-                    }
+            events.extend(
+                clip_caption_events(
+                    inventory[str(clip.asset_id)],
+                    source_in,
+                    source_out,
+                    timeline_start,
+                    corrections,
                 )
+            )
         timeline_start += float(clip.duration)
     return events
 

@@ -3,7 +3,13 @@ from uuid import uuid4
 
 from pydantic import ValidationError
 
-from app.edit_plan import apply_timeline_adjustments, derive_duration_variant, edit_plan_duration, validate_edit_plan
+from app.edit_plan import (
+    apply_timeline_adjustments,
+    derive_duration_variant,
+    edit_plan_duration,
+    repair_predictable_plan_defaults,
+    validate_edit_plan,
+)
 
 
 class EditPlanValidationTests(unittest.TestCase):
@@ -149,6 +155,39 @@ class EditPlanValidationTests(unittest.TestCase):
                 creative_direction={"music_mode": "subtle"},
                 music_tracks=[],
             )
+
+    def test_revision_repair_removes_music_when_job_is_voice_only(self) -> None:
+        track_id = uuid4()
+        proposed = {**self.document, "music_track_id": str(track_id), "music_mix": "subtle"}
+
+        repaired, repairs = repair_predictable_plan_defaults(
+            proposed,
+            creative_direction={"music_mode": "none"},
+            music_tracks=[{"track_id": str(track_id)}],
+            previous_plan=self.document,
+        )
+
+        self.assertIsNone(repaired["music_track_id"])
+        self.assertEqual(repaired["music_mix"], "none")
+        self.assertIn("removed_unrequested_music", repairs)
+
+    def test_spoken_word_boundaries_receive_small_safety_handles(self) -> None:
+        self.assets[0]["transcript_segments"] = [{
+            "start": 1.0,
+            "end": 2.1,
+            "text": "Clear spoken phrase",
+            "words": [
+                {"start": 1.0, "end": 1.35, "text": "Clear"},
+                {"start": 1.35, "end": 1.72, "text": "spoken"},
+                {"start": 1.72, "end": 2.1, "text": "phrase"},
+            ],
+        }]
+        self.document["clips"][0].update(source_in=1.05, source_out=2.0)
+
+        plan = validate_edit_plan(self.document, self.assets)
+
+        self.assertEqual(plan.clips[0].source_in, 0.88)
+        self.assertEqual(plan.clips[0].source_out, 2.26)
 
     def test_duration_variant_trims_without_changing_source_order(self) -> None:
         self.document["clips"] = [

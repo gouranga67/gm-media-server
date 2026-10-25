@@ -114,6 +114,41 @@ class CaptionMappingTests(unittest.TestCase):
 
         self.assertEqual(events[0]["text"], "Welcome to Sydney today")
 
+    def test_long_whisper_segment_becomes_progressive_caption_cards(self) -> None:
+        asset_id = uuid4()
+        words = [
+            {"start": index * 0.4, "end": index * 0.4 + 0.35, "text": word}
+            for index, word in enumerate(
+                "Do you love castor oil because so do we and here is why".split()
+            )
+        ]
+        plan = TalkingHeadEditPlan.model_validate(
+            {
+                "schema_version": "1.2",
+                "recipe": "talking_head",
+                "clips": [{
+                    "asset_id": str(asset_id), "source_in": 0, "source_out": 5,
+                    "crop": "center_fill", "transition": "cut",
+                }],
+                "caption_style": "clean_blue_v1",
+                "audio_preset": "spoken_voice_v1",
+                "end_card": "none",
+                "editorial_summary": "Progressive captions.",
+            }
+        )
+
+        events = caption_events(
+            plan,
+            [{"asset_id": str(asset_id), "transcript_segments": [{
+                "start": 0, "end": 5, "text": " ".join(word["text"] for word in words), "words": words,
+            }]}],
+        )
+
+        self.assertGreater(len(events), 1)
+        self.assertLessEqual(max(len(event["text"].split()) for event in events), 7)
+        self.assertGreater(events[1]["start"], events[0]["start"])
+        self.assertNotEqual(events[0]["text"], events[-1]["text"])
+
     def test_scales_ass_layout_for_final_delivery(self) -> None:
         ass = render_ass(
             [{"start": 0, "end": 1, "text": "Final"}],

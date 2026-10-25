@@ -351,7 +351,13 @@ def repair_predictable_plan_defaults(
     repairs: list[str] = []
     requested_music = (creative_direction or {}).get("music_mode") or "none"
     tracks = music_tracks or []
-    if requested_music in {"subtle", "present"} and tracks:
+    if requested_music == "none" and (
+        repaired.get("music_track_id") is not None or repaired.get("music_mix") != "none"
+    ):
+        repaired["music_track_id"] = None
+        repaired["music_mix"] = "none"
+        repairs.append("removed_unrequested_music")
+    elif requested_music in {"subtle", "present"} and tracks:
         approved_ids = {str(track["track_id"]) for track in tracks if track.get("track_id")}
         selected_id = repaired.get("music_track_id")
         if selected_id is None:
@@ -375,6 +381,70 @@ def repair_predictable_plan_defaults(
     return repaired, repairs
 
 
+def protect_spoken_boundaries(plan: EditPlan, assets: list[dict[str, Any]]) -> EditPlan:
+    """Add small source-backed handles so audible clips do not shear words."""
+
+    protected = plan.model_copy(deep=True)
+    inventory = {str(asset["asset_id"]): asset for asset in assets}
+    originals = {
+        id(clip): (float(clip.source_in), float(clip.source_out))
+        for clip in protected.clips
+    }
+    by_asset: dict[str, list[Any]] = defaultdict(list)
+
+    for clip in protected.clips:
+        if isinstance(protected, MontageEditPlan) and (
+            clip.media_kind != "video" or not clip.include_source_audio
+        ):
+            continue
+        asset_id = str(clip.asset_id)
+        asset = inventory.get(asset_id)
+        if asset is None:
+            continue
+        by_asset[asset_id].append(clip)
+        words: list[tuple[float, float]] = []
+        for segment in asset.get("transcript_segments", []):
+            if not isinstance(segment, dict):
+                continue
+            for word in segment.get("words", []):
+                if not isinstance(word, dict):
+                    continue
+                try:
+                    start = float(word["start"])
+                    end = float(word["end"])
+                except (KeyError, TypeError, ValueError):
+                    continue
+                if end > float(clip.source_in) and start < float(clip.source_out):
+                    words.append((start, end))
+        if not words:
+            continue
+        words.sort()
+        duration = float(asset.get("duration_seconds") or clip.source_out)
+        clip.source_in = round(max(0.0, min(float(clip.source_in), words[0][0] - 0.12)), 3)
+        clip.source_out = round(
+            min(duration, max(float(clip.source_out), words[-1][1] + 0.16)), 3
+        )
+
+    # Adjacent selections from one source can both expand into the same silence.
+    # Split that silence at the original midpoint while preserving invalid model
+    # overlaps for the validator to report normally.
+    for clips in by_asset.values():
+        ordered = sorted(clips, key=lambda item: originals[id(item)][0])
+        for left, right in zip(ordered, ordered[1:], strict=False):
+            left_original = originals[id(left)]
+            right_original = originals[id(right)]
+            if left_original[1] <= right_original[0] and left.source_out > right.source_in:
+                boundary = round((left_original[1] + right_original[0]) / 2, 3)
+                left.source_out = boundary
+                right.source_in = boundary
+
+    if isinstance(protected, MontageEditPlan):
+        for clip in protected.clips:
+            if clip.media_kind == "video":
+                clip.duration = round(float(clip.source_out - clip.source_in), 3)
+    return protected
+
+
 def validate_edit_plan(
     document: dict[str, Any],
     assets: list[dict[str, Any]],
@@ -391,7 +461,7 @@ def validate_edit_plan(
             creative_direction=creative_direction,
             music_tracks=music_tracks,
         )
-    plan = TalkingHeadEditPlan.model_validate(document)
+    plan = protect_spoken_boundaries(TalkingHeadEditPlan.model_validate(document), assets)
     if plan.post_copy and not allow_post_copy:
         raise ValueError("AI-written post copy was not enabled for this project")
     inventory = {str(asset["asset_id"]): asset for asset in assets}
@@ -494,7 +564,7 @@ def validate_montage_plan(
     creative_direction: dict[str, Any] | None = None,
     music_tracks: list[dict[str, Any]] | None = None,
 ) -> MontageEditPlan:
-    plan = MontageEditPlan.model_validate(document)
+    plan = protect_spoken_boundaries(MontageEditPlan.model_validate(document), assets)
     if plan.post_copy and not allow_post_copy:
         raise ValueError("AI-written post copy was not enabled for this project")
     inventory = {str(asset["asset_id"]): asset for asset in assets}

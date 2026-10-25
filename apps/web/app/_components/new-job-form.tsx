@@ -91,6 +91,9 @@ type UploadEntry = {
   readonly uploadedBytes: number;
   readonly totalBytes: number;
   readonly uploadComplete: boolean;
+  readonly uploadBytesPerSecond?: number;
+  readonly uploadEtaSeconds?: number;
+  readonly retryAttempt?: number;
   readonly error?: string;
 };
 
@@ -325,7 +328,14 @@ function phaseLabel(entry: UploadEntry): string {
     case "registering":
       return "Preparing";
     case "uploading":
-      return `Uploading ${percent}%`;
+      if (entry.retryAttempt) return `Retrying connection (${entry.retryAttempt}) · ${percent}%`;
+      if (entry.uploadBytesPerSecond && entry.uploadEtaSeconds !== undefined) {
+        const remaining = entry.uploadEtaSeconds < 60
+          ? `${Math.max(1, Math.ceil(entry.uploadEtaSeconds))}s`
+          : `${Math.ceil(entry.uploadEtaSeconds / 60)}m`;
+        return `Uploading ${percent}% · ${formatBytes(entry.uploadBytesPerSecond)}/s · about ${remaining} left`;
+      }
+      return `Uploading ${percent}% · measuring speed`;
     case "paused":
       return `Paused at ${percent}%`;
     case "processing":
@@ -1002,7 +1012,7 @@ function NewJobFormContent() {
     lastProgressRef.current.set(entry.localId, -1);
 
     const upload = await startResumableUpload(entry.file, asset, {
-      onProgress(uploadedBytes, totalUploadBytes) {
+      onProgress(uploadedBytes, totalUploadBytes, bytesPerSecond, etaSeconds) {
         const percent = totalUploadBytes === 0 ? 0 : Math.floor((uploadedBytes / totalUploadBytes) * 100);
         if (lastProgressRef.current.get(entry.localId) === percent) return;
         lastProgressRef.current.set(entry.localId, percent);
@@ -1010,6 +1020,18 @@ function NewJobFormContent() {
           phase: "uploading",
           uploadedBytes,
           totalBytes: totalUploadBytes,
+          uploadBytesPerSecond: bytesPerSecond,
+          uploadEtaSeconds: etaSeconds,
+          retryAttempt: undefined,
+          error: undefined,
+        });
+      },
+      onRetry(attempt) {
+        updateEntry(entry.localId, {
+          phase: "uploading",
+          retryAttempt: attempt,
+          uploadBytesPerSecond: undefined,
+          uploadEtaSeconds: undefined,
           error: undefined,
         });
       },
