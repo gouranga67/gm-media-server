@@ -683,7 +683,7 @@ class EditFeedbackCreate(BaseModel):
 
     edit_run_id: UUID
     rating: int = Field(ge=1, le=5)
-    tags: list[FeedbackTag] = Field(default_factory=list, max_length=8)
+    tags: list[FeedbackTag] = Field(default_factory=list)
     note: str = Field(default="", max_length=1200)
     would_use_again: bool = False
 

@@ -80,18 +80,13 @@ export function EditFeedbackCard({
 
   const toggleTag = (tag: FeedbackTag) => {
     setSaved(false);
-    if (tags.includes(tag)) {
-      setTags(tags.filter((item) => item !== tag));
-      return;
-    }
-    const opposite = OPPOSITES[tag];
-    const compatible = opposite ? tags.filter((item) => item !== opposite) : tags;
-    if (compatible.length >= 8) {
-      setError("Choose no more than eight feedback details.");
-      return;
-    }
     setError(undefined);
-    setTags([...compatible, tag]);
+    setTags((current) => {
+      if (current.includes(tag)) return current.filter((item) => item !== tag);
+      const opposite = OPPOSITES[tag];
+      const compatible = opposite ? current.filter((item) => item !== opposite) : current;
+      return [...compatible, tag];
+    });
   };
 
   const submit = async () => {
@@ -132,7 +127,7 @@ export function EditFeedbackCard({
             aria-pressed={rating === value}
             className={`min-h-14 rounded-md border px-1 py-2 text-[10px] font-bold ${rating === value ? "border-[#173F5F] bg-[#173F5F] text-white" : "border-[#D7D9D3] bg-white text-[#53646F] hover:border-[#7A9AAE]"}`}
             key={value}
-            onClick={() => { setRating(value); setSaved(false); }}
+            onClick={() => { setRating(value); setSaved(false); setError(undefined); }}
             type="button"
           >
             <span className="block text-base">{value}</span>{label}
@@ -143,6 +138,7 @@ export function EditFeedbackCard({
       {(["strength", "improve"] as const).map((kind) => (
         <div className="mt-4" key={kind}>
           <p className="text-xs font-bold text-[#173F5F]">{kind === "strength" ? "WHAT WORKED" : "WHAT SHOULD IMPROVE"}</p>
+          {kind === "strength" ? <p className="mt-1 text-xs text-[#666862]">Choose all that apply.</p> : null}
           <div className="mt-2 flex flex-wrap gap-2">
             {TAGS.filter((tag) => tag.kind === kind).map((tag) => (
               <button
@@ -173,7 +169,7 @@ export function EditFeedbackCard({
         I would publish or use this edit
       </label>
       {error ? <p className="mt-3 text-xs text-[#A23B2A]" role="alert">{error}</p> : null}
-      <Button className="mt-4 h-12 w-full" disabled={saving} onClick={() => void submit()} type="button" variant={saved ? "outline" : "default"}>
+      <Button className={`mt-4 h-12 w-full ${saved ? "" : "bg-[#173F5F] text-white hover:bg-[#245674]"}`} disabled={saving} onClick={() => void submit()} type="button" variant={saved ? "outline" : "default"}>
         {saving ? <LoaderCircleIcon aria-hidden="true" className="animate-spin" /> : saved ? <CheckIcon aria-hidden="true" /> : null}
         {saved ? "Feedback saved" : "Save feedback"}
       </Button>

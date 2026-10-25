@@ -1,4 +1,5 @@
 import unittest
+from datetime import datetime, timezone
 from uuid import uuid4
 
 from pydantic import ValidationError
@@ -6,7 +7,7 @@ from pydantic import ValidationError
 from app.config import Settings
 from app.editor_provider import _model_content
 from app.learning import derive_learning_preferences
-from app.schemas import EditFeedbackCreate, LearningSettingsUpdate
+from app.schemas import EditFeedbackCreate, EditFeedbackResponse, LearningSettingsUpdate
 
 
 class LearningLoopTests(unittest.TestCase):
@@ -81,6 +82,30 @@ class LearningLoopTests(unittest.TestCase):
                     "tags": ["strong_hook", "weak_hook"],
                 }
             )
+
+    def test_all_strengths_can_be_saved_and_read_back(self) -> None:
+        strengths = [
+            "strong_hook", "clear_story", "clean_captions", "balanced_audio",
+            "good_visuals", "good_colour", "strong_ending", "effects_worked",
+            "meme_worked",
+        ]
+        feedback = EditFeedbackCreate.model_validate({
+            "edit_run_id": str(uuid4()), "rating": 5, "tags": strengths,
+            "note": "Best edit yet", "would_use_again": True,
+        })
+        now = datetime.now(timezone.utc)
+        response = EditFeedbackResponse.model_validate({
+            **feedback.model_dump(), "id": uuid4(), "job_id": uuid4(),
+            "created_at": now, "updated_at": now,
+        })
+        self.assertEqual(response.tags, strengths)
+        self.assertTrue(response.would_use_again)
+
+        # A detailed rating is still one example, not nine learning samples.
+        learned = derive_learning_preferences([response.model_dump()], minimum_samples=3)
+        self.assertEqual(learned["sample_size"], 1)
+        self.assertEqual(learned["feedback_needed"], 2)
+        self.assertEqual(learned["preferences"], [])
 
     def test_learning_threshold_cannot_be_lowered_below_three(self) -> None:
         with self.assertRaises(ValidationError):
