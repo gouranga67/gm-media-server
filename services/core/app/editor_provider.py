@@ -337,6 +337,22 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
             "plan, not a patch. Do not repeat overlapping source ranges from the same video asset.\n\n"
         )
     recipe = str(public.get("job", {}).get("recipe") or "talking_head")
+    take_instruction = (
+        "Story quality takes precedence over humour, music, and effects. A funny tone or meme_heavy "
+        "effect level is not a request for a blooper reel. Read every source's take_quality report and "
+        "compare repeated takes before selecting footage. Prefer a complete clean take over false starts, "
+        "readiness checks, retake directions, and discussions about changing the script. These local flags "
+        "are evidence to verify against the full transcript, not certainty about the speaker's intent. "
+        "For a promotional video, identify the actual product or subject, give the supported benefit or "
+        "demonstration and proof, and finish the thought. Do not omit the product introduction just to "
+        "make room for a joke. If humour fits, use a short reaction after the main point; never make "
+        "an entire failed take the development/payoff unless the brief explicitly requests outtakes. "
+        "Do not confuse source order with story order: compare takes across all sources and use the "
+        "cleanest complete version, preserving cause and effect. Source speech gaps are not verified "
+        "silence; keep only a brief supported reaction and trim unused stretches. New promotional "
+        "dialogue cuts receive local pause tightening by default; explicit instructions to preserve "
+        "pauses or make a blooper reel take precedence.\n\n"
+    )
     if recipe == "montage":
         task_instruction = (
             "Create one source-led montage JSON edit plan. Choose only uploaded video and image assets. "
@@ -404,6 +420,7 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
             "text": (
                 task_instruction
                 + "\n\n"
+                + take_instruction
                 + learning_instruction
                 + revision_instruction
                 + correction_instruction

@@ -9,6 +9,7 @@ from app.database import connection
 from app.edit_plan import source_word_gaps
 from app.media_analysis import probe_media, resolve_source, video_probe_is_hdr
 from app.learning import learning_context_for_job
+from app.take_quality import editing_policy, take_quality_report
 from app.story_intelligence import (
     STORY_INTELLIGENCE_VERSION,
     build_story_assessment,
@@ -131,6 +132,7 @@ def build_editor_context(
             "visual_quality": manifest.get("derived", {}).get("visual_quality", {}),
             "loudness": manifest.get("derived", {}).get("loudness", {}),
             "transcript_segments": transcript,
+            "take_quality": take_quality_report(transcript),
             "story_index": {
                 "status": row.get("story_status") or "pending",
                 "version": row.get("story_version") or STORY_INTELLIGENCE_VERSION,
@@ -234,6 +236,7 @@ def build_editor_context(
             "brand_kit_id": str(job["brand_kit_id"]) if job.get("brand_kit_id") else None,
             "publishing_preset": job.get("publishing_preset") or "custom",
             "cover_time_seconds": float(job.get("cover_time_seconds") or 0),
+            "editorial_policy": editing_policy(job),
         },
         "project": {
             "name": job["project_name"],

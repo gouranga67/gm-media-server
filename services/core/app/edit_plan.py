@@ -8,6 +8,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.take_quality import validate_story_content
+
 
 EDIT_PLAN_SCHEMA_VERSION = "1.3"
 MAX_PREVIEW_SECONDS = 60.0
@@ -555,6 +557,27 @@ def repair_predictable_plan_defaults(
     if (creative_direction or {}).get("effect_level", "off") == "off" and repaired.get("effects"):
         repaired["effects"] = []
         repairs.append("removed_unrequested_creative_effects")
+    else:
+        cues = repaired.get("effects")
+        approved_effects = {str(item["asset_id"]) for item in creative_effects or []}
+        maximum = {"subtle": 2, "social": 4, "meme_heavy": 8}.get(
+            (creative_direction or {}).get("effect_level"), 0)
+        if maximum and isinstance(cues, list) and all(
+            isinstance(cue, dict) and str(cue.get("asset_id")) in approved_effects
+            and isinstance(cue.get("start_seconds"), (int, float))
+            and math.isfinite(cue["start_seconds"]) for cue in cues
+        ):
+            # An FX collision is not a reason to pay for a new story/cut list.
+            # Keep the first approved cue at each beat; never invent a new cue.
+            spaced: list[dict[str, Any]] = []
+            for cue in sorted(cues, key=lambda item: item["start_seconds"]):
+                if len(spaced) < maximum and (
+                    not spaced or cue["start_seconds"] - spaced[-1]["start_seconds"] >= 0.5
+                ):
+                    spaced.append(cue)
+            if len(spaced) != len(cues):
+                repaired["effects"] = spaced
+                repairs.append("reduced_effect_cue_collisions_without_changing_story")
     if requested_music == "none" and (
         repaired.get("music_track_id") is not None or repaired.get("music_mix") != "none"
     ):
@@ -698,6 +721,7 @@ def validate_edit_plan(
     creative_direction: dict[str, Any] | None = None,
     music_tracks: list[dict[str, Any]] | None = None,
     creative_effects: list[dict[str, Any]] | None = None,
+    enforce_story_quality: bool = False,
 ) -> EditPlan:
     if document.get("recipe") == "montage":
         return validate_montage_plan(
@@ -799,6 +823,24 @@ def validate_edit_plan(
             if current[0] < previous[1] - 0.01:
                 raise ValueError(f"asset {asset_id} contains overlapping source ranges")
 
+    policy = direction.get("editorial_policy") or {}
+    if enforce_story_quality:
+        validate_story_content(plan, assets, policy)
+        if policy.get("promotional") and not policy.get("bloopers_requested") and not policy.get("preserve_pauses_requested"):
+            tightened = apply_timeline_adjustments(plan, [
+                {"clip_index": index, "max_pause_seconds": 0.6}
+                for index in reversed(range(len(plan.clips)))
+            ], assets)
+            for clip in tightened.clips:
+                if clip.source_out - clip.source_in < 2 and clip.visual_preset in {"slow_push_in", "slow_pull_out"}:
+                    clip.visual_preset = "punch_in"
+            tightened.editorial_summary = plan.editorial_summary
+            tightened_document, _ = repair_predictable_plan_defaults(
+                tightened.model_dump(mode="json"), creative_direction=creative_direction,
+                music_tracks=music_tracks, creative_effects=creative_effects)
+            return validate_edit_plan(tightened_document, assets,
+                allow_post_copy=allow_post_copy, creative_direction=creative_direction,
+                music_tracks=music_tracks, creative_effects=creative_effects)
     return plan
 
 

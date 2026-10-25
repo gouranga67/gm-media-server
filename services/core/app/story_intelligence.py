@@ -3,6 +3,7 @@ from typing import Any
 
 from app.config import Settings, get_settings
 from app.content_catalog import _transcript_segments
+from app.take_quality import production_chatter_reason
 
 
 STORY_INTELLIGENCE_VERSION = "1.1"
@@ -327,6 +328,17 @@ def select_story_moments(
 
     if not moments or limit <= 0:
         return []
+    # Re-evaluate stored moments at retrieval time too: existing libraries must
+    # benefit without paying for transcription or requiring a full re-index.
+    moments = [dict(moment) for moment in moments]
+    for moment in moments:
+        reason = production_chatter_reason(str(moment.get("text") or ""))
+        if moment.get("kind") == "spoken" and reason is not None and reason != "possible_script_discussion":
+            moment["signals"] = [*(moment.get("signals") or []), "production_chatter"]
+            moment["role_scores"] = {role: 0.0 for role in _ROLE_ORDER}
+            moment["suggested_roles"] = []
+            moment["engagement_score"] = 0.0
+            moment["intrinsic_score"] = 0.02
     query_tokens = _tokens(query)
     base_scores: dict[int, float] = {}
     spoken_indexes: list[int] = []
@@ -337,7 +349,7 @@ def select_story_moments(
         intrinsic = float(moment.get("intrinsic_score") or 0)
         engagement = float(moment.get("engagement_score") or 0)
         base_scores[index] = intrinsic + engagement * 0.35 + relevance * 1.5
-        if moment.get("kind") == "spoken":
+        if moment.get("kind") == "spoken" and "production_chatter" not in (moment.get("signals") or []):
             spoken_indexes.append(index)
 
     selected_indexes: list[int] = []
@@ -378,7 +390,15 @@ def build_story_assessment(moments: list[dict[str, Any]]) -> dict[str, Any]:
 
     candidates: dict[str, list[dict[str, Any]]] = {role: [] for role in _ROLE_ORDER}
     spoken = [moment for moment in moments if moment.get("kind") == "spoken"]
+    spoken_assets = {moment.get("asset_id") for moment in spoken}
     for moment in moments:
+        reason = production_chatter_reason(str(moment.get("text") or ""))
+        if reason is not None and reason != "possible_script_discussion":
+            continue
+        if moment.get("kind") == "visual_window" and moment.get("asset_id") in spoken_assets:
+            # A generic scene interval supplies no dialogue evidence for a hook
+            # or a payoff when transcript-backed moments are available.
+            continue
         role_scores = moment.get("role_scores") if isinstance(moment.get("role_scores"), dict) else {}
         suggested = set(moment.get("suggested_roles") or [])
         for role in _ROLE_ORDER:

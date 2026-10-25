@@ -29,6 +29,7 @@ from app.finalize_upload import finalize_original, upload_source_path
 from app.media_analysis import analyze_asset, resolve_source
 from app.productization import assert_ai_budget
 from app.story_intelligence import STORY_INTELLIGENCE_VERSION, build_story_moments
+from app.take_quality import editing_policy
 from app.montage_renderer import render_montage_delivery, render_montage_preview
 from app.music_analysis import analyze_music_beats
 from app.revision_report import compare_revision
@@ -933,6 +934,10 @@ def process_one_edit(state: WorkerState) -> bool:
                     "caption_corrections": run.get("caption_corrections") or [],
                     "locked_elements": run.get("locked_elements") or [],
                 }
+                context["job"]["editorial_policy"] = editing_policy({
+                    **context["job"], "project_name": context["project"]["name"],
+                    "brief": context["project"]["brief"] + " " + str(run.get("revision_note") or ""),
+                })
             adjustments = list(run.get("clip_adjustments") or [])
             deterministic_revision = bool(run.get("based_on_run_id")) and not run.get("revision_note")
             if deterministic_revision:
@@ -989,6 +994,11 @@ def process_one_edit(state: WorkerState) -> bool:
                 proposed, provenance = create_edit_plan(context)
             request_kind = "revision" if run.get("based_on_run_id") else "initial_plan"
             _record_plan_usage(run, provenance, request_kind)
+            revision_text = str(run.get("revision_note") or "").lower()
+            check_story = context["project"]["privacy_mode"] != "local_only" and not deterministic_revision and (
+                not run.get("based_on_run_id") or run.get("revision_mode") == "rebuild_story"
+                or any(term in revision_text for term in ("blooper", "outtake", "dead space", "dead air", "pause", "story", "retake"))
+            ) and "spoken phrases" not in (run.get("locked_elements") or [])
             try:
                 plan = validate_edit_plan(
                     proposed.model_dump(mode="json"),
@@ -997,6 +1007,7 @@ def process_one_edit(state: WorkerState) -> bool:
                     creative_direction=context["job"],
                     music_tracks=context["music_library"],
                     creative_effects=context["creative_effect_library"],
+                    enforce_story_quality=check_story,
                 )
             except (ValueError, ValidationError) as validation_error:
                 if context["project"]["privacy_mode"] == "local_only":
@@ -1005,6 +1016,7 @@ def process_one_edit(state: WorkerState) -> bool:
                     proposed.model_dump(mode="json"),
                     creative_direction=context["job"],
                     music_tracks=context["music_library"],
+                    creative_effects=context["creative_effect_library"],
                     previous_plan=(context.get("revision") or {}).get("previous_plan"),
                 )
                 try:
@@ -1017,6 +1029,7 @@ def process_one_edit(state: WorkerState) -> bool:
                         creative_direction=context["job"],
                         music_tracks=context["music_library"],
                         creative_effects=context["creative_effect_library"],
+                        enforce_story_quality=check_story,
                     )
                 except (ValueError, ValidationError) as deterministic_error:
                     with connection() as database:
@@ -1056,6 +1069,7 @@ def process_one_edit(state: WorkerState) -> bool:
                         creative_direction=context["job"],
                         music_tracks=context["music_library"],
                         creative_effects=context["creative_effect_library"],
+                        enforce_story_quality=check_story,
                     )
                     deterministic_repairs.extend(final_repairs)
                 else:
