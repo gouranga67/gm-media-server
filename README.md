@@ -27,7 +27,7 @@ Editor model ---> constrained JSON edit plan ---> validator ---> FFmpeg renderer
 - The model can reference only registered asset IDs, valid time ranges, and approved edit operations.
 - Trusted code validates the edit decision list and builds FFmpeg arguments. The agent receives no shell or Docker access.
 
-Start with the illustrated [system architecture guide](docs/system-architecture-guide.md). The detailed design is in [the architecture plan](docs/architecture-plan.md), current progress and exit criteria are in [the build phases](docs/build-phases.md), and the layered acceptance process is in [the testing plan](docs/testing-plan.md).
+Start with the illustrated [system architecture guide](docs/system-architecture-guide.md), or open its [print-ready PDF edition](docs/GM-Studio-System-Architecture-Guide.pdf). The detailed design is in [the architecture plan](docs/architecture-plan.md), current progress and exit criteria are in [the build phases](docs/build-phases.md), and the layered acceptance process is in [the testing plan](docs/testing-plan.md).
 
 ## Requirements
 

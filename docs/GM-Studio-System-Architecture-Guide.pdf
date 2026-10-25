@@ -1,0 +1,799 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Count 11 /Kids [8 0 R 10 0 R 12 0 R 14 0 R 16 0 R 18 0 R 20 0 R 22 0 R 24 0 R 26 0 R 28 0 R] >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Oblique /Encoding /WinAnsiEncoding >>
+endobj
+6 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Courier /Encoding /WinAnsiEncoding >>
+endobj
+7 0 obj
+<< /Length 1237 >>
+stream
+q 0.067 0.176 0.302 rg 0.00 0.00 595.28 841.89 re f Q
+q 0.270 0.720 0.780 rg 54.00 663.89 86.00 6.00 re f Q
+BT /F2 12.00 Tf 0.270 0.720 0.780 rg 1 0 0 1 54.00 719.89 Tm (GM STUDIO) Tj ET
+BT /F2 30.00 Tf 1.000 1.000 1.000 rg 1 0 0 1 54.00 625.89 Tm (System Architecture) Tj ET
+BT /F1 16.00 Tf 1.000 1.000 1.000 rg 1 0 0 1 54.00 588.89 Tm (A visual guide to the editing appliance,) Tj ET
+BT /F1 16.00 Tf 1.000 1.000 1.000 rg 1 0 0 1 54.00 565.89 Tm (its AI workflow, and CUDA acceleration) Tj ET
+q 0.090 0.230 0.360 rg 54.00 174.00 487.28 110.00 re f Q
+BT /F2 8.00 Tf 0.270 0.720 0.780 rg 1 0 0 1 72.00 251.00 Tm (MEMORY) Tj ET
+BT /F2 8.00 Tf 0.270 0.720 0.780 rg 1 0 0 1 72.00 227.00 Tm (BRAIN) Tj ET
+BT /F2 8.00 Tf 0.270 0.720 0.780 rg 1 0 0 1 72.00 203.00 Tm (HANDS) Tj ET
+BT /F1 9.50 Tf 1.000 1.000 1.000 rg 1 0 0 1 148.00 251.00 Tm (Media, transcripts, visual index, and project history) Tj ET
+BT /F1 9.50 Tf 1.000 1.000 1.000 rg 1 0 0 1 148.00 227.00 Tm (A bounded editorial model choosing the story) Tj ET
+BT /F1 9.50 Tf 1.000 1.000 1.000 rg 1 0 0 1 148.00 203.00 Tm (FFmpeg, local models, and the NVIDIA GPU) Tj ET
+BT /F2 9.00 Tf 1.000 1.000 1.000 rg 1 0 0 1 54.00 82.00 Tm (Private by design  |  Source-led  |  Recoverable) Tj ET
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R /F4 6 0 R >> >> /Contents 7 0 R >>
+endobj
+9 0 obj
+<< /Length 2551 >>
+stream
+BT /F2 22.00 Tf 0.067 0.176 0.302 rg 1 0 0 1 54.00 755.89 Tm (How to read this guide) Tj ET
+q 0.270 0.720 0.780 rg 54.00 743.89 90.00 4.00 re f Q
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 709.89 Tm (The first half explains GM Studio as a simple flow that is easy to share. The second half goes) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 696.49 Tm (deeper into services, durable jobs, storage, security, and the exact role of CUDA and the NVIDIA) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 683.09 Tm (GPU.) Tj ET
+q 0.270 0.720 0.780 rg 54.00 654.69 4.00 15.00 re f Q
+BT /F2 15.50 Tf 0.067 0.176 0.302 rg 1 0 0 1 66.00 650.69 Tm (Contents) Tj ET
+BT /F2 9.40 Tf 0.090 0.310 0.470 rg 1 0 0 1 56.00 625.69 Tm (01) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 625.69 Tm (The short explanation) Tj ET
+BT /F2 9.40 Tf 0.090 0.310 0.470 rg 1 0 0 1 56.00 609.69 Tm (02) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 609.69 Tm (What happens to an uploaded video) Tj ET
+BT /F2 9.40 Tf 0.090 0.310 0.470 rg 1 0 0 1 56.00 593.69 Tm (03) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 593.69 Tm (The main system areas) Tj ET
+BT /F2 9.40 Tf 0.090 0.310 0.470 rg 1 0 0 1 56.00 577.69 Tm (04) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 577.69 Tm (Services and responsibilities) Tj ET
+BT /F2 9.40 Tf 0.090 0.310 0.470 rg 1 0 0 1 56.00 561.69 Tm (05) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 561.69 Tm (The job lifecycle) Tj ET
+BT /F2 9.40 Tf 0.090 0.310 0.470 rg 1 0 0 1 56.00 545.69 Tm (06) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 545.69 Tm (The evidence sent to the editorial brain) Tj ET
+BT /F2 9.40 Tf 0.090 0.310 0.470 rg 1 0 0 1 56.00 529.69 Tm (07) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 529.69 Tm (The edit plan) Tj ET
+BT /F2 9.40 Tf 0.090 0.310 0.470 rg 1 0 0 1 56.00 513.69 Tm (08) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 513.69 Tm (Storage and recovery) Tj ET
+BT /F2 9.40 Tf 0.090 0.310 0.470 rg 1 0 0 1 56.00 497.69 Tm (09) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 497.69 Tm (CUDA and the GPU) Tj ET
+BT /F2 9.40 Tf 0.090 0.310 0.470 rg 1 0 0 1 56.00 481.69 Tm (10) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 481.69 Tm (Phase 13 story intelligence) Tj ET
+q 0.820 0.850 0.860 RG 0.50 w 54.00 35.00 m 541.28 35.00 l S Q
+BT /F1 7.20 Tf 0.340 0.390 0.420 rg 1 0 0 1 54.00 21.00 Tm (GM Studio System Architecture) Tj ET
+BT /F2 7.20 Tf 0.340 0.390 0.420 rg 1 0 0 1 507.28 21.00 Tm (2 / 11) Tj ET
+endstream
+endobj
+10 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R /F4 6 0 R >> >> /Contents 9 0 R >>
+endobj
+11 0 obj
+<< /Length 8646 >>
+stream
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 779.89 Tm (This guide explains GM Studio twice: first as a simple story that is easy to share, then as a) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 766.49 Tm (deeper technical walkthrough. It also explains CUDA and how the Lenovo's NVIDIA GPU participates in) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 753.09 Tm (analysis and rendering.) Tj ET
+q 0.270 0.720 0.780 rg 54.00 724.69 4.00 15.00 re f Q
+BT /F2 15.50 Tf 0.067 0.176 0.302 rg 1 0 0 1 66.00 720.69 Tm (The short explanation) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 695.69 Tm (GM Studio is a private video-editing appliance running on the Lenovo server. It stores and analyzes) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 682.29 Tm (source media locally, asks an editorial model to make bounded creative decisions, validates those) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 668.89 Tm (decisions, and renders the result locally.) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 649.49 Tm (The easiest mental model is:) Tj ET
+BT /F2 9.40 Tf 0.270 0.720 0.780 rg 1 0 0 1 56.00 630.09 Tm (-) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 630.09 Tm (Memory: the media library, transcripts, visual index, metadata, projects, and edit history.) Tj ET
+BT /F2 9.40 Tf 0.270 0.720 0.780 rg 1 0 0 1 56.00 614.09 Tm (-) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 614.09 Tm (Brain: the editorial model that chooses a story from structured evidence.) Tj ET
+BT /F2 9.40 Tf 0.270 0.720 0.780 rg 1 0 0 1 56.00 598.09 Tm (-) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 598.09 Tm (Hands: FFmpeg, Whisper, CLIP, and the NVIDIA GPU that inspect and render real media.) Tj ET
+BT /F2 9.40 Tf 0.270 0.720 0.780 rg 1 0 0 1 56.00 582.09 Tm (-) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 582.09 Tm (Safety system: validation, permissions, immutable originals, provenance, and encrypted backups.) Tj ET
+q 0.930 0.970 0.980 rg 54.00 398.09 487.28 168.00 re f Q
+q 0.820 0.850 0.860 RG 0.70 w 54.00 398.09 487.28 168.00 re S Q
+BT /F2 7.40 Tf 0.090 0.310 0.470 rg 1 0 0 1 68.00 548.09 Tm (SYSTEM DIAGRAM 1) Tj ET
+q 1.000 1.000 1.000 rg 68.00 467.09 58.00 48.00 re f Q
+q 0.820 0.850 0.860 RG 1.00 w 68.00 467.09 58.00 48.00 re S Q
+BT /F2 8.10 Tf 0.067 0.176 0.302 rg 1 0 0 1 74.00 501.09 Tm (Private UI) Tj ET
+q 0.090 0.310 0.470 RG 1.40 w 126.00 491.09 m 133.00 491.09 l S Q
+q 0.090 0.310 0.470 rg 133.00 491.09 m 126.00 495.09 l 126.00 487.09 l h f Q
+q 1.000 1.000 1.000 rg 135.00 467.09 58.00 48.00 re f Q
+q 0.820 0.850 0.860 RG 1.00 w 135.00 467.09 58.00 48.00 re S Q
+BT /F2 8.10 Tf 0.067 0.176 0.302 rg 1 0 0 1 141.00 501.09 Tm (Media) Tj ET
+BT /F2 8.10 Tf 0.067 0.176 0.302 rg 1 0 0 1 141.00 491.09 Tm (memory) Tj ET
+q 0.090 0.310 0.470 RG 1.40 w 193.00 491.09 m 200.00 491.09 l S Q
+q 0.090 0.310 0.470 rg 200.00 491.09 m 193.00 495.09 l 193.00 487.09 l h f Q
+q 1.000 1.000 1.000 rg 202.00 467.09 58.00 48.00 re f Q
+q 0.820 0.850 0.860 RG 1.00 w 202.00 467.09 58.00 48.00 re S Q
+BT /F2 8.10 Tf 0.067 0.176 0.302 rg 1 0 0 1 208.00 501.09 Tm (Local) Tj ET
+BT /F2 8.10 Tf 0.067 0.176 0.302 rg 1 0 0 1 208.00 491.09 Tm (analysis) Tj ET
+q 0.090 0.310 0.470 RG 1.40 w 260.00 491.09 m 267.00 491.09 l S Q
+q 0.090 0.310 0.470 rg 267.00 491.09 m 260.00 495.09 l 260.00 487.09 l h f Q
+q 1.000 1.000 1.000 rg 269.00 467.09 58.00 48.00 re f Q
+q 0.820 0.850 0.860 RG 1.00 w 269.00 467.09 58.00 48.00 re S Q
+BT /F2 8.10 Tf 0.067 0.176 0.302 rg 1 0 0 1 275.00 501.09 Tm (Story) Tj ET
+BT /F2 8.10 Tf 0.067 0.176 0.302 rg 1 0 0 1 275.00 491.09 Tm (evidence) Tj ET
+q 0.090 0.310 0.470 RG 1.40 w 327.00 491.09 m 334.00 491.09 l S Q
+q 0.090 0.310 0.470 rg 334.00 491.09 m 327.00 495.09 l 327.00 487.09 l h f Q
+q 1.000 1.000 1.000 rg 336.00 467.09 58.00 48.00 re f Q
+q 0.820 0.850 0.860 RG 1.00 w 336.00 467.09 58.00 48.00 re S Q
+BT /F2 8.10 Tf 0.067 0.176 0.302 rg 1 0 0 1 342.00 501.09 Tm (AI director) Tj ET
+q 0.090 0.310 0.470 RG 1.40 w 394.00 491.09 m 401.00 491.09 l S Q
+q 0.090 0.310 0.470 rg 401.00 491.09 m 394.00 495.09 l 394.00 487.09 l h f Q
+q 1.000 1.000 1.000 rg 403.00 467.09 58.00 48.00 re f Q
+q 0.820 0.850 0.860 RG 1.00 w 403.00 467.09 58.00 48.00 re S Q
+BT /F2 8.10 Tf 0.067 0.176 0.302 rg 1 0 0 1 409.00 501.09 Tm (Validated) Tj ET
+BT /F2 8.10 Tf 0.067 0.176 0.302 rg 1 0 0 1 409.00 491.09 Tm (plan) Tj ET
+q 0.090 0.310 0.470 RG 1.40 w 461.00 491.09 m 468.00 491.09 l S Q
+q 0.090 0.310 0.470 rg 468.00 491.09 m 461.00 495.09 l 461.00 487.09 l h f Q
+q 1.000 1.000 1.000 rg 470.00 467.09 58.00 48.00 re f Q
+q 0.820 0.850 0.860 RG 1.00 w 470.00 467.09 58.00 48.00 re S Q
+BT /F2 8.10 Tf 0.067 0.176 0.302 rg 1 0 0 1 476.00 501.09 Tm (GPU render) Tj ET
+q 0.900 0.970 0.970 rg 244.00 410.09 108.00 34.00 re f Q
+q 0.270 0.720 0.780 RG 1.00 w 244.00 410.09 108.00 34.00 re S Q
+BT /F2 8.10 Tf 0.067 0.176 0.302 rg 1 0 0 1 250.00 430.09 Tm (Review) Tj ET
+BT /F1 6.50 Tf 0.340 0.390 0.420 rg 1 0 0 1 250.00 419.09 Tm (approve or revise) Tj ET
+q 0.270 0.720 0.780 RG 1.40 w 487.00 467.09 m 352.00 444.09 l S Q
+q 0.270 0.720 0.780 rg 352.00 444.09 m 359.00 448.09 l 359.00 440.09 l h f Q
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 386.09 Tm (A useful one-sentence description is:) Tj ET
+q 0.900 0.970 0.970 rg 54.00 301.69 487.28 73.00 re f Q
+q 0.270 0.720 0.780 rg 54.00 301.69 5.00 73.00 re f Q
+BT /F3 11.00 Tf 0.067 0.176 0.302 rg 1 0 0 1 72.00 352.69 Tm (GM Studio privately understands your footage, gives an AI director a compact map) Tj ET
+BT /F3 11.00 Tf 0.067 0.176 0.302 rg 1 0 0 1 72.00 337.69 Tm (of the useful moments, and then performs the approved edit locally with) Tj ET
+BT /F3 11.00 Tf 0.067 0.176 0.302 rg 1 0 0 1 72.00 322.69 Tm (deterministic media tools.) Tj ET
+q 0.270 0.720 0.780 rg 54.00 284.69 4.00 15.00 re f Q
+BT /F2 15.50 Tf 0.067 0.176 0.302 rg 1 0 0 1 66.00 280.69 Tm (What happens to an uploaded video) Tj ET
+BT /F2 9.40 Tf 0.090 0.310 0.470 rg 1 0 0 1 56.00 255.69 Tm (1) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 255.69 Tm (The upload resumes if the phone connection is interrupted.) Tj ET
+BT /F2 9.40 Tf 0.090 0.310 0.470 rg 1 0 0 1 56.00 239.69 Tm (2) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 239.69 Tm (The completed original receives a SHA-256 fingerprint and becomes read-only application data.) Tj ET
+BT /F2 9.40 Tf 0.090 0.310 0.470 rg 1 0 0 1 56.00 223.69 Tm (3) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 223.69 Tm (FFprobe records its format, duration, streams, dimensions, frame rate, and rotation.) Tj ET
+BT /F2 9.40 Tf 0.090 0.310 0.470 rg 1 0 0 1 56.00 207.69 Tm (4) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 207.69 Tm (FFmpeg makes edit-friendly proxies, thumbnails, contact sheets, scene boundaries, and audio) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 194.69 Tm (measurements.) Tj ET
+BT /F2 9.40 Tf 0.090 0.310 0.470 rg 1 0 0 1 56.00 178.69 Tm (5) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 178.69 Tm (Local Whisper transcribes speech with source timestamps.) Tj ET
+BT /F2 9.40 Tf 0.090 0.310 0.470 rg 1 0 0 1 56.00 162.69 Tm (6) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 162.69 Tm (Local CLIP indexes representative frames so visible subjects can be searched semantically.) Tj ET
+BT /F2 9.40 Tf 0.090 0.310 0.470 rg 1 0 0 1 56.00 146.69 Tm (7) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 146.69 Tm (PostgreSQL connects every fact to the immutable asset and exact source time range.) Tj ET
+BT /F2 9.40 Tf 0.090 0.310 0.470 rg 1 0 0 1 56.00 130.69 Tm (8) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 130.69 Tm (A job attaches references to selected originals without copying them.) Tj ET
+BT /F2 9.40 Tf 0.090 0.310 0.470 rg 1 0 0 1 56.00 114.69 Tm (9) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 114.69 Tm (The editor receives a bounded evidence packet and returns a structured edit decision list.) Tj ET
+BT /F2 9.40 Tf 0.090 0.310 0.470 rg 1 0 0 1 56.00 98.69 Tm (10) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 98.69 Tm (Trusted code validates every asset, time range, effect, and duration.) Tj ET
+BT /F2 9.40 Tf 0.090 0.310 0.470 rg 1 0 0 1 56.00 82.69 Tm (11) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 82.69 Tm (FFmpeg and the NVIDIA GPU render a preview and, after approval, a final package.) Tj ET
+q 0.820 0.850 0.860 RG 0.50 w 54.00 35.00 m 541.28 35.00 l S Q
+BT /F1 7.20 Tf 0.340 0.390 0.420 rg 1 0 0 1 54.00 21.00 Tm (GM Studio System Architecture) Tj ET
+BT /F2 7.20 Tf 0.340 0.390 0.420 rg 1 0 0 1 507.28 21.00 Tm (3 / 11) Tj ET
+endstream
+endobj
+12 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R /F4 6 0 R >> >> /Contents 11 0 R >>
+endobj
+13 0 obj
+<< /Length 5163 >>
+stream
+BT /F2 9.40 Tf 0.090 0.310 0.470 rg 1 0 0 1 56.00 779.89 Tm (12) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 779.89 Tm (Job history, model usage, edit provenance, and recovery backups remain available.) Tj ET
+q 0.270 0.720 0.780 rg 54.00 754.89 4.00 15.00 re f Q
+BT /F2 15.50 Tf 0.067 0.176 0.302 rg 1 0 0 1 66.00 750.89 Tm (The main system areas) Tj ET
+q 0.930 0.970 0.980 rg 54.00 505.89 487.28 220.00 re f Q
+q 0.820 0.850 0.860 RG 0.70 w 54.00 505.89 487.28 220.00 re S Q
+BT /F2 7.40 Tf 0.090 0.310 0.470 rg 1 0 0 1 68.00 707.89 Tm (SYSTEM DIAGRAM 2) Tj ET
+q 1.000 1.000 1.000 rg 68.00 609.89 222.64 74.00 re f Q
+q 0.270 0.720 0.780 RG 0.70 w 68.00 609.89 222.64 74.00 re S Q
+BT /F2 8.00 Tf 0.090 0.310 0.470 rg 1 0 0 1 78.00 667.89 Tm (PRIVATE ACCESS) Tj ET
+BT /F1 7.50 Tf 0.100 0.150 0.190 rg 1 0 0 1 80.00 652.89 Tm (- Phone / computer) Tj ET
+BT /F1 7.50 Tf 0.100 0.150 0.190 rg 1 0 0 1 80.00 640.89 Tm (- Tailscale Serve) Tj ET
+BT /F1 7.50 Tf 0.100 0.150 0.190 rg 1 0 0 1 80.00 628.89 Tm (- Next.js interface) Tj ET
+q 1.000 1.000 1.000 rg 304.64 609.89 222.64 74.00 re f Q
+q 0.270 0.720 0.780 RG 0.70 w 304.64 609.89 222.64 74.00 re S Q
+BT /F2 8.00 Tf 0.090 0.310 0.470 rg 1 0 0 1 314.64 667.89 Tm (CONTROL PLANE) Tj ET
+BT /F1 7.50 Tf 0.100 0.150 0.190 rg 1 0 0 1 316.64 652.89 Tm (- FastAPI) Tj ET
+BT /F1 7.50 Tf 0.100 0.150 0.190 rg 1 0 0 1 316.64 640.89 Tm (- PostgreSQL) Tj ET
+BT /F1 7.50 Tf 0.100 0.150 0.190 rg 1 0 0 1 316.64 628.89 Tm (- Redis signal) Tj ET
+q 1.000 1.000 1.000 rg 68.00 523.89 222.64 74.00 re f Q
+q 0.270 0.720 0.780 RG 0.70 w 68.00 523.89 222.64 74.00 re S Q
+BT /F2 8.00 Tf 0.090 0.310 0.470 rg 1 0 0 1 78.00 581.89 Tm (MEDIA PLANE) Tj ET
+BT /F1 7.50 Tf 0.100 0.150 0.190 rg 1 0 0 1 80.00 566.89 Tm (- Resumable uploads) Tj ET
+BT /F1 7.50 Tf 0.100 0.150 0.190 rg 1 0 0 1 80.00 554.89 Tm (- Durable worker) Tj ET
+BT /F1 7.50 Tf 0.100 0.150 0.190 rg 1 0 0 1 80.00 542.89 Tm (- RTX 3050) Tj ET
+q 1.000 1.000 1.000 rg 304.64 523.89 222.64 74.00 re f Q
+q 0.270 0.720 0.780 RG 0.70 w 304.64 523.89 222.64 74.00 re S Q
+BT /F2 8.00 Tf 0.090 0.310 0.470 rg 1 0 0 1 314.64 581.89 Tm (EDITORIAL PLANE) Tj ET
+BT /F1 7.50 Tf 0.100 0.150 0.190 rg 1 0 0 1 316.64 566.89 Tm (- Evidence) Tj ET
+BT /F1 7.50 Tf 0.100 0.150 0.190 rg 1 0 0 1 316.64 554.89 Tm (- AI director) Tj ET
+BT /F1 7.50 Tf 0.100 0.150 0.190 rg 1 0 0 1 316.64 542.89 Tm (- Validator + FFmpeg) Tj ET
+BT /F2 11.80 Tf 0.090 0.310 0.470 rg 1 0 0 1 54.00 486.89 Tm (Private access) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 465.89 Tm (Tailscale supplies the encrypted network connection and authenticated identity. The web container) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 452.49 Tm (listens only on the server's loopback interface. The configured owner can invite active editor or) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 439.09 Tm (viewer identities that already belong to the tailnet.) Tj ET
+BT /F2 11.80 Tf 0.090 0.310 0.470 rg 1 0 0 1 54.00 412.69 Tm (Control plane) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 391.69 Tm (FastAPI is the authority for projects, assets, jobs, edit plans, approvals, library metadata,) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 378.29 Tm (access roles, and downloads. PostgreSQL is the durable source of truth. Redis is a lightweight) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 364.89 Tm (wake-up signal; losing Redis does not erase the job because the durable state remains in) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 351.49 Tm (PostgreSQL.) Tj ET
+BT /F2 11.80 Tf 0.090 0.310 0.470 rg 1 0 0 1 54.00 325.09 Tm (Media plane) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 304.09 Tm (The media filesystem contains originals and separate derived files. The worker claims durable work,) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 290.69 Tm (performs analysis or rendering, writes results atomically, and updates PostgreSQL. Originals are) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 277.29 Tm (never overwritten by an edit.) Tj ET
+BT /F2 11.80 Tf 0.090 0.310 0.470 rg 1 0 0 1 54.00 250.89 Tm (Editorial plane) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 229.89 Tm (The editorial model receives structured evidence and returns JSON matching a strict schema. It does) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 216.49 Tm (not receive shell access, Docker access, arbitrary filesystem paths, or permission to invent an) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 203.09 Tm (asset ID. The validator rejects unknown sources, invalid time ranges, unsupported effects, and) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 189.69 Tm (unsafe plans before FFmpeg sees them.) Tj ET
+q 0.270 0.720 0.780 rg 54.00 161.29 4.00 15.00 re f Q
+BT /F2 15.50 Tf 0.067 0.176 0.302 rg 1 0 0 1 66.00 157.29 Tm (Services and responsibilities) Tj ET
+q 0.820 0.850 0.860 RG 0.50 w 54.00 35.00 m 541.28 35.00 l S Q
+BT /F1 7.20 Tf 0.340 0.390 0.420 rg 1 0 0 1 54.00 21.00 Tm (GM Studio System Architecture) Tj ET
+BT /F2 7.20 Tf 0.340 0.390 0.420 rg 1 0 0 1 507.28 21.00 Tm (4 / 11) Tj ET
+endstream
+endobj
+14 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R /F4 6 0 R >> >> /Contents 13 0 R >>
+endobj
+15 0 obj
+<< /Length 9551 >>
+stream
+q 0.067 0.176 0.302 rg 54.00 759.49 487.28 24.40 re f Q
+q 0.820 0.850 0.860 RG 0.50 w 54.00 759.49 487.28 24.40 re S Q
+BT /F2 8.10 Tf 1.000 1.000 1.000 rg 1 0 0 1 61.00 771.89 Tm (Service) Tj ET
+q 0.820 0.850 0.860 RG 0.50 w 205.06 759.49 m 205.06 783.89 l S Q
+BT /F2 8.10 Tf 1.000 1.000 1.000 rg 1 0 0 1 212.06 771.89 Tm (Responsibility) Tj ET
+q 1.000 1.000 1.000 rg 54.00 724.69 487.28 34.80 re f Q
+q 0.820 0.850 0.860 RG 0.50 w 54.00 724.69 487.28 34.80 re S Q
+BT /F2 8.10 Tf 0.100 0.150 0.190 rg 1 0 0 1 61.00 747.49 Tm (web-agent) Tj ET
+q 0.820 0.850 0.860 RG 0.50 w 205.06 724.69 m 205.06 759.49 l S Q
+BT /F1 8.10 Tf 0.100 0.150 0.190 rg 1 0 0 1 212.06 747.49 Tm (Phone-friendly interface, Tailscale identity enforcement, upload and review) Tj ET
+BT /F1 8.10 Tf 0.100 0.150 0.190 rg 1 0 0 1 212.06 737.09 Tm (flows) Tj ET
+q 0.930 0.970 0.980 rg 54.00 689.89 487.28 34.80 re f Q
+q 0.820 0.850 0.860 RG 0.50 w 54.00 689.89 487.28 34.80 re S Q
+BT /F2 8.10 Tf 0.100 0.150 0.190 rg 1 0 0 1 61.00 712.69 Tm (api) Tj ET
+q 0.820 0.850 0.860 RG 0.50 w 205.06 689.89 m 205.06 724.69 l S Q
+BT /F1 8.10 Tf 0.100 0.150 0.190 rg 1 0 0 1 212.06 712.69 Tm (Projects, assets, jobs, permissions, plans, approvals, usage, and authorized) Tj ET
+BT /F1 8.10 Tf 0.100 0.150 0.190 rg 1 0 0 1 212.06 702.29 Tm (media delivery) Tj ET
+q 1.000 1.000 1.000 rg 54.00 665.49 487.28 24.40 re f Q
+q 0.820 0.850 0.860 RG 0.50 w 54.00 665.49 487.28 24.40 re S Q
+BT /F2 8.10 Tf 0.100 0.150 0.190 rg 1 0 0 1 61.00 677.89 Tm (tusd) Tj ET
+q 0.820 0.850 0.860 RG 0.50 w 205.06 665.49 m 205.06 689.89 l S Q
+BT /F1 8.10 Tf 0.100 0.150 0.190 rg 1 0 0 1 212.06 677.89 Tm (Chunked and resumable uploads into staging storage) Tj ET
+q 0.930 0.970 0.980 rg 54.00 630.69 487.28 34.80 re f Q
+q 0.820 0.850 0.860 RG 0.50 w 54.00 630.69 487.28 34.80 re S Q
+BT /F2 8.10 Tf 0.100 0.150 0.190 rg 1 0 0 1 61.00 653.49 Tm (postgres) Tj ET
+q 0.820 0.850 0.860 RG 0.50 w 205.06 630.69 m 205.06 665.49 l S Q
+BT /F1 8.10 Tf 0.100 0.150 0.190 rg 1 0 0 1 212.06 653.49 Tm (Durable metadata, catalogue, edit history, access roles, provenance, and audit) Tj ET
+BT /F1 8.10 Tf 0.100 0.150 0.190 rg 1 0 0 1 212.06 643.09 Tm (events) Tj ET
+q 1.000 1.000 1.000 rg 54.00 606.29 487.28 24.40 re f Q
+q 0.820 0.850 0.860 RG 0.50 w 54.00 606.29 487.28 24.40 re S Q
+BT /F2 8.10 Tf 0.100 0.150 0.190 rg 1 0 0 1 61.00 618.69 Tm (redis) Tj ET
+q 0.820 0.850 0.860 RG 0.50 w 205.06 606.29 m 205.06 630.69 l S Q
+BT /F1 8.10 Tf 0.100 0.150 0.190 rg 1 0 0 1 212.06 618.69 Tm (Efficient worker notification and short-lived coordination) Tj ET
+q 0.930 0.970 0.980 rg 54.00 571.49 487.28 34.80 re f Q
+q 0.820 0.850 0.860 RG 0.50 w 54.00 571.49 487.28 34.80 re S Q
+BT /F2 8.10 Tf 0.100 0.150 0.190 rg 1 0 0 1 61.00 594.29 Tm (worker) Tj ET
+q 0.820 0.850 0.860 RG 0.50 w 205.06 571.49 m 205.06 606.29 l S Q
+BT /F1 8.10 Tf 0.100 0.150 0.190 rg 1 0 0 1 212.06 594.29 Tm (Ingest, transcription, catalogue building, edit planning, rendering, recovery,) Tj ET
+BT /F1 8.10 Tf 0.100 0.150 0.190 rg 1 0 0 1 212.06 583.89 Tm (and packaging) Tj ET
+q 1.000 1.000 1.000 rg 54.00 547.09 487.28 24.40 re f Q
+q 0.820 0.850 0.860 RG 0.50 w 54.00 547.09 487.28 24.40 re S Q
+BT /F2 8.10 Tf 0.100 0.150 0.190 rg 1 0 0 1 61.00 559.49 Tm (visual-indexer) Tj ET
+q 0.820 0.850 0.860 RG 0.50 w 205.06 547.09 m 205.06 571.49 l S Q
+BT /F1 8.10 Tf 0.100 0.150 0.190 rg 1 0 0 1 212.06 559.49 Tm (Private CLIP image/text embeddings for semantic visual search) Tj ET
+q 0.930 0.970 0.980 rg 54.00 522.69 487.28 24.40 re f Q
+q 0.820 0.850 0.860 RG 0.50 w 54.00 522.69 487.28 24.40 re S Q
+BT /F2 8.10 Tf 0.100 0.150 0.190 rg 1 0 0 1 61.00 535.09 Tm (media-init) Tj ET
+q 0.820 0.850 0.860 RG 0.50 w 205.06 522.69 m 205.06 547.09 l S Q
+BT /F1 8.10 Tf 0.100 0.150 0.190 rg 1 0 0 1 212.06 535.09 Tm (Prepares the persistent media directory layout and permissions) Tj ET
+q 1.000 1.000 1.000 rg 54.00 498.29 487.28 24.40 re f Q
+q 0.820 0.850 0.860 RG 0.50 w 54.00 498.29 487.28 24.40 re S Q
+BT /F2 8.10 Tf 0.100 0.150 0.190 rg 1 0 0 1 61.00 510.69 Tm (migrate) Tj ET
+q 0.820 0.850 0.860 RG 0.50 w 205.06 498.29 m 205.06 522.69 l S Q
+BT /F1 8.10 Tf 0.100 0.150 0.190 rg 1 0 0 1 212.06 510.69 Tm (Applies ordered database migrations before the application becomes healthy) Tj ET
+q 0.270 0.720 0.780 rg 54.00 478.29 4.00 15.00 re f Q
+BT /F2 15.50 Tf 0.067 0.176 0.302 rg 1 0 0 1 66.00 474.29 Tm (The job lifecycle) Tj ET
+q 0.930 0.970 0.980 rg 54.00 229.29 487.28 220.00 re f Q
+q 0.820 0.850 0.860 RG 0.70 w 54.00 229.29 487.28 220.00 re S Q
+BT /F2 7.40 Tf 0.090 0.310 0.470 rg 1 0 0 1 68.00 431.29 Tm (SYSTEM DIAGRAM 3) Tj ET
+q 1.000 1.000 1.000 rg 66.00 355.29 47.00 32.00 re f Q
+q 0.820 0.850 0.860 RG 1.00 w 66.00 355.29 47.00 32.00 re S Q
+BT /F2 8.10 Tf 0.067 0.176 0.302 rg 1 0 0 1 72.00 373.29 Tm (Draft) Tj ET
+q 0.090 0.310 0.470 RG 1.40 w 113.00 371.29 m 122.00 371.29 l S Q
+q 0.090 0.310 0.470 rg 122.00 371.29 m 115.00 375.29 l 115.00 367.29 l h f Q
+q 1.000 1.000 1.000 rg 124.00 355.29 47.00 32.00 re f Q
+q 0.820 0.850 0.860 RG 1.00 w 124.00 355.29 47.00 32.00 re S Q
+BT /F2 8.10 Tf 0.067 0.176 0.302 rg 1 0 0 1 130.00 373.29 Tm (Upload) Tj ET
+q 0.090 0.310 0.470 RG 1.40 w 171.00 371.29 m 180.00 371.29 l S Q
+q 0.090 0.310 0.470 rg 180.00 371.29 m 173.00 375.29 l 173.00 367.29 l h f Q
+q 1.000 1.000 1.000 rg 182.00 355.29 47.00 32.00 re f Q
+q 0.820 0.850 0.860 RG 1.00 w 182.00 355.29 47.00 32.00 re S Q
+BT /F2 8.10 Tf 0.067 0.176 0.302 rg 1 0 0 1 188.00 373.29 Tm (Analyze) Tj ET
+q 0.090 0.310 0.470 RG 1.40 w 229.00 371.29 m 238.00 371.29 l S Q
+q 0.090 0.310 0.470 rg 238.00 371.29 m 231.00 375.29 l 231.00 367.29 l h f Q
+q 1.000 1.000 1.000 rg 240.00 355.29 47.00 32.00 re f Q
+q 0.820 0.850 0.860 RG 1.00 w 240.00 355.29 47.00 32.00 re S Q
+BT /F2 8.10 Tf 0.067 0.176 0.302 rg 1 0 0 1 246.00 373.29 Tm (Plan) Tj ET
+q 0.090 0.310 0.470 RG 1.40 w 287.00 371.29 m 296.00 371.29 l S Q
+q 0.090 0.310 0.470 rg 296.00 371.29 m 289.00 375.29 l 289.00 367.29 l h f Q
+q 1.000 1.000 1.000 rg 298.00 355.29 47.00 32.00 re f Q
+q 0.820 0.850 0.860 RG 1.00 w 298.00 355.29 47.00 32.00 re S Q
+BT /F2 8.10 Tf 0.067 0.176 0.302 rg 1 0 0 1 304.00 373.29 Tm (Preview) Tj ET
+q 0.090 0.310 0.470 RG 1.40 w 345.00 371.29 m 354.00 371.29 l S Q
+q 0.090 0.310 0.470 rg 354.00 371.29 m 347.00 375.29 l 347.00 367.29 l h f Q
+q 1.000 1.000 1.000 rg 356.00 355.29 47.00 32.00 re f Q
+q 0.820 0.850 0.860 RG 1.00 w 356.00 355.29 47.00 32.00 re S Q
+BT /F2 8.10 Tf 0.067 0.176 0.302 rg 1 0 0 1 362.00 373.29 Tm (Review) Tj ET
+q 0.090 0.310 0.470 RG 1.40 w 403.00 371.29 m 412.00 371.29 l S Q
+q 0.090 0.310 0.470 rg 412.00 371.29 m 405.00 375.29 l 405.00 367.29 l h f Q
+q 1.000 1.000 1.000 rg 414.00 355.29 47.00 32.00 re f Q
+q 0.820 0.850 0.860 RG 1.00 w 414.00 355.29 47.00 32.00 re S Q
+BT /F2 8.10 Tf 0.067 0.176 0.302 rg 1 0 0 1 420.00 373.29 Tm (Export) Tj ET
+q 0.090 0.310 0.470 RG 1.40 w 461.00 371.29 m 470.00 371.29 l S Q
+q 0.090 0.310 0.470 rg 470.00 371.29 m 463.00 375.29 l 463.00 367.29 l h f Q
+q 1.000 1.000 1.000 rg 472.00 355.29 47.00 32.00 re f Q
+q 0.820 0.850 0.860 RG 1.00 w 472.00 355.29 47.00 32.00 re S Q
+BT /F2 8.10 Tf 0.067 0.176 0.302 rg 1 0 0 1 478.00 373.29 Tm (Delivere) Tj ET
+BT /F2 8.10 Tf 0.067 0.176 0.302 rg 1 0 0 1 478.00 363.29 Tm (d) Tj ET
+q 1.000 0.950 0.930 rg 169.00 264.29 92.00 38.00 re f Q
+q 0.750 0.300 0.220 RG 1.00 w 169.00 264.29 92.00 38.00 re S Q
+BT /F2 8.10 Tf 0.067 0.176 0.302 rg 1 0 0 1 175.00 288.29 Tm (Failed) Tj ET
+BT /F1 6.50 Tf 0.340 0.390 0.420 rg 1 0 0 1 175.00 277.29 Tm (safe retry) Tj ET
+q 0.900 0.970 0.970 rg 336.00 264.29 92.00 38.00 re f Q
+q 0.270 0.720 0.780 RG 1.00 w 336.00 264.29 92.00 38.00 re S Q
+BT /F2 8.10 Tf 0.067 0.176 0.302 rg 1 0 0 1 342.00 288.29 Tm (Revision) Tj ET
+BT /F1 6.50 Tf 0.340 0.390 0.420 rg 1 0 0 1 342.00 277.29 Tm (new preview) Tj ET
+q 0.270 0.720 0.780 RG 1.40 w 353.00 355.29 m 382.00 302.29 l S Q
+q 0.270 0.720 0.780 rg 382.00 302.29 m 378.00 309.29 l 386.00 309.29 l h f Q
+q 0.270 0.720 0.780 RG 1.40 w 336.00 283.29 m 318.00 355.29 l S Q
+q 0.270 0.720 0.780 rg 318.00 355.29 m 314.00 348.29 l 322.00 348.29 l h f Q
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 217.29 Tm (Long operations are durable. A worker records a lease while it is processing. If the container or) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 203.89 Tm (whole server stops, an expired lease makes the work claimable again. The database, rather than an) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 190.49 Tm (open browser or model connection, owns progress.) Tj ET
+q 0.270 0.720 0.780 rg 54.00 162.09 4.00 15.00 re f Q
+BT /F2 15.50 Tf 0.067 0.176 0.302 rg 1 0 0 1 66.00 158.09 Tm (The evidence sent to the editorial brain) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 133.09 Tm (The hosted model does not need the original files. GM Studio assembles an editorial context) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 119.69 Tm (containing:) Tj ET
+BT /F2 9.40 Tf 0.270 0.720 0.780 rg 1 0 0 1 56.00 100.29 Tm (-) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 100.29 Tm (The user's brief, recipe, target duration, platform, aspect ratio, and style.) Tj ET
+BT /F2 9.40 Tf 0.270 0.720 0.780 rg 1 0 0 1 56.00 84.29 Tm (-) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 84.29 Tm (Immutable asset IDs and source names.) Tj ET
+q 0.820 0.850 0.860 RG 0.50 w 54.00 35.00 m 541.28 35.00 l S Q
+BT /F1 7.20 Tf 0.340 0.390 0.420 rg 1 0 0 1 54.00 21.00 Tm (GM Studio System Architecture) Tj ET
+BT /F2 7.20 Tf 0.340 0.390 0.420 rg 1 0 0 1 507.28 21.00 Tm (5 / 11) Tj ET
+endstream
+endobj
+16 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R /F4 6 0 R >> >> /Contents 15 0 R >>
+endobj
+17 0 obj
+<< /Length 7292 >>
+stream
+BT /F2 9.40 Tf 0.270 0.720 0.780 rg 1 0 0 1 56.00 779.89 Tm (-) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 779.89 Tm (Transcript segments with exact timestamps.) Tj ET
+BT /F2 9.40 Tf 0.270 0.720 0.780 rg 1 0 0 1 56.00 763.89 Tm (-) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 763.89 Tm (Scene boundaries and duration.) Tj ET
+BT /F2 9.40 Tf 0.270 0.720 0.780 rg 1 0 0 1 56.00 747.89 Tm (-) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 747.89 Tm (Visual-quality and audio measurements.) Tj ET
+BT /F2 9.40 Tf 0.270 0.720 0.780 rg 1 0 0 1 56.00 731.89 Tm (-) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 731.89 Tm (Locally selected thumbnails or contact sheets when the privacy mode allows them.) Tj ET
+BT /F2 9.40 Tf 0.270 0.720 0.780 rg 1 0 0 1 56.00 715.89 Tm (-) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 715.89 Tm (Approved local music facts and beat grids.) Tj ET
+BT /F2 9.40 Tf 0.270 0.720 0.780 rg 1 0 0 1 56.00 699.89 Tm (-) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 699.89 Tm (Brand kit and publishing preset.) Tj ET
+BT /F2 9.40 Tf 0.270 0.720 0.780 rg 1 0 0 1 56.00 683.89 Tm (-) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 683.89 Tm (Previous plan and requested changes during a revision.) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 667.89 Tm (Internal storage paths are stripped before a hosted request. Long material is bounded to a) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 654.49 Tm (configured context size. Phase 13 improves this further by supplying reusable moment cards and) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 641.09 Tm (retrieving the strongest evidence before the planning request.) Tj ET
+q 0.270 0.720 0.780 rg 54.00 612.69 4.00 15.00 re f Q
+BT /F2 15.50 Tf 0.067 0.176 0.302 rg 1 0 0 1 66.00 608.69 Tm (The edit plan) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 583.69 Tm (The edit decision list is the contract between creative reasoning and deterministic rendering. A) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 570.29 Tm (clip records facts such as:) Tj ET
+q 0.965 0.969 0.965 rg 54.00 442.89 487.28 112.00 re f Q
+q 0.820 0.850 0.860 RG 0.70 w 54.00 442.89 487.28 112.00 re S Q
+BT /F4 7.30 Tf 0.100 0.150 0.190 rg 1 0 0 1 66.00 539.89 Tm ({) Tj ET
+BT /F4 7.30 Tf 0.100 0.150 0.190 rg 1 0 0 1 66.00 529.89 Tm ("asset_id": "registered-uuid",) Tj ET
+BT /F4 7.30 Tf 0.100 0.150 0.190 rg 1 0 0 1 66.00 519.89 Tm ("source_in": 12.4,) Tj ET
+BT /F4 7.30 Tf 0.100 0.150 0.190 rg 1 0 0 1 66.00 509.89 Tm ("source_out": 16.8,) Tj ET
+BT /F4 7.30 Tf 0.100 0.150 0.190 rg 1 0 0 1 66.00 499.89 Tm ("transition": "cut",) Tj ET
+BT /F4 7.30 Tf 0.100 0.150 0.190 rg 1 0 0 1 66.00 489.89 Tm ("visual_preset": "punch_in",) Tj ET
+BT /F4 7.30 Tf 0.100 0.150 0.190 rg 1 0 0 1 66.00 479.89 Tm ("story_role": "payoff",) Tj ET
+BT /F4 7.30 Tf 0.100 0.150 0.190 rg 1 0 0 1 66.00 469.89 Tm ("editorial_intent": "Deliver the answer with restrained emphasis.") Tj ET
+BT /F4 7.30 Tf 0.100 0.150 0.190 rg 1 0 0 1 66.00 459.89 Tm (}) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 438.89 Tm (The complete plan also records the recipe, captions, audio preset, music choice, editorial summary,) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 425.49 Tm (and post copy. Pydantic and additional validators confirm that the source exists, timestamps fit) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 412.09 Tm (the source, clips do not overlap illegally, duration is bounded, and only supported operations are) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 398.69 Tm (requested.) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 379.29 Tm (The model decides what should happen. Trusted code decides whether it is allowed and how FFmpeg) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 365.89 Tm (implements it.) Tj ET
+q 0.270 0.720 0.780 rg 54.00 337.49 4.00 15.00 re f Q
+BT /F2 15.50 Tf 0.067 0.176 0.302 rg 1 0 0 1 66.00 333.49 Tm (Storage and recovery) Tj ET
+q 0.930 0.970 0.980 rg 54.00 140.49 487.28 168.00 re f Q
+q 0.820 0.850 0.860 RG 0.70 w 54.00 140.49 487.28 168.00 re S Q
+BT /F2 7.40 Tf 0.090 0.310 0.470 rg 1 0 0 1 68.00 290.49 Tm (SYSTEM DIAGRAM 4) Tj ET
+q 1.000 1.000 1.000 rg 72.00 216.49 86.00 46.00 re f Q
+q 0.820 0.850 0.860 RG 1.00 w 72.00 216.49 86.00 46.00 re S Q
+BT /F2 8.10 Tf 0.067 0.176 0.302 rg 1 0 0 1 78.00 248.49 Tm (Upload staging) Tj ET
+q 0.090 0.310 0.470 RG 1.40 w 158.00 239.49 m 173.00 239.49 l S Q
+q 0.090 0.310 0.470 rg 173.00 239.49 m 166.00 243.49 l 166.00 235.49 l h f Q
+q 1.000 1.000 1.000 rg 176.00 216.49 86.00 46.00 re f Q
+q 0.820 0.850 0.860 RG 1.00 w 176.00 216.49 86.00 46.00 re S Q
+BT /F2 8.10 Tf 0.067 0.176 0.302 rg 1 0 0 1 182.00 248.49 Tm (Read-only) Tj ET
+BT /F2 8.10 Tf 0.067 0.176 0.302 rg 1 0 0 1 182.00 238.49 Tm (original) Tj ET
+q 0.090 0.310 0.470 RG 1.40 w 262.00 239.49 m 286.00 239.49 l S Q
+q 0.090 0.310 0.470 rg 286.00 239.49 m 279.00 243.49 l 279.00 235.49 l h f Q
+q 1.000 1.000 1.000 rg 289.00 216.49 86.00 46.00 re f Q
+q 0.820 0.850 0.860 RG 1.00 w 289.00 216.49 86.00 46.00 re S Q
+BT /F2 8.10 Tf 0.067 0.176 0.302 rg 1 0 0 1 295.00 248.49 Tm (Derived files) Tj ET
+q 0.090 0.310 0.470 RG 1.40 w 375.00 239.49 m 395.00 239.49 l S Q
+q 0.090 0.310 0.470 rg 395.00 239.49 m 388.00 243.49 l 388.00 235.49 l h f Q
+q 1.000 1.000 1.000 rg 398.00 216.49 86.00 46.00 re f Q
+q 0.820 0.850 0.860 RG 1.00 w 398.00 216.49 86.00 46.00 re S Q
+BT /F2 8.10 Tf 0.067 0.176 0.302 rg 1 0 0 1 404.00 248.49 Tm (Encrypted USB) Tj ET
+q 0.090 0.310 0.470 RG 1.40 w 484.00 239.49 m 492.00 239.49 l S Q
+q 0.090 0.310 0.470 rg 492.00 239.49 m 485.00 243.49 l 485.00 235.49 l h f Q
+q 1.000 1.000 1.000 rg 495.00 216.49 86.00 46.00 re f Q
+q 0.820 0.850 0.860 RG 1.00 w 495.00 216.49 86.00 46.00 re S Q
+BT /F2 8.10 Tf 0.067 0.176 0.302 rg 1 0 0 1 501.00 248.49 Tm (OneDrive mirror) Tj ET
+q 0.900 0.970 0.970 rg 231.00 155.49 132.00 36.00 re f Q
+q 0.270 0.720 0.780 RG 1.00 w 231.00 155.49 132.00 36.00 re S Q
+BT /F2 8.10 Tf 0.067 0.176 0.302 rg 1 0 0 1 237.00 177.49 Tm (PostgreSQL dump) Tj ET
+q 0.270 0.720 0.780 RG 1.40 w 297.00 191.49 m 441.00 216.49 l S Q
+q 0.270 0.720 0.780 rg 441.00 216.49 m 434.00 220.49 l 434.00 212.49 l h f Q
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 128.49 Tm (Originals and derived files have different lifecycles. Retention may remove reproducible previews) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 115.09 Tm (and deliveries after their configured age, while the database keeps the plan needed to rebuild) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 101.69 Tm (them. A database constraint requires retention runs to report zero removed originals. Exact) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 88.29 Tm (duplicates can share physical disk blocks only after their SHA-256 values and canonical review) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 74.89 Tm (agree; their database records and historical paths remain distinct.) Tj ET
+q 0.820 0.850 0.860 RG 0.50 w 54.00 35.00 m 541.28 35.00 l S Q
+BT /F1 7.20 Tf 0.340 0.390 0.420 rg 1 0 0 1 54.00 21.00 Tm (GM Studio System Architecture) Tj ET
+BT /F2 7.20 Tf 0.340 0.390 0.420 rg 1 0 0 1 507.28 21.00 Tm (6 / 11) Tj ET
+endstream
+endobj
+18 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R /F4 6 0 R >> >> /Contents 17 0 R >>
+endobj
+19 0 obj
+<< /Length 712 >>
+stream
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 779.89 Tm (Restic encrypts the database dump, protected credentials, project configuration, and media.) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 766.49 Tm (OneDrive contains encrypted repository objects rather than directly playable videos. Recovery tests) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 753.09 Tm (restore into an isolated directory and validate the result before it is trusted.) Tj ET
+q 0.820 0.850 0.860 RG 0.50 w 54.00 35.00 m 541.28 35.00 l S Q
+BT /F1 7.20 Tf 0.340 0.390 0.420 rg 1 0 0 1 54.00 21.00 Tm (GM Studio System Architecture) Tj ET
+BT /F2 7.20 Tf 0.340 0.390 0.420 rg 1 0 0 1 507.28 21.00 Tm (7 / 11) Tj ET
+endstream
+endobj
+20 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R /F4 6 0 R >> >> /Contents 19 0 R >>
+endobj
+21 0 obj
+<< /Length 5704 >>
+stream
+q 0.067 0.176 0.302 rg 0.00 715.89 595.28 126.00 re f Q
+q 0.270 0.720 0.780 rg 54.00 711.89 92.00 4.00 re f Q
+BT /F2 23.00 Tf 1.000 1.000 1.000 rg 1 0 0 1 54.00 759.89 Tm (CUDA and the GPU) Tj ET
+q 0.270 0.720 0.780 rg 54.00 676.89 4.00 15.00 re f Q
+BT /F2 15.50 Tf 0.067 0.176 0.302 rg 1 0 0 1 66.00 672.89 Tm (What CUDA is) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 647.89 Tm (CUDA is NVIDIA's software platform for running general computation on an NVIDIA GPU. A GPU contains) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 634.49 Tm (many smaller execution units that can process large batches of similar mathematical work in) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 621.09 Tm (parallel. CUDA lets software use those units for tasks beyond drawing graphics.) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 601.69 Tm (In GM Studio, CUDA does not replace the application or the container. It is a path that lets) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 588.29 Tm (selected programs inside the worker containers send supported work to the physical RTX 3050.) Tj ET
+q 0.930 0.970 0.980 rg 54.00 400.89 487.28 168.00 re f Q
+q 0.820 0.850 0.860 RG 0.70 w 54.00 400.89 487.28 168.00 re S Q
+BT /F2 7.40 Tf 0.090 0.310 0.470 rg 1 0 0 1 68.00 550.89 Tm (SYSTEM DIAGRAM 5) Tj ET
+q 1.000 1.000 1.000 rg 182.64 525.89 230.00 25.00 re f Q
+q 0.270 0.720 0.780 RG 1.00 w 182.64 525.89 230.00 25.00 re S Q
+BT /F2 8.10 Tf 0.067 0.176 0.302 rg 1 0 0 1 188.64 536.89 Tm (Whisper / CLIP / FFmpeg) Tj ET
+BT /F1 6.50 Tf 0.340 0.390 0.420 rg 1 0 0 1 188.64 525.89 Tm (application process) Tj ET
+q 0.090 0.310 0.470 RG 1.40 w 297.64 525.89 m 297.64 521.89 l S Q
+q 0.090 0.310 0.470 rg 297.64 521.89 m 293.64 528.89 l 301.64 528.89 l h f Q
+q 1.000 1.000 1.000 rg 182.64 496.89 230.00 25.00 re f Q
+q 0.270 0.720 0.780 RG 1.00 w 182.64 496.89 230.00 25.00 re S Q
+BT /F2 8.10 Tf 0.067 0.176 0.302 rg 1 0 0 1 188.64 507.89 Tm (CUDA + cuDNN runtime) Tj ET
+BT /F1 6.50 Tf 0.340 0.390 0.420 rg 1 0 0 1 188.64 496.89 Tm (inside the container) Tj ET
+q 0.090 0.310 0.470 RG 1.40 w 297.64 496.89 m 297.64 492.89 l S Q
+q 0.090 0.310 0.470 rg 297.64 492.89 m 293.64 499.89 l 301.64 499.89 l h f Q
+q 1.000 1.000 1.000 rg 182.64 467.89 230.00 25.00 re f Q
+q 0.270 0.720 0.780 RG 1.00 w 182.64 467.89 230.00 25.00 re S Q
+BT /F2 8.10 Tf 0.067 0.176 0.302 rg 1 0 0 1 188.64 478.89 Tm (NVIDIA Container Toolkit) Tj ET
+BT /F1 6.50 Tf 0.340 0.390 0.420 rg 1 0 0 1 188.64 467.89 Tm (grants device access) Tj ET
+q 0.090 0.310 0.470 RG 1.40 w 297.64 467.89 m 297.64 463.89 l S Q
+q 0.090 0.310 0.470 rg 297.64 463.89 m 293.64 470.89 l 301.64 470.89 l h f Q
+q 1.000 1.000 1.000 rg 182.64 438.89 230.00 25.00 re f Q
+q 0.270 0.720 0.780 RG 1.00 w 182.64 438.89 230.00 25.00 re S Q
+BT /F2 8.10 Tf 0.067 0.176 0.302 rg 1 0 0 1 188.64 449.89 Tm (Ubuntu NVIDIA driver) Tj ET
+BT /F1 6.50 Tf 0.340 0.390 0.420 rg 1 0 0 1 188.64 438.89 Tm (owns the hardware) Tj ET
+q 0.090 0.310 0.470 RG 1.40 w 297.64 438.89 m 297.64 434.89 l S Q
+q 0.090 0.310 0.470 rg 297.64 434.89 m 293.64 441.89 l 301.64 441.89 l h f Q
+q 0.900 0.970 0.970 rg 182.64 409.89 230.00 25.00 re f Q
+q 0.270 0.720 0.780 RG 1.00 w 182.64 409.89 230.00 25.00 re S Q
+BT /F2 8.10 Tf 0.067 0.176 0.302 rg 1 0 0 1 188.64 420.89 Tm (Physical RTX 3050) Tj ET
+BT /F1 6.50 Tf 0.340 0.390 0.420 rg 1 0 0 1 188.64 409.89 Tm (CUDA + Tensor + NVENC + VRAM) Tj ET
+BT /F2 11.80 Tf 0.090 0.310 0.470 rg 1 0 0 1 54.00 381.89 Tm (Host driver) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 360.89 Tm (Ubuntu owns the NVIDIA kernel driver. The driver communicates with the physical GPU. Containers do) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 347.49 Tm (not carry or replace this kernel driver.) Tj ET
+BT /F2 11.80 Tf 0.090 0.310 0.470 rg 1 0 0 1 54.00 321.09 Tm (NVIDIA Container Toolkit) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 300.09 Tm (Docker normally isolates hardware devices. The NVIDIA Container Toolkit exposes selected GPU) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 286.69 Tm (devices and matching driver libraries to an authorized container. Compose requests GPU access for) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 273.29 Tm (the worker and visual indexer.) Tj ET
+BT /F2 11.80 Tf 0.090 0.310 0.470 rg 1 0 0 1 54.00 246.89 Tm (CUDA runtime inside the container) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 225.89 Tm (The CUDA worker image includes user-space CUDA and cuDNN libraries expected by GPU-aware) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 212.49 Tm (applications. Pinning these libraries in the image makes the processing environment repeatable.) Tj ET
+BT /F2 11.80 Tf 0.090 0.310 0.470 rg 1 0 0 1 54.00 186.09 Tm (Application) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 165.09 Tm (Whisper, CLIP, PyTorch, and some FFmpeg operations detect the exposed GPU and submit supported) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 151.69 Tm (work. Ordinary Python code, PostgreSQL queries, HTTP handling, and most filesystem work remain on) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 138.29 Tm (the CPU.) Tj ET
+q 0.270 0.720 0.780 rg 54.00 109.89 4.00 15.00 re f Q
+BT /F2 15.50 Tf 0.067 0.176 0.302 rg 1 0 0 1 66.00 105.89 Tm (GPU work in GM Studio) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 80.89 Tm (The RTX 3050 contains different hardware paths:) Tj ET
+q 0.820 0.850 0.860 RG 0.50 w 54.00 35.00 m 541.28 35.00 l S Q
+BT /F1 7.20 Tf 0.340 0.390 0.420 rg 1 0 0 1 54.00 21.00 Tm (GM Studio System Architecture) Tj ET
+BT /F2 7.20 Tf 0.340 0.390 0.420 rg 1 0 0 1 507.28 21.00 Tm (8 / 11) Tj ET
+endstream
+endobj
+22 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R /F4 6 0 R >> >> /Contents 21 0 R >>
+endobj
+23 0 obj
+<< /Length 6990 >>
+stream
+q 0.067 0.176 0.302 rg 54.00 759.49 487.28 24.40 re f Q
+q 0.820 0.850 0.860 RG 0.50 w 54.00 759.49 487.28 24.40 re S Q
+BT /F2 8.10 Tf 1.000 1.000 1.000 rg 1 0 0 1 61.00 771.89 Tm (GPU facility) Tj ET
+q 0.820 0.850 0.860 RG 0.50 w 205.06 759.49 m 205.06 783.89 l S Q
+BT /F2 8.10 Tf 1.000 1.000 1.000 rg 1 0 0 1 212.06 771.89 Tm (GM Studio use) Tj ET
+q 1.000 1.000 1.000 rg 54.00 735.09 487.28 24.40 re f Q
+q 0.820 0.850 0.860 RG 0.50 w 54.00 735.09 487.28 24.40 re S Q
+BT /F2 8.10 Tf 0.100 0.150 0.190 rg 1 0 0 1 61.00 747.49 Tm (CUDA cores) Tj ET
+q 0.820 0.850 0.860 RG 0.50 w 205.06 735.09 m 205.06 759.49 l S Q
+BT /F1 8.10 Tf 0.100 0.150 0.190 rg 1 0 0 1 212.06 747.49 Tm (Parallel numerical operations used by local analysis models) Tj ET
+q 0.930 0.970 0.980 rg 54.00 710.69 487.28 24.40 re f Q
+q 0.820 0.850 0.860 RG 0.50 w 54.00 710.69 487.28 24.40 re S Q
+BT /F2 8.10 Tf 0.100 0.150 0.190 rg 1 0 0 1 61.00 723.09 Tm (Tensor cores) Tj ET
+q 0.820 0.850 0.860 RG 0.50 w 205.06 710.69 m 205.06 735.09 l S Q
+BT /F1 8.10 Tf 0.100 0.150 0.190 rg 1 0 0 1 212.06 723.09 Tm (Accelerated lower-precision neural-network matrix operations when supported) Tj ET
+q 1.000 1.000 1.000 rg 54.00 686.29 487.28 24.40 re f Q
+q 0.820 0.850 0.860 RG 0.50 w 54.00 686.29 487.28 24.40 re S Q
+BT /F2 8.10 Tf 0.100 0.150 0.190 rg 1 0 0 1 61.00 698.69 Tm (NVENC) Tj ET
+q 0.820 0.850 0.860 RG 0.50 w 205.06 686.29 m 205.06 710.69 l S Q
+BT /F1 8.10 Tf 0.100 0.150 0.190 rg 1 0 0 1 212.06 698.69 Tm (Dedicated hardware video encoding for H.264 delivery and previews) Tj ET
+q 0.930 0.970 0.980 rg 54.00 661.89 487.28 24.40 re f Q
+q 0.820 0.850 0.860 RG 0.50 w 54.00 661.89 487.28 24.40 re S Q
+BT /F2 8.10 Tf 0.100 0.150 0.190 rg 1 0 0 1 61.00 674.29 Tm (NVDEC) Tj ET
+q 0.820 0.850 0.860 RG 0.50 w 205.06 661.89 m 205.06 686.29 l S Q
+BT /F1 8.10 Tf 0.100 0.150 0.190 rg 1 0 0 1 212.06 674.29 Tm (Dedicated hardware video decoding when the FFmpeg pipeline supports it) Tj ET
+q 1.000 1.000 1.000 rg 54.00 637.49 487.28 24.40 re f Q
+q 0.820 0.850 0.860 RG 0.50 w 54.00 637.49 487.28 24.40 re S Q
+BT /F2 8.10 Tf 0.100 0.150 0.190 rg 1 0 0 1 61.00 649.89 Tm (VRAM) Tj ET
+q 0.820 0.850 0.860 RG 0.50 w 205.06 637.49 m 205.06 661.89 l S Q
+BT /F1 8.10 Tf 0.100 0.150 0.190 rg 1 0 0 1 212.06 649.89 Tm (Holds model weights, tensors, decoded frames, and intermediate GPU data) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 626.49 Tm (These paths are related but not identical. h264_nvenc uses the dedicated encoder rather than) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 613.09 Tm (occupying CUDA cores in the same way as Whisper. A CUDA model can therefore be busy while NVENC) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 599.69 Tm (performs encoding, although both still share VRAM, power, cooling, memory bandwidth, and) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 586.29 Tm (scheduling.) Tj ET
+q 0.270 0.720 0.780 rg 54.00 557.89 4.00 15.00 re f Q
+BT /F2 15.50 Tf 0.067 0.176 0.302 rg 1 0 0 1 66.00 553.89 Tm (Current GPU workloads) Tj ET
+BT /F2 11.80 Tf 0.090 0.310 0.470 rg 1 0 0 1 54.00 521.89 Tm (Faster Whisper) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 500.89 Tm (Whisper converts audio into timestamped text. Its neural network uses CUDA and cuDNN through the) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 487.49 Tm (runtime packaged in the worker image. GPU execution makes transcription much faster than this) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 474.09 Tm (four-core CPU would normally manage.) Tj ET
+BT /F2 11.80 Tf 0.090 0.310 0.470 rg 1 0 0 1 54.00 447.69 Tm (CLIP visual indexing) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 426.69 Tm (CLIP converts a source frame and a text search into vectors in the same mathematical space. Similar) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 413.29 Tm (vectors indicate a likely visual match. The private visual-indexer container runs the pinned CLIP) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 399.89 Tm (model locally, and PostgreSQL stores the resulting vectors with exact source-frame provenance.) Tj ET
+BT /F2 11.80 Tf 0.090 0.310 0.470 rg 1 0 0 1 54.00 373.49 Tm (FFmpeg rendering) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 352.49 Tm (FFmpeg builds the edit from validated source ranges, captions, crops, filters, transitions, and) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 339.09 Tm (audio. The current delivery path prefers h264_nvenc for hardware encoding and falls back to libx264) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 325.69 Tm (on the CPU if necessary. Some filter work remains on the CPU because not every FFmpeg filter has a) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 312.29 Tm (CUDA implementation.) Tj ET
+q 0.270 0.720 0.780 rg 54.00 283.89 4.00 15.00 re f Q
+BT /F2 15.50 Tf 0.067 0.176 0.302 rg 1 0 0 1 66.00 279.89 Tm (Why VRAM matters) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 254.89 Tm (The RTX 3050 has 4 GB of VRAM. Model weights, inference tensors, frames, and encoder buffers must) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 241.49 Tm (fit inside it. Running several GPU-heavy jobs simultaneously can cause allocation failure or severe) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 228.09 Tm (contention even when system RAM is available.) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 208.69 Tm (GM Studio therefore limits active work and processes expensive operations conservatively. The) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 195.29 Tm (suitable pattern for this machine is one major GPU workload at a time, with lightweight web,) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 181.89 Tm (database, and queue services continuing on the CPU.) Tj ET
+q 0.270 0.720 0.780 rg 54.00 153.49 4.00 15.00 re f Q
+BT /F2 15.50 Tf 0.067 0.176 0.302 rg 1 0 0 1 66.00 149.49 Tm (CUDA, NVENC, and containers in plain language) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 124.49 Tm (Imagine the GPU is a specialist workshop:) Tj ET
+BT /F2 9.40 Tf 0.270 0.720 0.780 rg 1 0 0 1 56.00 105.09 Tm (-) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 105.09 Tm (The host driver owns the door and machinery.) Tj ET
+BT /F2 9.40 Tf 0.270 0.720 0.780 rg 1 0 0 1 56.00 89.09 Tm (-) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 89.09 Tm (The container toolkit gives a named container a secure pass through the door.) Tj ET
+BT /F2 9.40 Tf 0.270 0.720 0.780 rg 1 0 0 1 56.00 73.09 Tm (-) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 73.09 Tm (The CUDA runtime supplies compatible operating instructions inside that container.) Tj ET
+q 0.820 0.850 0.860 RG 0.50 w 54.00 35.00 m 541.28 35.00 l S Q
+BT /F1 7.20 Tf 0.340 0.390 0.420 rg 1 0 0 1 54.00 21.00 Tm (GM Studio System Architecture) Tj ET
+BT /F2 7.20 Tf 0.340 0.390 0.420 rg 1 0 0 1 507.28 21.00 Tm (9 / 11) Tj ET
+endstream
+endobj
+24 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R /F4 6 0 R >> >> /Contents 23 0 R >>
+endobj
+25 0 obj
+<< /Length 5018 >>
+stream
+BT /F2 9.40 Tf 0.270 0.720 0.780 rg 1 0 0 1 56.00 779.89 Tm (-) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 779.89 Tm (Whisper or CLIP submits mathematical jobs to the workshop.) Tj ET
+BT /F2 9.40 Tf 0.270 0.720 0.780 rg 1 0 0 1 56.00 763.89 Tm (-) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 763.89 Tm (NVENC is a dedicated video-compression machine in the same workshop.) Tj ET
+BT /F2 9.40 Tf 0.270 0.720 0.780 rg 1 0 0 1 56.00 747.89 Tm (-) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 747.89 Tm (The worker coordinates the work and stores the results.) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 731.89 Tm (The container still runs as a normal isolated Linux process. GPU access is an explicitly granted) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 718.49 Tm (device capability.) Tj ET
+q 0.270 0.720 0.780 rg 54.00 690.09 4.00 15.00 re f Q
+BT /F2 15.50 Tf 0.067 0.176 0.302 rg 1 0 0 1 66.00 686.09 Tm (Observing CPU and GPU activity) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 661.09 Tm (Whole-server CPU and memory:) Tj ET
+q 0.965 0.969 0.965 rg 54.00 613.69 487.28 32.00 re f Q
+q 0.820 0.850 0.860 RG 0.70 w 54.00 613.69 487.28 32.00 re S Q
+BT /F4 7.30 Tf 0.100 0.150 0.190 rg 1 0 0 1 66.00 630.69 Tm (htop) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 609.69 Tm (Container CPU and memory:) Tj ET
+q 0.965 0.969 0.965 rg 54.00 562.29 487.28 32.00 re f Q
+q 0.820 0.850 0.860 RG 0.70 w 54.00 562.29 487.28 32.00 re S Q
+BT /F4 7.30 Tf 0.100 0.150 0.190 rg 1 0 0 1 66.00 579.29 Tm (sudo docker stats) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 558.29 Tm (GPU utilization, memory, temperature, power, and active processes:) Tj ET
+q 0.965 0.969 0.965 rg 54.00 510.89 487.28 32.00 re f Q
+q 0.820 0.850 0.860 RG 0.70 w 54.00 510.89 487.28 32.00 re S Q
+BT /F4 7.30 Tf 0.100 0.150 0.190 rg 1 0 0 1 66.00 527.89 Tm (nvidia-smi) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 506.89 Tm (Refresh the GPU view once per second:) Tj ET
+q 0.965 0.969 0.965 rg 54.00 459.49 487.28 32.00 re f Q
+q 0.820 0.850 0.860 RG 0.70 w 54.00 459.49 487.28 32.00 re S Q
+BT /F4 7.30 Tf 0.100 0.150 0.190 rg 1 0 0 1 66.00 476.49 Tm (watch -n 1 nvidia-smi) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 455.49 Tm (Check GPU visibility inside the worker image:) Tj ET
+q 0.965 0.969 0.965 rg 54.00 408.09 487.28 32.00 re f Q
+q 0.820 0.850 0.860 RG 0.70 w 54.00 408.09 487.28 32.00 re S Q
+BT /F4 7.30 Tf 0.100 0.150 0.190 rg 1 0 0 1 66.00 425.09 Tm (sudo docker compose exec -T worker python -c "import torch; print\(torch.cuda.is_available\(\)\)") Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 404.09 Tm (FFmpeg's active encoders can be inspected inside the worker:) Tj ET
+q 0.965 0.969 0.965 rg 54.00 356.69 487.28 32.00 re f Q
+q 0.820 0.850 0.860 RG 0.70 w 54.00 356.69 487.28 32.00 re S Q
+BT /F4 7.30 Tf 0.100 0.150 0.190 rg 1 0 0 1 66.00 373.69 Tm (sudo docker compose exec -T worker ffmpeg -hide_banner -encoders) Tj ET
+q 0.270 0.720 0.780 rg 54.00 343.69 4.00 15.00 re f Q
+BT /F2 15.50 Tf 0.067 0.176 0.302 rg 1 0 0 1 66.00 339.69 Tm (Failure boundaries) Tj ET
+BT /F2 9.40 Tf 0.270 0.720 0.780 rg 1 0 0 1 56.00 314.69 Tm (-) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 314.69 Tm (If hosted editorial reasoning is unavailable, existing plans and local deterministic edits remain) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 301.69 Tm (usable.) Tj ET
+BT /F2 9.40 Tf 0.270 0.720 0.780 rg 1 0 0 1 56.00 285.69 Tm (-) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 285.69 Tm (If CUDA model inference fails, the job records an error and can be retried; the original remains) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 272.69 Tm (unchanged.) Tj ET
+BT /F2 9.40 Tf 0.270 0.720 0.780 rg 1 0 0 1 56.00 256.69 Tm (-) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 256.69 Tm (If NVENC fails, supported render paths fall back to CPU libx264.) Tj ET
+BT /F2 9.40 Tf 0.270 0.720 0.780 rg 1 0 0 1 56.00 240.69 Tm (-) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 240.69 Tm (If a worker stops, PostgreSQL leases allow another worker instance to resume durable work.) Tj ET
+BT /F2 9.40 Tf 0.270 0.720 0.780 rg 1 0 0 1 56.00 224.69 Tm (-) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 224.69 Tm (If a browser closes, server-side work continues.) Tj ET
+BT /F2 9.40 Tf 0.270 0.720 0.780 rg 1 0 0 1 56.00 208.69 Tm (-) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 208.69 Tm (If the internal disk fails, the encrypted USB and OneDrive repository provide recovery paths.) Tj ET
+q 0.270 0.720 0.780 rg 54.00 183.69 4.00 15.00 re f Q
+BT /F2 15.50 Tf 0.067 0.176 0.302 rg 1 0 0 1 66.00 179.69 Tm (Security boundaries) Tj ET
+q 0.820 0.850 0.860 RG 0.50 w 54.00 35.00 m 541.28 35.00 l S Q
+BT /F1 7.20 Tf 0.340 0.390 0.420 rg 1 0 0 1 54.00 21.00 Tm (GM Studio System Architecture) Tj ET
+BT /F2 7.20 Tf 0.340 0.390 0.420 rg 1 0 0 1 507.28 21.00 Tm (10 / 11) Tj ET
+endstream
+endobj
+26 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R /F4 6 0 R >> >> /Contents 25 0 R >>
+endobj
+27 0 obj
+<< /Length 5937 >>
+stream
+q 0.930 0.970 0.980 rg 54.00 611.89 487.28 168.00 re f Q
+q 0.820 0.850 0.860 RG 0.70 w 54.00 611.89 487.28 168.00 re S Q
+BT /F2 7.40 Tf 0.090 0.310 0.470 rg 1 0 0 1 68.00 761.89 Tm (SYSTEM DIAGRAM 6) Tj ET
+q 1.000 1.000 1.000 rg 70.00 694.89 77.00 42.00 re f Q
+q 0.820 0.850 0.860 RG 1.00 w 70.00 694.89 77.00 42.00 re S Q
+BT /F2 8.10 Tf 0.067 0.176 0.302 rg 1 0 0 1 76.00 722.89 Tm (Tailnet) Tj ET
+BT /F2 8.10 Tf 0.067 0.176 0.302 rg 1 0 0 1 76.00 712.89 Tm (identity) Tj ET
+q 0.090 0.310 0.470 RG 1.40 w 147.00 715.89 m 159.00 715.89 l S Q
+q 0.090 0.310 0.470 rg 159.00 715.89 m 152.00 719.89 l 152.00 711.89 l h f Q
+q 1.000 1.000 1.000 rg 161.00 694.89 77.00 42.00 re f Q
+q 0.820 0.850 0.860 RG 1.00 w 161.00 694.89 77.00 42.00 re S Q
+BT /F2 8.10 Tf 0.067 0.176 0.302 rg 1 0 0 1 167.00 722.89 Tm (Tailscale Serve) Tj ET
+q 0.090 0.310 0.470 RG 1.40 w 238.00 715.89 m 250.00 715.89 l S Q
+q 0.090 0.310 0.470 rg 250.00 715.89 m 243.00 719.89 l 243.00 711.89 l h f Q
+q 1.000 1.000 1.000 rg 252.00 694.89 77.00 42.00 re f Q
+q 0.820 0.850 0.860 RG 1.00 w 252.00 694.89 77.00 42.00 re S Q
+BT /F2 8.10 Tf 0.067 0.176 0.302 rg 1 0 0 1 258.00 722.89 Tm (Web permissions) Tj ET
+q 0.090 0.310 0.470 RG 1.40 w 329.00 715.89 m 341.00 715.89 l S Q
+q 0.090 0.310 0.470 rg 341.00 715.89 m 334.00 719.89 l 334.00 711.89 l h f Q
+q 1.000 1.000 1.000 rg 343.00 694.89 77.00 42.00 re f Q
+q 0.820 0.850 0.860 RG 1.00 w 343.00 694.89 77.00 42.00 re S Q
+BT /F2 8.10 Tf 0.067 0.176 0.302 rg 1 0 0 1 349.00 722.89 Tm (Private API) Tj ET
+q 0.090 0.310 0.470 RG 1.40 w 420.00 715.89 m 432.00 715.89 l S Q
+q 0.090 0.310 0.470 rg 432.00 715.89 m 425.00 719.89 l 425.00 711.89 l h f Q
+q 1.000 1.000 1.000 rg 434.00 694.89 77.00 42.00 re f Q
+q 0.820 0.850 0.860 RG 1.00 w 434.00 694.89 77.00 42.00 re S Q
+BT /F2 8.10 Tf 0.067 0.176 0.302 rg 1 0 0 1 440.00 722.89 Tm (PostgreSQL) Tj ET
+q 0.900 0.970 0.970 rg 218.00 631.89 160.00 36.00 re f Q
+q 0.270 0.720 0.780 RG 1.00 w 218.00 631.89 160.00 36.00 re S Q
+BT /F2 8.10 Tf 0.067 0.176 0.302 rg 1 0 0 1 224.00 653.89 Tm (Bounded model evidence) Tj ET
+BT /F1 6.50 Tf 0.340 0.390 0.420 rg 1 0 0 1 224.00 642.89 Tm (no shell or storage paths) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 599.89 Tm (The design combines several boundaries:) Tj ET
+BT /F2 9.40 Tf 0.270 0.720 0.780 rg 1 0 0 1 56.00 580.49 Tm (-) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 580.49 Tm (Tailscale authenticates network identities.) Tj ET
+BT /F2 9.40 Tf 0.270 0.720 0.780 rg 1 0 0 1 56.00 564.49 Tm (-) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 564.49 Tm (The web layer applies owner, editor, and viewer permissions.) Tj ET
+BT /F2 9.40 Tf 0.270 0.720 0.780 rg 1 0 0 1 56.00 548.49 Tm (-) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 548.49 Tm (The API owns state and validates requested operations.) Tj ET
+BT /F2 9.40 Tf 0.270 0.720 0.780 rg 1 0 0 1 56.00 532.49 Tm (-) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 532.49 Tm (Containers communicate over a private Docker network.) Tj ET
+BT /F2 9.40 Tf 0.270 0.720 0.780 rg 1 0 0 1 56.00 516.49 Tm (-) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 516.49 Tm (Only GPU workers receive GPU device access.) Tj ET
+BT /F2 9.40 Tf 0.270 0.720 0.780 rg 1 0 0 1 56.00 500.49 Tm (-) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 500.49 Tm (Only bounded evidence is sent for editorial reasoning.) Tj ET
+BT /F2 9.40 Tf 0.270 0.720 0.780 rg 1 0 0 1 56.00 484.49 Tm (-) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 484.49 Tm (Models cannot supply arbitrary shell commands or filesystem paths.) Tj ET
+BT /F2 9.40 Tf 0.270 0.720 0.780 rg 1 0 0 1 56.00 468.49 Tm (-) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 468.49 Tm (Originals, plans, and derived outputs retain provenance.) Tj ET
+BT /F2 9.40 Tf 0.270 0.720 0.780 rg 1 0 0 1 56.00 452.49 Tm (-) Tj ET
+BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 452.49 Tm (Backups are encrypted before leaving the server.) Tj ET
+q 0.270 0.720 0.780 rg 54.00 427.49 4.00 15.00 re f Q
+BT /F2 15.50 Tf 0.067 0.176 0.302 rg 1 0 0 1 66.00 423.49 Tm (Phase 13 story intelligence) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 398.49 Tm (Phase 13 adds a local story-intelligence layer. It turns existing transcripts and scene ranges into) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 385.09 Tm (reusable, source-timestamped moment cards. A compact local retrieval step chooses relevant and) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 371.69 Tm (structurally strong evidence for the editor. The job form records the audience, desired) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 358.29 Tm (understanding, intended feeling, and ending. The edit plan describes each clip's narrative role,) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 344.89 Tm (such as hook, context, development, payoff, reaction, or ending, plus its editorial intent.) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 325.49 Tm (This improves story quality without adding a model call per clip. Analysis is performed once and) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 312.09 Tm (cached, one bounded editorial request plans a new edit, and exact timeline refinements and delivery) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 298.69 Tm (variants continue locally without additional model usage. Later Phase 13 work can add locally) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 285.29 Tm (measured motion, faces, laughter, applause, shot scale, and continuity hints to the same evidence) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 271.89 Tm (contract.) Tj ET
+q 0.820 0.850 0.860 RG 0.50 w 54.00 35.00 m 541.28 35.00 l S Q
+BT /F1 7.20 Tf 0.340 0.390 0.420 rg 1 0 0 1 54.00 21.00 Tm (GM Studio System Architecture) Tj ET
+BT /F2 7.20 Tf 0.340 0.390 0.420 rg 1 0 0 1 507.28 21.00 Tm (11 / 11) Tj ET
+endstream
+endobj
+28 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R /F4 6 0 R >> >> /Contents 27 0 R >>
+endobj
+xref
+0 29
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000192 00000 n 
+0000000289 00000 n 
+0000000391 00000 n 
+0000000496 00000 n 
+0000000591 00000 n 
+0000001879 00000 n 
+0000002041 00000 n 
+0000004643 00000 n 
+0000004806 00000 n 
+0000013504 00000 n 
+0000013668 00000 n 
+0000018883 00000 n 
+0000019047 00000 n 
+0000028650 00000 n 
+0000028814 00000 n 
+0000036158 00000 n 
+0000036322 00000 n 
+0000037085 00000 n 
+0000037249 00000 n 
+0000043005 00000 n 
+0000043169 00000 n 
+0000050211 00000 n 
+0000050375 00000 n 
+0000055445 00000 n 
+0000055609 00000 n 
+0000061598 00000 n 
+trailer
+<< /Size 29 /Root 1 0 R >>
+startxref
+61762
+%%EOF
