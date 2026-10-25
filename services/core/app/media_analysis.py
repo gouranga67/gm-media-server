@@ -26,6 +26,9 @@ def resolve_source(media_root: Path, storage_key: str) -> Path:
         raise ValueError("invalid asset storage key")
     candidate = media_root.joinpath(*Path(storage_key).parts)
     resolved_root = media_root.resolve()
+    lexical_target = candidate.resolve(strict=False)
+    if not lexical_target.is_relative_to(resolved_root):
+        raise ValueError("asset source is outside the media root")
     resolved = candidate.resolve(strict=True)
     if not resolved.is_relative_to(resolved_root) or not resolved.is_file():
         raise ValueError("asset source is outside the media root")
