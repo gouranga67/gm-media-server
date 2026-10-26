@@ -1,4 +1,5 @@
 """A host-shared inference lock; visual service can lock its read-only mount."""
+
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator

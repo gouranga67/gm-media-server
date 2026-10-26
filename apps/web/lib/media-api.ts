@@ -446,6 +446,9 @@ export type EditFeedback = {
   readonly tags: readonly FeedbackTag[];
   readonly note: string;
   readonly would_use_again: boolean;
+  readonly scope?: "edit" | "story" | "pacing" | "captions" | "audio" | "colour" | "effects";
+  readonly start_seconds?: number | null;
+  readonly end_seconds?: number | null;
   readonly created_at: string;
   readonly updated_at: string;
 };
@@ -680,7 +683,8 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const detail = (await response.json().catch(() => null)) as { detail?: string } | null;
-    throw new Error(detail?.detail ?? `Request failed with status ${response.status}`);
+    const message: unknown = detail?.detail;
+    throw new Error(typeof message === "string" ? message : Array.isArray(message) ? message.slice(0,3).map((item: { msg?: string }) => item.msg ?? "Invalid field").join("; ") : `Request failed with status ${response.status}`);
   }
 
   if (response.status === 204) return undefined as T;
@@ -1137,9 +1141,11 @@ export function requestRevision(
     readonly revisionMode?: "targeted" | "rebuild_story";
     readonly baseVersion?: number;
     readonly restoreVersion?: number;
+    readonly finishingSettings?: FinishingTools;
     readonly clipAdjustments?: readonly {
       readonly clip_index: number;
       readonly clip_id?: string;
+      readonly transition?: "cut" | "dip_to_black" | "cross_dissolve";
       readonly source_in?: number;
       readonly source_out?: number;
       readonly split_at?: number;
@@ -1164,6 +1170,7 @@ export function requestRevision(
       note: input.note,
       base_version: input.baseVersion,
       restore_version: input.restoreVersion,
+      finishing_settings: input.finishingSettings,
       revision_mode: input.revisionMode ?? "targeted",
       caption_corrections: input.captionCorrections,
       clip_adjustments: input.clipAdjustments ?? [],
@@ -1190,6 +1197,9 @@ export function saveEditFeedback(
     readonly tags: readonly FeedbackTag[];
     readonly note: string;
     readonly wouldUseAgain: boolean;
+    readonly scope?: EditFeedback["scope"];
+    readonly startSeconds?: number;
+    readonly endSeconds?: number;
   },
 ) {
   return apiRequest<EditFeedback>(`jobs/${jobId}/feedback`, {
@@ -1200,6 +1210,9 @@ export function saveEditFeedback(
       tags: input.tags,
       note: input.note,
       would_use_again: input.wouldUseAgain,
+      scope: input.scope ?? "edit",
+      start_seconds: input.startSeconds,
+      end_seconds: input.endSeconds,
     }),
   });
 }
@@ -1346,3 +1359,33 @@ export const removeSourceProduct = (id: string) => apiRequest(`library/products/
 export const getSourceRanges = (id: string) => apiRequest<readonly SourceRange[]>(`library/assets/${id}/ranges`);
 export const saveSourceRange = (id: string, range: SourceRange) => apiRequest<SourceRange>(`library/assets/${id}/ranges/${range.id}`, { method: "PUT", body: JSON.stringify(range) });
 export const removeSourceRange = (assetId: string, id: string) => apiRequest(`library/assets/${assetId}/ranges/${id}`, { method: "DELETE" });
+
+export type FinishingTools = {
+  readonly audio_joins?: readonly { readonly clip_index: number; readonly lead_seconds: number; readonly tail_seconds: number }[];
+  readonly motions: readonly { readonly clip_index: number; readonly points: readonly { readonly time: number; readonly zoom: number; readonly x?: number; readonly y?: number }[] }[];
+  readonly audio_regions: readonly { readonly start: number; readonly end: number; readonly gain_db: number }[];
+  readonly caption_regions: readonly { readonly start: number; readonly end: number; readonly position: "lower_safe" | "middle" | "upper" | "hidden" }[];
+  readonly colours: readonly { readonly clip_index: number; readonly contrast?: number; readonly saturation?: number; readonly brightness?: number; readonly gamma?: number }[];
+  readonly layers: readonly { readonly asset_id: string; readonly media_kind: "image" | "video"; readonly source_in: number; readonly start: number; readonly end: number; readonly width: number; readonly x: number; readonly y: number; readonly opacity?: number; readonly shape: "rectangle" | "circle"; readonly animation: "none" | "fade" | "slide_up"; readonly chroma_color: string | null; readonly playback_rate?: number; readonly freeze?: boolean }[];
+  readonly music_start_seconds: number;
+  readonly voice_denoise: boolean;
+};
+export type FinishingInspection = { readonly version: number; readonly settings: FinishingTools; readonly sources: readonly { readonly asset_id: string; readonly name: string; readonly media_kind: "image" | "video"; readonly duration_seconds: number }[] };
+export const getFinishingTools = (id: string) => apiRequest<FinishingInspection>(`jobs/${id}/finishing-tools`);
+
+export type LearningLesson = { readonly id: string; readonly directive: string; readonly recipe: string; readonly edit_style: string; readonly status: "proposed" | "promoted" | "rolled_back"; readonly training_job_ids: readonly string[]; readonly evaluation: { readonly held_out_jobs: number; readonly can_promote: boolean; readonly rating_delta: number | null; readonly regressions: number } };
+export type LearningTrial = { readonly id: string; readonly job_id: string; readonly version: number; readonly baseline_version: number; readonly status: string; readonly evaluation_lesson_id: string; readonly project_name: string };
+export type LearningLab = { readonly lessons: readonly LearningLesson[]; readonly trials: readonly LearningTrial[]; readonly jobs: readonly { readonly id: string; readonly name: string; readonly recipe: string; readonly edit_style: string; readonly version: number }[]; readonly note: string };
+export const getLearningLab = () => apiRequest<LearningLab>("learning/lab");
+export const proposeLearningLessons = () => apiRequest("learning/lab/propose",{method:"POST"});
+export const tryLearningLesson = (lessonId: string, jobId: string, version: number) => apiRequest(`learning/lab/lessons/${lessonId}/trial`,{method:"POST",body:JSON.stringify({job_id:jobId,base_version:version})});
+export const evaluateLearningLesson = (lessonId: string, candidateId: string, baseline: number, candidate: number) => apiRequest(`learning/lab/lessons/${lessonId}/evaluate`,{method:"POST",body:JSON.stringify({candidate_run_id:candidateId,baseline_rating:baseline,candidate_rating:candidate})});
+export const setLearningLessonStatus = (lessonId: string, action: "promote" | "rollback") => apiRequest(`learning/lab/lessons/${lessonId}/status`,{method:"POST",body:JSON.stringify({action})});
+
+export const requestLocalRepair = (jobId: string, version: number, action: "tighten_pauses" | "denoise") => apiRequest(`jobs/${jobId}/local-repair`,{method:"POST",body:JSON.stringify({base_version:version,action})});
+
+export type HookOptions = { readonly version: number; readonly options: readonly { readonly text: string; readonly source_name: string; readonly adjustment: { readonly clip_index: number; readonly clip_id: string; readonly replacement_asset_id: string; readonly source_in: number; readonly source_out: number; readonly visual_preset: "standard" } }[] };
+export const getHookOptions = (jobId: string) => apiRequest<HookOptions>(`jobs/${jobId}/hook-options`);
+
+export type PilotReadiness = { readonly version: string; readonly schema_ready: boolean; readonly configured_private_owner: boolean; readonly deployment_scope: string; readonly tools: Readonly<Record<string, boolean>>; readonly remaining_acceptance: readonly string[]; readonly failed_previews_last_7_days: number };
+export const getPilotReadiness = () => apiRequest<PilotReadiness>("pilot-readiness");

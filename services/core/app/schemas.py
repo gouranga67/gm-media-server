@@ -4,6 +4,7 @@ from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from app.finishing_tools import FinishingTools
 
 
 class StringEnum(str, Enum):
@@ -651,10 +652,19 @@ class ClipAdjustment(BaseModel):
 
     clip_index: int = Field(ge=0, le=47)
     clip_id: str | None = Field(default=None, min_length=16, max_length=16)
+    transition: Literal["cut", "dip_to_black", "cross_dissolve"] | None = None
     action: Literal["keep", "remove", "move_up", "move_down"] = "keep"
-    visual_preset: Literal[
-        "standard", "punch_in", "strong_punch_in", "slow_push_in", "slow_pull_out", "rhythmic_punch"
-    ] | None = None
+    visual_preset: (
+        Literal[
+            "standard",
+            "punch_in",
+            "strong_punch_in",
+            "slow_push_in",
+            "slow_pull_out",
+            "rhythmic_punch",
+        ]
+        | None
+    ) = None
     source_audio_gain_db: float | None = Field(default=None, ge=-12.0, le=12.0)
     max_pause_seconds: float | None = Field(default=None, ge=0.3, le=2.0)
     source_in: float | None = Field(default=None, ge=0, allow_inf_nan=False)
@@ -677,12 +687,19 @@ class RevisionCreate(BaseModel):
     revision_mode: Literal["targeted", "rebuild_story"] = "targeted"
     base_version: int | None = Field(default=None, gt=0)
     restore_version: int | None = Field(default=None, gt=0)
-    caption_corrections: list[CaptionCorrection] = Field(default_factory=list, max_length=50)
+    finishing_settings: FinishingTools | None = None
+    evaluation_lesson_id: UUID | None = None
+    repair_kind: Literal["tighten_pauses", "denoise"] | None = None
+    caption_corrections: list[CaptionCorrection] = Field(
+        default_factory=list, max_length=50
+    )
     clip_adjustments: list[ClipAdjustment] = Field(default_factory=list, max_length=48)
     caption_settings: CaptionSettings | None = None
     effects_enabled: bool | None = None
     broll_enabled: bool | None = None
-    locked_elements: list[Literal["clip order", "spoken phrases", "captions", "music", "effects"]] = Field(default_factory=list, max_length=5)
+    locked_elements: list[
+        Literal["clip order", "spoken phrases", "captions", "music", "effects"]
+    ] = Field(default_factory=list, max_length=5)
 
     @field_validator("note")
     @classmethod
@@ -691,12 +708,30 @@ class RevisionCreate(BaseModel):
 
     @model_validator(mode="after")
     def has_requested_change(self) -> "RevisionCreate":
+        if self.restore_version is not None and (
+            self.note
+            or self.clip_adjustments
+            or self.caption_corrections
+            or self.caption_settings
+            or self.finishing_settings
+            or self.effects_enabled is not None
+            or self.broll_enabled is not None
+            or self.evaluation_lesson_id
+            or self.repair_kind
+        ):
+            raise ValueError("restore a version separately from other changes")
+        if self.clip_adjustments and self.note:
+            raise ValueError(
+                "apply precise timeline changes separately from a model revision note"
+            )
         if self.revision_mode == "rebuild_story" and not self.note:
             raise ValueError("describe the story you want rebuilt")
         if self.revision_mode == "rebuild_story" and any(
             item in self.locked_elements for item in ("clip order", "spoken phrases")
         ):
-            raise ValueError("unlock clip order and spoken phrases before rebuilding the story")
+            raise ValueError(
+                "unlock clip order and spoken phrases before rebuilding the story"
+            )
         if (
             not self.note
             and not self.caption_corrections
@@ -705,9 +740,27 @@ class RevisionCreate(BaseModel):
             and self.effects_enabled is None
             and self.broll_enabled is None
             and self.restore_version is None
+            and self.finishing_settings is None
+            and self.evaluation_lesson_id is None
         ):
             raise ValueError(
                 "provide a revision note, caption correction, timeline adjustment, or caption layout"
+            )
+        if self.evaluation_lesson_id is not None and (
+            self.note
+            or self.clip_adjustments
+            or self.finishing_settings
+            or self.restore_version
+            or self.caption_corrections
+        ):
+            raise ValueError("try a lesson separately from other revision changes")
+        if self.finishing_settings is not None and self.base_version is None:
+            raise ValueError("finishing tools require the current base version")
+        if self.finishing_settings is not None and (
+            self.note or self.clip_adjustments or self.restore_version
+        ):
+            raise ValueError(
+                "apply finishing tools separately from story or timeline revisions"
             )
         originals = [item.original_text for item in self.caption_corrections]
         if len(originals) != len(set(originals)):
@@ -733,6 +786,18 @@ class EditFeedbackCreate(BaseModel):
     tags: list[FeedbackTag] = Field(default_factory=list)
     note: str = Field(default="", max_length=1200)
     would_use_again: bool = False
+    scope: Literal["edit", "story", "pacing", "captions", "audio", "colour", "effects"] = "edit"
+    start_seconds: float | None = Field(default=None, ge=0, le=60, allow_inf_nan=False)
+    end_seconds: float | None = Field(default=None, gt=0, le=60, allow_inf_nan=False)
+
+    @model_validator(mode="after")
+    def valid_feedback_range(self):
+        if (self.start_seconds is None) != (self.end_seconds is None):
+            raise ValueError("provide both feedback times or leave both empty")
+        if self.start_seconds is not None and self.end_seconds <= self.start_seconds:
+            raise ValueError("feedback end must follow its start")
+        return self
+
 
     @field_validator("note")
     @classmethod

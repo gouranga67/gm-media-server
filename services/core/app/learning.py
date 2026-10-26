@@ -204,11 +204,13 @@ def learning_context_for_job(database: Any, job: dict[str, Any]) -> dict[str, An
     learned = derive_learning_preferences(
         list(rows), minimum_samples=int(settings["minimum_samples"])
     )
+    approved = database.execute("SELECT directive FROM learning_lessons WHERE status='promoted' AND recipe=%s AND edit_style=%s ORDER BY updated_at DESC LIMIT 6", (str(job["recipe"]), str(job.get("edit_style") or "clean"))).fetchall()
     return {
         "enabled": True,
         "scope": str(job["recipe"]),
         **learned,
-        "directives": [item["directive"] for item in learned["preferences"]],
+        "directives": [item["directive"] for item in learned["preferences"]] + [item["directive"] for item in approved],
+        "evaluated_lessons": len(approved),
         "source": "local_explicit_feedback",
         "hosted_model_calls": 0,
     }
@@ -236,11 +238,12 @@ def save_edit_feedback(job_id: UUID, payload: EditFeedbackCreate) -> dict[str, A
         row = database.execute(
             """
             INSERT INTO edit_feedback (
-                job_id, edit_run_id, rating, tags, note, would_use_again
-            ) VALUES (%s, %s, %s, %s, %s, %s)
+                job_id, edit_run_id, rating, tags, note, would_use_again, scope, start_seconds, end_seconds
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (edit_run_id) DO UPDATE SET
                 rating=excluded.rating, tags=excluded.tags, note=excluded.note,
-                would_use_again=excluded.would_use_again, updated_at=now()
+                would_use_again=excluded.would_use_again, scope=excluded.scope,
+                start_seconds=excluded.start_seconds, end_seconds=excluded.end_seconds, updated_at=now()
             RETURNING *
             """,
             (
@@ -249,7 +252,7 @@ def save_edit_feedback(job_id: UUID, payload: EditFeedbackCreate) -> dict[str, A
                 payload.rating,
                 Jsonb(payload.tags),
                 payload.note,
-                payload.would_use_again,
+                payload.would_use_again, payload.scope, payload.start_seconds, payload.end_seconds,
             ),
         ).fetchone()
         database.execute(

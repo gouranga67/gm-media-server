@@ -21,6 +21,7 @@ const { createRoot } = require("react-dom/client");
 const ts = require("typescript");
 const Module = require("node:module");
 const originalLoad = Module._load;
+let lessonProposed = false;
 let calls = [], transfers = [], navigation = [], readyEvents = 0, analysisStatus = "ready", root, managedAssets = [], batchFailure = false, conceptHistory = [], renderConceptFailure = false, conceptCounter = 0, organizationHistory = [], organizationFailure = false;
 const serverId = "11111111-1111-4111-8111-111111111111";
 const jobId = "22222222-2222-4222-8222-222222222222";
@@ -54,6 +55,11 @@ for (const extension of [".ts", ".tsx"]) Module._extensions[extension] = (module
 const { NewJobForm } = require(path.join(repo, "apps/web/app/_components/new-job-form.tsx"));
 const { ConceptDesk } = require(path.join(repo, "apps/web/app/_components/concept-desk.tsx"));
 const { MediaLibrary } = require(path.join(repo, "apps/web/app/_components/media-library.tsx"));
+const { LearningLabPanel } = require(path.join(repo, "apps/web/app/_components/learning-lab.tsx"));
+const { PreciseClipEditor } = require(path.join(repo, "apps/web/app/_components/precise-clip-editor.tsx"));
+const { FinishingWorkspace } = require(path.join(repo, "apps/web/app/_components/finishing-workspace.tsx"));
+const { SourceKnowledge } = require(path.join(repo, "apps/web/app/_components/source-knowledge.tsx"));
+const { SourceRanges } = require(path.join(repo, "apps/web/app/_components/source-ranges.tsx"));
 const { LibraryUpload } = require(path.join(repo, "apps/web/app/_components/library-upload.tsx"));
 
 globalThis.fetch = async (url, options = {}) => {
@@ -61,7 +67,15 @@ globalThis.fetch = async (url, options = {}) => {
   const body = options.body ? JSON.parse(options.body) : undefined;
   calls.push({ route, method: options.method ?? "GET", body });
   let payload;
-  if (route === "concepts/library-status") payload = { unique_sources: 3, catalogued_sources: 3, spoken_sources: 2, visually_indexed_sources: 3, still_processing: 0 };
+  if (route === "learning/lab") payload = { lessons: lessonProposed ? [{ id:serverId,recipe:"talking_head",edit_style:"high_impact",status:"proposed",directive:"Keep complete clean speech.",training_job_ids:[jobId,"training-b","training-c"],evaluation:{held_out_jobs:0,can_promote:false,rating_delta:null,regressions:0} }] : [],trials:[],jobs:[] };
+  else if (route === "learning/lab/propose") { lessonProposed=true;payload={matched_proposals:1,hosted_model_calls:0}; }
+  else if (route === "library/knowledge") payload = { products: [], evidence_version: "1.0" };
+  else if (/^library\/products\//.test(route)) payload = { ...body, id: route.split("/").at(-1) };
+  else if (route.endsWith("/ranges") && route.startsWith("library/assets/")) payload = [];
+  else if (route.includes("/ranges/") && route.startsWith("library/assets/")) payload = body;
+  else if (route === `jobs/${jobId}/revisions`) payload = { id: "revision", version: 3, status: "pending" };
+  else if (route === `jobs/${jobId}/finishing-tools`) payload = { version: 2, settings: { motions:[],colours:[],audio_regions:[],caption_regions:[],layers:[],music_start_seconds:0,voice_denoise:false,audio_joins:[] }, sources:[{ asset_id:serverId,name:"Review image",media_kind:"image",duration_seconds:0 }] };
+  else if (route === "concepts/library-status") payload = { unique_sources: 3, catalogued_sources: 3, spoken_sources: 2, visually_indexed_sources: 3, still_processing: 0 };
   else if (route === "concepts" && (options.method ?? "GET") === "GET") payload = conceptHistory;
   else if (route === "concepts") {
     const created = conceptSession(body.id, body.focus, body.reel_kind);
@@ -138,6 +152,8 @@ beforeEach(() => {
     { ...serverAsset, id: "broll", source_name: "VID_0002.mp4", display_name: "Cream close-up", media_role: "broll", job_references: 0 },
     { ...serverAsset, id: "unsorted", source_name: "VID_0003.mp4", display_name: "VID_0003.mp4", media_role: "auto", job_references: 0 },
   ].map((item) => ({ notes: "", tags: [], favorite: false, library_status: "active", collection_count: 0, visual_status: "ready", updated_at: item.created_at, ...item }));
+  lessonProposed=false;
+  window.sessionStorage.clear();
   document.body.innerHTML = '<div id="root"></div>';
   root = createRoot(document.getElementById("root"));
 });
@@ -505,4 +521,65 @@ test("failed auto-sort application preserves the review and original names", asy
   assert.equal(document.querySelector('input[aria-label="Apply suggestion for VID_0003.mp4"]').checked,true);
   assert.equal(managedAssets.find((item) => item.id === "unsorted").display_name,"VID_0003.mp4");
   assert.equal(posts("library/organization").length,1);
+});
+
+
+const toolClip = { clip_index:0,clip_id:"1234567890abcdef",asset_id:serverId,source_name:"Talking about soap",source_in:0,source_out:4,duration:4,words:[{text:"Soap",start:.2,end:.6}] };
+test("precise edits wait for submit and carry the inspected version and clip handle",async()=>{
+ await act(async()=>root.render(React.createElement(PreciseClipEditor,{jobId,version:2,clip:toolClip,onUpdated:()=>{readyEvents+=1;}})));
+ await click(document.querySelector('button[aria-label="Start before Soap at 0.20 seconds"]'));
+ assert.equal(posts(`jobs/${jobId}/revisions`).length,0);
+ await act(async()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+ await waitFor(()=>readyEvents===1);
+ const body=posts(`jobs/${jobId}/revisions`)[0].body;
+ assert.equal(body.base_version,2);assert.equal(body.clip_adjustments[0].clip_id,toolClip.clip_id);
+ assert.equal(body.clip_adjustments[0].source_in,.12);assert.equal(body.note,"");
+});
+test("finishing choices make no request until explicit submission and preserve local-only revision",async()=>{
+ await act(async()=>root.render(React.createElement(FinishingWorkspace,{jobId,version:2,clips:[toolClip],onUpdated:()=>{readyEvents+=1;}})));
+ const details=document.querySelector('details');
+ await act(async()=>{details.open=true;details.dispatchEvent(new Event('toggle'));});
+ await waitFor(()=>document.querySelector('form'));
+ assert.equal(posts(`jobs/${jobId}/revisions`).length,0);
+ await act(async()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+ await waitFor(()=>readyEvents===1);
+ const body=posts(`jobs/${jobId}/revisions`)[0].body;
+ assert.equal(body.base_version,2);assert.equal(body.note,"");
+ assert.equal(body.finishing_settings.motions[0].points[1].zoom,1.15);
+ assert.equal(body.finishing_settings.motions[0].points[1].time,3.99);
+});
+test("source dictionary saves names and aliases only after submit",async()=>{
+ await act(async()=>root.render(React.createElement(SourceKnowledge)));
+ await waitFor(()=>!button("Save product").disabled||document.body.textContent.includes("No products added"));
+ const inputs=document.querySelectorAll('form input');
+ await type('form input',"Castor oil");
+ Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set.call(inputs[1],"castor, oil roller");
+ await act(async()=>inputs[1].dispatchEvent(new Event('input',{bubbles:true})));
+ assert.equal(calls.some(c=>c.method==="PUT"),false);
+ await act(async()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+ await waitFor(()=>calls.some(c=>c.method==="PUT"));
+ assert.deepEqual(calls.find(c=>c.method==="PUT").body.aliases,["castor","oil roller"]);
+});
+test("source annotations are separate from the whole-file role and need confirmation by submission",async()=>{
+ await act(async()=>root.render(React.createElement(SourceRanges,{assetId:serverId,duration:10})));
+ await click(button("Mark source ranges"));
+ await waitFor(()=>document.querySelector('form'));
+ assert.equal(calls.some(c=>c.method==="PUT"),false);
+ await act(async()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+ await waitFor(()=>calls.some(c=>c.method==="PUT"));
+ assert.equal(calls.find(c=>c.method==="PUT").body.role,"broll");
+ assert.equal(calls.find(c=>c.method==="PUT").body.end_seconds,3);
+});
+
+
+test("lesson proposals stay inactive and cannot start a trial without an explicit selection",async()=>{
+ await act(async()=>root.render(React.createElement(LearningLabPanel)));
+ await waitFor(()=>document.body.textContent.includes("No repeated note pattern"));
+ assert.equal(calls.some(c=>c.method==="POST"),false);
+ await click(button("Propose lessons from saved notes"));
+ await waitFor(()=>document.body.textContent.includes("Keep complete clean speech."));
+ assert.equal(button("Promote passed lesson").disabled,true);
+ assert.equal(button("Create trial preview · uses model tokens").disabled,true);
+ assert.equal(calls.filter(c=>c.method==="POST").length,1);
+ assert.equal(calls.some(c=>c.route.endsWith("/trial")),false);
 });

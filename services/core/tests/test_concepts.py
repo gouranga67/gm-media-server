@@ -409,3 +409,15 @@ class BlooperConceptTests(unittest.TestCase):
         inventory = compact_inventory(rows, segments, self.payload)
         self.assertLessEqual(len(json.dumps(public_inventory(inventory), ensure_ascii=False)), MAX_INVENTORY_CHARACTERS)
         self.assertTrue(any(item.get("blooper_candidate") for item in inventory["evidence"]))
+
+class RichMetadataBudgetTests(unittest.TestCase):
+    def test_large_photo_metadata_stays_bounded_without_losing_source_coverage(self):
+        rows=[asset(n,str(n)) for n in range(60)]
+        for row in rows:
+            row.update(display_name='n'*255,project_name='p'*120,notes='N'*4000,tags=['t'*64]*25,
+                manifest={'derived':{'ocr':{'lines':[{'text':'r'*500} for _ in range(40)]}}})
+        inventory=compact_inventory(rows,[],ConceptRequestCreate(id=uuid4()))
+        public=public_inventory(inventory)
+        self.assertEqual(len(public['assets']),60)
+        self.assertTrue(public['metadata_compacted'])
+        self.assertLessEqual(len(json.dumps(public,ensure_ascii=False)),MAX_INVENTORY_CHARACTERS)

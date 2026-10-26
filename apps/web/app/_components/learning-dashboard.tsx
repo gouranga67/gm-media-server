@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { BrainCircuitIcon, CheckIcon, LoaderCircleIcon, PauseCircleIcon } from "lucide-react";
 
+import { LearningLabPanel } from "./learning-lab";
 import { StudioNav } from "@/app/_components/studio-nav";
 import { Button } from "@/components/ui/button";
 import { getLearningSummary, updateLearningSettings, type LearningSummary } from "@/lib/media-api";
@@ -51,7 +52,7 @@ export function LearningDashboard() {
         <StudioNav current="/learning" />
         <header className="mt-10 flex flex-col justify-between gap-5 border-b border-[#D7D9D3] pb-8 md:flex-row md:items-end">
           <div>
-            <p className="font-mono text-xs font-bold tracking-wide text-[#3A8F63] uppercase">Local improvement loop</p>
+            <p className="font-mono text-xs font-bold tracking-wide text-[#215B43] uppercase">Local improvement loop</p>
             <h1 className="mt-2 text-3xl font-black tracking-tight text-[#173F5F]">What GM Studio is learning</h1>
             <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[#666862]">
               Ratings are attached to exact edit versions. Repeated patterns become recipe-specific guidance; source evidence and job instructions always take priority.
@@ -67,6 +68,7 @@ export function LearningDashboard() {
 
         {summary ? (
           <div className="mt-8 space-y-8">
+            <LearningLabPanel />
             <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {[
                 ["Feedback", summary.feedback_count.toString()],
@@ -124,7 +126,7 @@ export function LearningDashboard() {
                           <h3 className="text-lg font-bold text-[#173F5F]">{scopeName === "talking_head" ? "Talking-head edits" : "Montages"}</h3>
                           <p className="mt-1 text-xs text-[#666862]">{scope.sample_size} rated edits · {scope.average_rating?.toFixed(1) ?? "—"} average</p>
                         </div>
-                        {scope.feedback_needed > 0 ? <span className="rounded-full bg-[#FFF6DC] px-2 py-1 font-mono text-[9px] font-bold text-[#775C08]">{scope.feedback_needed} MORE NEEDED</span> : <CheckIcon className="text-[#3A8F63]" />}
+                        {scope.feedback_needed > 0 ? <span className="rounded-full bg-[#FFF6DC] px-2 py-1 font-mono text-[9px] font-bold text-[#775C08]">{scope.feedback_needed} MORE NEEDED</span> : <CheckIcon className="text-[#215B43]" />}
                       </div>
                       {scope.preferences.length ? (
                         <ul className="mt-4 space-y-3">

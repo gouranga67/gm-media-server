@@ -1,25 +1,219 @@
 "use client";
 import { useEffect, useState, type FormEvent } from "react";
-import { getSourceKnowledge, saveSourceProduct, removeSourceProduct, type SourceProduct } from "@/lib/media-api";
+import {
+  getSourceKnowledge,
+  saveSourceProduct,
+  removeSourceProduct,
+  type SourceProduct,
+} from "@/lib/media-api";
 import { StudioNav } from "./studio-nav";
-const input = "mt-1 min-h-11 w-full rounded-md border border-[#C7CBD0] bg-white px-3 text-sm text-[#20211F]";
+const input =
+  "mt-1 min-h-11 w-full rounded-md border border-[#C7CBD0] bg-white px-3 text-sm text-[#20211F]";
 export function SourceKnowledge() {
   const [products, setProducts] = useState<readonly SourceProduct[]>([]);
   const [editing, setEditing] = useState<SourceProduct>();
-  const [name, setName] = useState(""); const [aliases, setAliases] = useState(""); const [notes, setNotes] = useState("");
-  const [error, setError] = useState(""); const [busy, setBusy] = useState(false); const [loaded, setLoaded] = useState(false);
-  useEffect(() => { let active = true; getSourceKnowledge().then((data) => { if (active) { setProducts(data.products); setLoaded(true); } }).catch((e: unknown) => { if (active) setError(e instanceof Error ? e.message : "Knowledge could not be loaded"); }); return () => { active = false; }; }, []);
-  function edit(product?: SourceProduct) { setEditing(product); setName(product?.name ?? ""); setAliases(product?.aliases.join(", ") ?? ""); setNotes(product?.notes ?? ""); }
-  async function submit(event: FormEvent) {
-    event.preventDefault(); setBusy(true); setError("");
-    try { const saved = await saveSourceProduct({ id: editing?.id ?? crypto.randomUUID(), name: name.trim(), aliases: aliases.split(",").map((a) => a.trim()).filter(Boolean), notes }); setProducts((previous) => [...previous.filter((p) => p.id !== saved.id), saved].sort((a,b) => a.name.localeCompare(b.name))); edit(); }
-    catch (e) { setError(e instanceof Error ? e.message : "Product could not be saved"); } finally { setBusy(false); }
+  const [name, setName] = useState("");
+  const [aliases, setAliases] = useState("");
+  const [notes, setNotes] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  useEffect(() => {
+    let active = true;
+    getSourceKnowledge()
+      .then((data) => {
+        if (active) {
+          setProducts(data.products);
+          setLoaded(true);
+        }
+      })
+      .catch((e: unknown) => {
+        if (active)
+          setError(
+            e instanceof Error ? e.message : "Knowledge could not be loaded",
+          );
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+  function edit(product?: SourceProduct) {
+    setEditing(product);
+    setName(product?.name ?? "");
+    setAliases(product?.aliases.join(", ") ?? "");
+    setNotes(product?.notes ?? "");
   }
-  async function remove(product: SourceProduct) { if (!window.confirm(`Remove the dictionary entry for ${product.name}? Original media stays unchanged.`)) return; setBusy(true); try { await removeSourceProduct(product.id); setProducts((previous) => previous.filter((p) => p.id !== product.id)); if (editing?.id === product.id) edit(); } catch (e) { setError(e instanceof Error ? e.message : "Could not remove product"); } finally { setBusy(false); } }
-  return <main className="min-h-dvh bg-[#F7F7F5] px-4 py-5 text-[#20211F]"><div className="mx-auto max-w-5xl"><StudioNav current="/studio/knowledge" /><h1 className="mt-8 text-3xl font-black text-[#173F5F]">Source knowledge</h1><p className="mt-3 max-w-3xl text-sm leading-6 text-[#666862]">Give the editor consistent product names and aliases. Names help connect transcript and image text; they do not verify pictured products or marketing claims. Owners can manage this shared dictionary.</p>
-    {error ? <p role="alert" className="my-4 rounded-md bg-[#FFF0EC] p-4 text-sm text-[#A23B2A]">{error}</p> : null}
-    <div className="mt-6 grid items-start gap-6 md:grid-cols-2"><form className="space-y-4 rounded-lg border border-[#D7D9D3] bg-white p-5" onSubmit={submit}><h2 className="font-bold text-[#173F5F]">{editing ? "Edit product" : "Add a product"}</h2><label className="block text-sm">Product name<input className={input} maxLength={120} required value={name} onChange={(e) => setName(e.currentTarget.value)} /></label><label className="block text-sm">Other names · comma separated<input className={input} value={aliases} onChange={(e) => setAliases(e.currentTarget.value)} placeholder="Common name, brand spelling" /></label><label className="block text-sm">Context for your team<textarea className={`${input} min-h-24 py-3`} maxLength={2000} value={notes} onChange={(e) => setNotes(e.currentTarget.value)} /></label><div className="flex gap-3"><button className="min-h-11 rounded-md bg-[#173F5F] px-4 text-sm font-bold text-white disabled:opacity-50" disabled={busy || !loaded || !name.trim()}>{busy ? "Saving…" : "Save product"}</button>{editing ? <button className="min-h-11 px-3 text-sm underline" onClick={() => edit()} type="button">Cancel</button> : null}</div></form>
-    <section aria-label="Product dictionary" className="space-y-3">{!loaded ? <p>Loading dictionary…</p> : products.length === 0 ? <p className="rounded-lg border border-dashed border-[#C7CBD0] p-5 text-sm text-[#666862]">No products added yet. Existing editing continues to work without this dictionary.</p> : products.map((p) => <article className="rounded-lg border border-[#D7D9D3] bg-white p-4" key={p.id}><h2 className="font-bold text-[#173F5F]">{p.name}</h2><p className="mt-2 text-sm text-[#666862]">{p.aliases.join(" · ") || "No aliases"}</p>{p.notes ? <p className="mt-2 whitespace-pre-wrap text-sm">{p.notes}</p> : null}<div className="mt-3 flex gap-4"><button className="min-h-11 text-sm underline" disabled={busy} onClick={() => edit(p)} type="button">Edit {p.name}</button><button className="min-h-11 text-sm text-[#A23B2A] underline" disabled={busy} onClick={() => void remove(p)} type="button">Remove</button></div></article>)}</section></div>
-    <p className="mt-6 text-sm leading-6 text-[#666862]">To mark a useful shot or a range to avoid, open a source in Library and choose Mark source ranges. Image text recognition runs locally when images are analyzed or catalogued.</p>
-  </div></main>;
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setError("");
+    try {
+      const saved = await saveSourceProduct({
+        id: editing?.id ?? crypto.randomUUID(),
+        name: name.trim(),
+        aliases: aliases
+          .split(",")
+          .map((a) => a.trim())
+          .filter(Boolean),
+        notes,
+      });
+      setProducts((previous) =>
+        [...previous.filter((p) => p.id !== saved.id), saved].sort((a, b) =>
+          a.name.localeCompare(b.name),
+        ),
+      );
+      edit();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Product could not be saved");
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function remove(product: SourceProduct) {
+    if (
+      !window.confirm(
+        `Remove the dictionary entry for ${product.name}? Original media stays unchanged.`,
+      )
+    )
+      return;
+    setBusy(true);
+    try {
+      await removeSourceProduct(product.id);
+      setProducts((previous) => previous.filter((p) => p.id !== product.id));
+      if (editing?.id === product.id) edit();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not remove product");
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <main className="min-h-dvh bg-[#F7F7F5] px-4 py-5 text-[#20211F]">
+      <div className="mx-auto max-w-5xl">
+        <StudioNav current="/studio/knowledge" />
+        <h1 className="mt-8 text-3xl font-black text-[#173F5F]">
+          Source knowledge
+        </h1>
+        <p className="mt-3 max-w-3xl text-sm leading-6 text-[#666862]">
+          Give the editor consistent product names and aliases. Names help
+          connect transcript and image text; they do not verify pictured
+          products or marketing claims. Owners can manage this shared
+          dictionary.
+        </p>
+        {error ? (
+          <p
+            role="alert"
+            className="my-4 rounded-md bg-[#FFF0EC] p-4 text-sm text-[#A23B2A]"
+          >
+            {error}
+          </p>
+        ) : null}
+        <div className="mt-6 grid items-start gap-6 md:grid-cols-2">
+          <form
+            className="space-y-4 rounded-lg border border-[#D7D9D3] bg-white p-5"
+            onSubmit={submit}
+          >
+            <h2 className="font-bold text-[#173F5F]">
+              {editing ? "Edit product" : "Add a product"}
+            </h2>
+            <label className="block text-sm">
+              Product name
+              <input
+                className={input}
+                maxLength={120}
+                required
+                value={name}
+                onChange={(e) => setName(e.currentTarget.value)}
+              />
+            </label>
+            <label className="block text-sm">
+              Other names · comma separated
+              <input
+                className={input}
+                value={aliases}
+                onChange={(e) => setAliases(e.currentTarget.value)}
+                placeholder="Common name, brand spelling"
+              />
+            </label>
+            <label className="block text-sm">
+              Context for your team
+              <textarea
+                className={`${input} min-h-24 py-3`}
+                maxLength={2000}
+                value={notes}
+                onChange={(e) => setNotes(e.currentTarget.value)}
+              />
+            </label>
+            <div className="flex gap-3">
+              <button
+                className="min-h-11 rounded-md bg-[#173F5F] px-4 text-sm font-bold text-white disabled:opacity-50"
+                disabled={busy || !loaded || !name.trim()}
+              >
+                {busy ? "Saving…" : "Save product"}
+              </button>
+              {editing ? (
+                <button
+                  className="min-h-11 px-3 text-sm underline"
+                  onClick={() => edit()}
+                  type="button"
+                >
+                  Cancel
+                </button>
+              ) : null}
+            </div>
+          </form>
+          <section aria-label="Product dictionary" className="space-y-3">
+            {!loaded ? (
+              <p>Loading dictionary…</p>
+            ) : products.length === 0 ? (
+              <p className="rounded-lg border border-dashed border-[#C7CBD0] p-5 text-sm text-[#666862]">
+                No products added yet. Existing editing continues to work
+                without this dictionary.
+              </p>
+            ) : (
+              products.map((p) => (
+                <article
+                  className="rounded-lg border border-[#D7D9D3] bg-white p-4"
+                  key={p.id}
+                >
+                  <h2 className="font-bold text-[#173F5F]">{p.name}</h2>
+                  <p className="mt-2 text-sm text-[#666862]">
+                    {p.aliases.join(" · ") || "No aliases"}
+                  </p>
+                  {p.notes ? (
+                    <p className="mt-2 whitespace-pre-wrap text-sm">
+                      {p.notes}
+                    </p>
+                  ) : null}
+                  <div className="mt-3 flex gap-4">
+                    <button
+                      className="min-h-11 text-sm underline"
+                      disabled={busy}
+                      onClick={() => edit(p)}
+                      type="button"
+                    >
+                      Edit {p.name}
+                    </button>
+                    <button
+                      className="min-h-11 text-sm text-[#A23B2A] underline"
+                      disabled={busy}
+                      onClick={() => void remove(p)}
+                      type="button"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </article>
+              ))
+            )}
+          </section>
+        </div>
+        <p className="mt-6 text-sm leading-6 text-[#666862]">
+          To mark a useful shot or a range to avoid, open a source in Library
+          and choose Mark source ranges. Image text recognition runs locally
+          when images are analyzed or catalogued.
+        </p>
+      </div>
+    </main>
+  );
 }

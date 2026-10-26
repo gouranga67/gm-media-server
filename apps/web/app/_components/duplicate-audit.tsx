@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { StudioNav } from "./studio-nav";
 import { useEffect, useState, type ReactNode } from "react";
 import {
   AudioLinesIcon,
@@ -234,7 +235,7 @@ export function DuplicateAudit() {
     <main className="min-h-dvh bg-[#F7F7F5] px-4 pt-[max(1.25rem,env(safe-area-inset-top))] pb-[max(2rem,env(safe-area-inset-bottom))] text-[#20211F] [color-scheme:light] sm:px-6">
       <div className="mx-auto w-full max-w-6xl">
         <header className="border-b border-[#D7D9D3] pb-5">
-          <div className="flex items-center justify-between gap-4"><Link className="text-sm font-bold tracking-tight text-[#173F5F]" href="/jobs/new">GM Studio</Link><span className="inline-flex items-center gap-1.5 rounded-full border border-[#D7D9D3] bg-white px-3 py-2 font-mono text-[10px] font-bold text-[#173F5F]"><span className="size-1.5 rounded-full bg-[#3A8F63]" />PRIVATE · ONLINE</span></div>
+          <div className="flex items-center justify-between gap-4"><StudioNav current="/library/duplicates" /><span className="inline-flex items-center gap-1.5 rounded-full border border-[#D7D9D3] bg-white px-3 py-2 font-mono text-[10px] font-bold text-[#173F5F]"><span className="size-1.5 rounded-full bg-[#3A8F63]" />PRIVATE · ONLINE</span></div>
           <div className="mt-6 flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
             <div className="max-w-3xl"><p className="font-mono text-[10px] font-bold tracking-widest text-[#174D73] uppercase">Library health</p><h1 className="mt-2 text-3xl font-bold tracking-tight text-[#173F5F]">Exact duplicate audit</h1><p className="mt-3 max-w-2xl text-sm leading-6 text-[#666862]">Find byte-for-byte copies already stored on this server and choose the record that should represent each group.</p></div>
             <div className="flex flex-wrap gap-2"><Link className="inline-flex min-h-11 items-center gap-2 rounded-md border border-[#D7D9D3] bg-white px-4 text-sm font-bold text-[#173F5F]" href="/library"><LibraryIcon aria-hidden="true" className="size-4" />Media library</Link><Link className="inline-flex min-h-11 items-center rounded-md bg-[#173F5F] px-4 text-sm font-bold text-white" href="/jobs/new">Start a new job</Link></div>

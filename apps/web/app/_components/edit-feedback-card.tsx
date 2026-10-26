@@ -73,6 +73,9 @@ export function EditFeedbackCard({
   const [rating, setRating] = useState(initialFeedback?.rating ?? 0);
   const [tags, setTags] = useState<readonly FeedbackTag[]>(initialFeedback?.tags ?? []);
   const [note, setNote] = useState(initialFeedback?.note ?? "");
+  const [scope, setScope] = useState<NonNullable<EditFeedback["scope"]>>(initialFeedback?.scope ?? "edit");
+  const [start, setStart] = useState(initialFeedback?.start_seconds?.toString() ?? "");
+  const [end, setEnd] = useState(initialFeedback?.end_seconds?.toString() ?? "");
   const [wouldUseAgain, setWouldUseAgain] = useState(initialFeedback?.would_use_again ?? false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(Boolean(initialFeedback));
@@ -102,7 +105,7 @@ export function EditFeedbackCard({
         rating,
         tags,
         note: note.trim(),
-        wouldUseAgain,
+        wouldUseAgain, scope, startSeconds: start === "" ? undefined : Number(start), endSeconds: end === "" ? undefined : Number(end),
       });
       setSaved(true);
       onSaved();
@@ -164,6 +167,7 @@ export function EditFeedbackCard({
         placeholder="What should the editor remember next time?"
         value={note}
       />
+      <details className="mt-4"><summary className="min-h-11 cursor-pointer content-center text-xs font-bold text-[#173F5F]">Focus feedback on a topic or moment</summary><div className="grid gap-3 py-3 sm:grid-cols-3"><label className="text-xs">Topic<select className="mt-1 min-h-11 w-full rounded border border-[#C7CBD0] bg-white px-2" value={scope} onChange={(e) => { setScope(e.currentTarget.value as typeof scope); setSaved(false); }}>{["edit","story","pacing","captions","audio","colour","effects"].map((value) => <option key={value} value={value}>{value}</option>)}</select></label><label className="text-xs">Start seconds · optional<input className="mt-1 min-h-11 w-full rounded border border-[#C7CBD0] px-2" min={0} max={60} step="0.1" type="number" value={start} onChange={(e) => { setStart(e.currentTarget.value); setSaved(false); }} /></label><label className="text-xs">End seconds · optional<input className="mt-1 min-h-11 w-full rounded border border-[#C7CBD0] px-2" min={0} max={60} step="0.1" type="number" value={end} onChange={(e) => { setEnd(e.currentTarget.value); setSaved(false); }} /></label></div></details>
       <label className="mt-4 flex items-center gap-3 rounded-md bg-[#EFF6FA] p-3 text-sm text-[#173F5F]">
         <input checked={wouldUseAgain} onChange={(event) => { setWouldUseAgain(event.target.checked); setSaved(false); }} type="checkbox" />
         I would publish or use this edit

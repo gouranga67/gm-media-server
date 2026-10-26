@@ -115,7 +115,7 @@ const PRIVACY_OPTIONS: ReadonlyArray<{
   {
     value: "text_only",
     label: "Text only",
-    description: "A hosted editor may see transcript and metadata, but no images or original files.",
+    description: "A hosted editor may see transcript, recognized image text and library metadata, but no images or original files.",
   },
   {
     value: "local_only",
@@ -1474,6 +1474,7 @@ function NewJobFormContent() {
                 value={brief}
               />
             </div>
+            <details className="rounded-md border border-[#D7D9D3] bg-white p-3"><summary className="min-h-11 cursor-pointer content-center text-sm font-bold text-[#173F5F]">Optional story direction</summary>
             <fieldset className="rounded-md border border-[#D7D9D3] bg-[#EFF6FA] p-4" disabled={formLocked}>
               <legend className="px-2 font-mono text-xs font-bold tracking-wide text-[#173F5F] uppercase">
                 Story direction
@@ -1500,6 +1501,7 @@ function NewJobFormContent() {
                 </label>
               </div>
             </fieldset>
+            </details>
             <div className="space-y-2">
               <label className="text-xs font-bold text-[#173F5F]" htmlFor="must-include">
                 MUST-INCLUDE POINTS
@@ -1649,6 +1651,7 @@ function NewJobFormContent() {
                 </label>
               ) : null}
             </fieldset>
+            <details className="rounded-md border border-[#D7D9D3] bg-white p-3"><summary className="min-h-11 cursor-pointer content-center text-sm font-bold text-[#173F5F]">Advanced model settings</summary>
             <fieldset className="space-y-3" disabled={formLocked || privacyMode === "local_only"}>
               <legend className="text-xs font-bold text-[#173F5F]">CREATIVE EFFECTS</legend>
               <p className="text-xs leading-relaxed text-[#666862]">
@@ -1669,6 +1672,7 @@ function NewJobFormContent() {
                 {" "}<Link className="font-bold text-[#173F5F] underline underline-offset-4" href="/creative">View music &amp; effects library</Link>
               </p>
             </fieldset>
+            </details>
             <fieldset className="space-y-3" disabled={formLocked || privacyMode === "local_only"}>
               <legend className="text-xs font-bold text-[#173F5F]">EDITOR MODEL</legend>
               <label className="block space-y-2 text-xs font-bold text-[#173F5F]" htmlFor="editor-model">

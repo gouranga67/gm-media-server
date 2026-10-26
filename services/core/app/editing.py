@@ -1,11 +1,11 @@
 import re
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, status
 from fastapi.responses import FileResponse
 from psycopg.types.json import Jsonb
-from pydantic import ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from app.caption_text import caption_phrase_exists
 from app.config import get_settings
@@ -15,6 +15,8 @@ from app.edit_plan import (
     TalkingHeadEditPlan,
     document_sha256,
     clip_handle,
+    apply_timeline_adjustments,
+    repair_predictable_plan_defaults,
     source_word_gaps,
     validate_edit_plan,
 )
@@ -640,9 +642,14 @@ def request_revision(job_id: UUID, payload: RevisionCreate) -> dict[str, Any]:
     if not context["ready_for_editing"]:
         raise HTTPException(status_code=409, detail="source analysis is not ready")
     corrections = [item.model_dump() for item in payload.caption_corrections]
-    adjustments = [item.model_dump(mode="json", exclude_none=True) for item in payload.clip_adjustments]
+    adjustments = [
+        item.model_dump(mode="json", exclude_none=True)
+        for item in payload.clip_adjustments
+    ]
     _validate_caption_corrections(context, corrections)
-    if context["project"]["privacy_mode"] == "local_only" and payload.note:
+    if context["project"]["privacy_mode"] == "local_only" and (
+        payload.note or payload.evaluation_lesson_id
+    ):
         raise HTTPException(
             status_code=409,
             detail="local-only jobs support caption corrections but not editorial replanning",
@@ -664,7 +671,9 @@ def request_revision(job_id: UUID, payload: RevisionCreate) -> dict[str, Any]:
             (job_id,),
         ).fetchone()
         if active is not None:
-            raise HTTPException(status_code=409, detail="another edit version is still running")
+            raise HTTPException(
+                status_code=409, detail="another edit version is still running"
+            )
         based_on = database.execute(
             """
             SELECT * FROM edit_runs
@@ -674,16 +683,96 @@ def request_revision(job_id: UUID, payload: RevisionCreate) -> dict[str, Any]:
             (job_id,),
         ).fetchone()
         if based_on is None:
-            raise HTTPException(status_code=409, detail="a ready preview is required before revision")
-        if payload.base_version is not None and payload.base_version != based_on["version"]:
-            raise HTTPException(status_code=409, detail="this preview changed; refresh before submitting edits")
+            raise HTTPException(
+                status_code=409, detail="a ready preview is required before revision"
+            )
+        if (
+            payload.base_version is not None
+            and payload.base_version != based_on["version"]
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="this preview changed; refresh before submitting edits",
+            )
         if payload.restore_version is not None:
             if payload.note or adjustments or payload.caption_corrections:
-                raise HTTPException(status_code=422, detail="restore a version separately from other edit changes")
-            based_on = database.execute("SELECT * FROM edit_runs WHERE job_id=%s AND version=%s AND status='ready' AND edit_plan_id IS NOT NULL",
-                (job_id, payload.restore_version)).fetchone()
+                raise HTTPException(
+                    status_code=422,
+                    detail="restore a version separately from other edit changes",
+                )
+            based_on = database.execute(
+                "SELECT * FROM edit_runs WHERE job_id=%s AND version=%s AND status='ready' AND edit_plan_id IS NOT NULL",
+                (job_id, payload.restore_version),
+            ).fetchone()
             if not based_on:
-                raise HTTPException(status_code=404, detail="a ready version with that number was not found")
+                raise HTTPException(
+                    status_code=404,
+                    detail="a ready version with that number was not found",
+                )
+        if payload.finishing_settings is not None or adjustments:
+            source_plan = database.execute(
+                "SELECT document FROM edit_plans WHERE id=%s",
+                (based_on["edit_plan_id"],),
+            ).fetchone()
+            if not source_plan:
+                raise HTTPException(
+                    status_code=409, detail="the source edit plan is unavailable"
+                )
+            try:
+                previous_document, _ = repair_predictable_plan_defaults(
+                    source_plan["document"],
+                    creative_direction=context["job"],
+                    music_tracks=context["music_library"],
+                    creative_effects=context["creative_effect_library"],
+                )
+                options = {
+                    "allow_post_copy": bool(context["project"]["ai_copy_allowed"]),
+                    "creative_direction": context["job"],
+                    "music_tracks": context["music_library"],
+                    "creative_effects": context["creative_effect_library"],
+                }
+                candidate = validate_edit_plan(
+                    previous_document, context["assets"], **options
+                )
+                if adjustments:
+                    candidate = apply_timeline_adjustments(
+                        candidate, adjustments, context["assets"]
+                    )
+                document = candidate.model_dump(mode="json")
+                if payload.finishing_settings is not None:
+                    document.update(
+                        schema_version="1.5",
+                        finishing=payload.finishing_settings.model_dump(mode="json"),
+                    )
+                validate_edit_plan(document, context["assets"], **options)
+            except (ValueError, ValidationError) as error:
+                raise HTTPException(status_code=422, detail=str(error)[:500]) from error
+        if payload.evaluation_lesson_id is not None:
+            from app.learning_lab import lesson, assert_holdout
+
+            candidate_lesson = lesson(database, payload.evaluation_lesson_id)
+            if candidate_lesson["status"] != "proposed":
+                raise HTTPException(
+                    status_code=409,
+                    detail="only a proposed lesson can be tried as a held-out experiment",
+                )
+            assert_holdout(database, candidate_lesson, job_id)
+            payload.note = candidate_lesson["directive"]
+        if payload.repair_kind is not None:
+            existing_repair = database.execute(
+                "SELECT * FROM edit_runs WHERE based_on_run_id=%s AND repair_kind IS NOT NULL",
+                (based_on["id"],),
+            ).fetchone()
+            if existing_repair:
+                raise HTTPException(
+                    status_code=409,
+                    detail="one local repair has already been attempted on this version; review it before making another change",
+                )
+            if payload.note or payload.evaluation_lesson_id:
+                raise HTTPException(
+                    status_code=422,
+                    detail="local repairs cannot request model replanning",
+                )
         inherited_corrections = list(based_on.get("caption_corrections") or [])
         replacement_targets = {
             str(item.get("original_text") or "").casefold() for item in corrections
@@ -691,7 +780,8 @@ def request_revision(job_id: UUID, payload: RevisionCreate) -> dict[str, Any]:
         effective_corrections = [
             item
             for item in inherited_corrections
-            if str(item.get("original_text") or "").casefold() not in replacement_targets
+            if str(item.get("original_text") or "").casefold()
+            not in replacement_targets
         ] + corrections
         effective_caption_settings = (
             payload.caption_settings.model_dump()
@@ -706,16 +796,27 @@ def request_revision(job_id: UUID, payload: RevisionCreate) -> dict[str, Any]:
             """
             INSERT INTO edit_runs (
                 job_id, version, based_on_run_id, revision_note, caption_corrections,
-                caption_settings, effects_enabled, clip_adjustments, locked_elements, revision_mode, broll_enabled
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                caption_settings, effects_enabled, clip_adjustments, locked_elements, revision_mode, broll_enabled, finishing_settings, evaluation_lesson_id, repair_kind
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING *
             """,
             (
-                job_id, version, based_on["id"], payload.note or None,
-                Jsonb(effective_corrections), Jsonb(effective_caption_settings),
+                job_id,
+                version,
+                based_on["id"],
+                payload.note or None,
+                Jsonb(effective_corrections),
+                Jsonb(effective_caption_settings),
                 payload.effects_enabled,
-                Jsonb(adjustments), Jsonb(payload.locked_elements), payload.revision_mode,
+                Jsonb(adjustments),
+                Jsonb(payload.locked_elements),
+                payload.revision_mode,
                 payload.broll_enabled,
+                Jsonb(payload.finishing_settings.model_dump(mode="json"))
+                if payload.finishing_settings is not None
+                else None,
+                payload.evaluation_lesson_id,
+                payload.repair_kind,
             ),
         ).fetchone()
         database.execute(
@@ -1091,3 +1192,197 @@ def final_file(job_id: UUID, file_kind: str) -> FileResponse:
         filename=filename,
         content_disposition_type="attachment",
     )
+
+
+@router.get("/jobs/{job_id}/finishing-tools")
+def inspect_finishing_tools(job_id: UUID):
+    context = _context_or_http(job_id)
+    with connection() as database:
+        row = database.execute(
+            """SELECT r.version, p.document FROM edit_runs r JOIN edit_plans p ON p.id=r.edit_plan_id
+            WHERE r.job_id=%s AND r.status='ready' ORDER BY r.version DESC LIMIT 1""",
+            (job_id,),
+        ).fetchone()
+    if not row:
+        raise HTTPException(status_code=409, detail="a ready preview is required")
+    from app.finishing_tools import FinishingTools
+
+    return {
+        "version": row["version"],
+        "settings": row["document"].get("finishing")
+        or FinishingTools().model_dump(mode="json"),
+        "clips": [
+            {key: value for key, value in clip.items() if key != "words"}
+            for clip in _editorial_timeline(row["document"], context)
+        ],
+        "sources": [
+            {
+                "asset_id": str(a["asset_id"]),
+                "name": a.get("library_name") or a["source_name"],
+                "media_kind": "image"
+                if str(a.get("mime_type", "")).startswith("image/")
+                else "video",
+                "duration_seconds": a.get("duration_seconds") or 0,
+            }
+            for a in context["assets"]
+            if a.get("has_video") or str(a.get("mime_type", "")).startswith("image/")
+        ],
+        "capabilities": {
+            "keyframes": True,
+            "phrase_audio": True,
+            "cue_captions": True,
+            "picture_layers": True,
+            "green_screen": True,
+            "visual_retiming": True,
+            "independent_audio_joins": True,
+            "ai_background_removal": False,
+            "automatic_tracking": False,
+        },
+        "hosted_model_calls": 0,
+    }
+
+
+class LocalRepairRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    base_version: int = Field(gt=0)
+    action: Literal["tighten_pauses", "denoise"]
+
+
+@router.post("/jobs/{job_id}/local-repair")
+def local_repair(job_id: UUID, payload: LocalRepairRequest):
+    tools = inspect_finishing_tools(job_id)
+    if tools["version"] != payload.base_version:
+        raise HTTPException(
+            status_code=409, detail="refresh this preview before requesting a repair"
+        )
+    if payload.action == "denoise":
+        from app.finishing_tools import FinishingTools
+
+        settings = FinishingTools.model_validate(
+            {**tools["settings"], "voice_denoise": True}
+        )
+        request = RevisionCreate(
+            base_version=payload.base_version,
+            finishing_settings=settings,
+            repair_kind="denoise",
+        )
+    else:
+        review = job_review(job_id)
+        changes = [
+            {
+                "clip_index": c["clip_index"],
+                "clip_id": c["clip_id"],
+                "max_pause_seconds": 0.6,
+            }
+            for c in reversed(review["editorial_timeline"])
+            if c["media_kind"] == "video" and c["longest_pause_seconds"] > 0.7
+        ]
+        if not changes:
+            raise HTTPException(
+                status_code=409,
+                detail="no long speech gap was detected; use a precise trim for the moment you want changed",
+            )
+        request = RevisionCreate(
+            base_version=payload.base_version,
+            clip_adjustments=changes,
+            repair_kind="tighten_pauses",
+        )
+    return request_revision(job_id, request)
+
+
+@router.get("/jobs/{job_id}/hook-options")
+def hook_options(job_id: UUID):
+    from app.edit_plan import apply_timeline_adjustments
+
+    context = _context_or_http(job_id)
+    with connection() as database:
+        source = database.execute(
+            """SELECT r.version,p.document FROM edit_runs r JOIN edit_plans p ON p.id=r.edit_plan_id
+            WHERE r.job_id=%s AND r.status='ready' ORDER BY r.version DESC LIMIT 1""",
+            (job_id,),
+        ).fetchone()
+    if not source:
+        raise HTTPException(status_code=409, detail="a ready preview is required")
+    options = []
+    candidates = []
+    for asset in context["assets"]:
+        if (
+            not asset.get("has_video")
+            or not asset.get("has_audio")
+            or asset.get("source_evidence", {}).get("library", {}).get("role")
+            == "broll"
+        ):
+            continue
+        for moment in asset.get("story_index", {}).get("moments", []):
+            if moment.get("kind") == "spoken" and "hook" in moment.get(
+                "suggested_roles", []
+            ):
+                candidates.append(
+                    (float(moment.get("role_scores", {}).get("hook", 0)), asset, moment)
+                )
+    kwargs = {
+        "allow_post_copy": bool(context["project"]["ai_copy_allowed"]),
+        "creative_direction": context["job"],
+        "music_tracks": context["music_library"],
+        "creative_effects": context["creative_effect_library"],
+    }
+    baseline = validate_edit_plan(source["document"], context["assets"], **kwargs)
+    for score, asset, moment in sorted(
+        candidates, key=lambda value: value[0], reverse=True
+    ):
+        start = max(0, float(moment["start_seconds"]) - 0.08)
+        end = min(float(asset["duration_seconds"]), float(moment["end_seconds"]) + 0.12)
+        if not 0.5 <= end - start <= 8:
+            continue
+        if any(
+            r.get("role") == "avoid"
+            and max(start, float(r["start_seconds"]))
+            < min(end, float(r["end_seconds"]))
+            for r in asset.get("source_evidence", {}).get("user_ranges", [])
+        ):
+            continue
+        if any(
+            str(c.asset_id) == str(asset["asset_id"])
+            and max(start, c.source_in) < min(end, c.source_out)
+            for c in baseline.clips[1:]
+        ):
+            continue
+        adjustment = {
+            "clip_index": 0,
+            "clip_id": clip_handle(0, source["document"]["clips"][0]),
+            "replacement_asset_id": str(asset["asset_id"]),
+            "source_in": round(start, 3),
+            "source_out": round(end, 3),
+            "visual_preset": "standard",
+        }
+        if (
+            str(baseline.clips[0].asset_id) == str(asset["asset_id"])
+            and abs(start - baseline.clips[0].source_in) < 0.15
+            and abs(end - baseline.clips[0].source_out) < 0.15
+        ):
+            continue
+        try:
+            candidate = apply_timeline_adjustments(
+                baseline, [adjustment], context["assets"]
+            )
+            validate_edit_plan(
+                candidate.model_dump(mode="json"), context["assets"], **kwargs
+            )
+        except ValueError:
+            continue
+        options.append(
+            {
+                "text": str(moment.get("text", ""))[:600],
+                "source_name": asset.get("library_name") or asset["source_name"],
+                "adjustment": adjustment,
+                "reason": "Locally ranked recorded hook; review its fit with the story.",
+            }
+        )
+        if len(options) == 3:
+            break
+    return {
+        "version": source["version"],
+        "options": options,
+        "hosted_model_calls": 0,
+        "note": "Recorded alternatives only. No new narration or model critique. Empty options mean no safe local replacement qualified.",
+    }

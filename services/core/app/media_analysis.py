@@ -623,6 +623,7 @@ def _transcribe_locked(source: Path, settings: "Settings") -> tuple[dict[str, An
     )
     last_error: Exception | None = None
     for device, compute_type in attempts:
+        model = None
         try:
             model = _whisper_model(model_path, device, compute_type)
             raw_segments, info = model.transcribe(
@@ -662,7 +663,8 @@ def _transcribe_locked(source: Path, settings: "Settings") -> tuple[dict[str, An
             return transcript, render_webvtt(segments)
         except Exception as error:
             last_error = error
-            _whisper_model.cache_clear()
+            if model is not None:
+                _whisper_model.cache_clear()
             if device != "cuda" or len(attempts) == 1:
                 raise
             print(f"CUDA transcription unavailable; using CPU fallback: {error}", flush=True)

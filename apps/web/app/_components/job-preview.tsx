@@ -166,7 +166,7 @@ export function JobPreview({ jobId }: { readonly jobId: string }) {
           {status === "ready" ? (
             <div className="space-y-5">
               <div>
-                <p className="flex items-center gap-2 font-mono text-xs font-bold tracking-wide text-[#3A8F63] uppercase">
+                <p className="flex items-center gap-2 font-mono text-xs font-bold tracking-wide text-[#215B43] uppercase">
                   <CheckIcon aria-hidden="true" className="size-4" /> Preview ready
                 </p>
                 <h1 className="mt-2 text-2xl font-bold tracking-tight text-[#173F5F]">

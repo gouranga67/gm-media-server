@@ -28,7 +28,7 @@ def compare_revision(previous: dict[str, Any], current: dict[str, Any]) -> dict[
     for key, default, label in (
         ("music_track_id", None, "Music track"), ("music_mix", "none", "Music level"),
         ("effects", [], "Creative effects"), ("caption_position", "lower_safe", "Caption position"),
-        ("broll", [], "B-roll overlays"),
+        ("broll", [], "B-roll overlays"), ("finishing", None, "Local finishing tools"),
         ("caption_timing_offset_seconds", 0, "Caption timing"), ("post_copy", "", "Post copy"),
     ):
         if previous.get(key, default) != current.get(key, default):

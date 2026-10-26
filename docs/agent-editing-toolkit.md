@@ -1,5 +1,7 @@
 # Useful editing tools for the GM Studio agent
 
+Implementation update: the [continuous sprint report](phase-reports/phase-19-25-sprint.md) records the tools now implemented, their validation, and the automatic tracking, segmentation, shot-matching and public-isolation work still gated. This comparison remains the design rationale, not a claim that every shortlisted tool has shipped.
+
 26 October 2026 · Planning companion to the system audit
 
 **Recommendation:** borrow a small set of CapCut’s useful editing capabilities and make them precise, evidence-aware operations for our agent. The highest return comes from control over timing, framing, layers and audio. A large catalogue of effects is less useful if the agent cannot place, shape or revise them accurately.

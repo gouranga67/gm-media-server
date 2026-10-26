@@ -1,3 +1,14 @@
+from app.finishing_tools import (
+    apply_graph_finishing,
+    finish_caption_events,
+    selected_picture_layers,
+    picture_layer_inputs,
+    append_picture_layers,
+    audio_join_sources,
+    audio_join_inputs,
+    clip_audio_window,
+    assemble_clip_graph,
+)
 import json
 import os
 from pathlib import Path
@@ -53,16 +64,15 @@ def montage_caption_events(
     inventory = {str(asset["asset_id"]): asset for asset in assets}
     events: list[dict[str, Any]] = []
     timeline_start = 0.0
-    for clip in plan.clips:
+    for index,clip in enumerate(plan.clips):
         if clip.media_kind == "video" and clip.include_source_audio:
-            source_in = float(clip.source_in)
-            source_out = float(clip.source_out)
+            source_in,source_out,audio_start = clip_audio_window(plan,index,timeline_start)
             events.extend(
                 clip_caption_events(
                     inventory[str(clip.asset_id)],
                     source_in,
                     source_out,
-                    timeline_start,
+                    audio_start,
                     corrections,
                 )
             )
@@ -156,6 +166,7 @@ def _filter_graph(
     music_input_index: int | None,
     captions_path: Path | None = None,
     hdr_modes: list[str | None] | None = None,
+    join_sources: list[dict] | None = None,
 ) -> str:
     filters: list[str] = []
     concat_inputs: list[str] = []
@@ -202,7 +213,7 @@ def _filter_graph(
             audio += f",afade=t=out:st={duration - transition:.3f}:d={transition:.3f}"
         filters.append(audio + f"[a{index}]")
         concat_inputs.extend((f"[v{index}]", f"[a{index}]"))
-    filters.append("".join(concat_inputs) + f"concat=n={len(plan.clips)}:v=1:a=1[vcat][acat]")
+    filters.append(assemble_clip_graph(plan,concat_inputs,fps))
     video_output = "vbase" if captions_path is not None else "vout"
     filters.append(
         f"[vcat]tpad=stop_mode=clone:stop_duration={total_duration:.3f},"
@@ -244,7 +255,7 @@ def _filter_graph(
             "loudnorm=I=-14:LRA=11:TP=-1.0,"
             f"apad=pad_dur={total_duration:.3f},atrim=0:{total_duration:.3f}[aout]"
         )
-    return ";".join(filters)
+    return apply_graph_finishing(";".join(filters), plan, width=width, height=height, fps=fps, join_sources=join_sources)
 
 
 def _timing_error(probe: dict[str, Any], expected_duration: float) -> str | None:
@@ -329,7 +340,7 @@ def _render(
             )
     music_source, _ = _selected_music(context, plan, settings)
     if music_source is not None:
-        common.extend(["-stream_loop", "-1", "-i", str(music_source)])
+        common.extend(["-stream_loop", "-1", *(["-ss", f"{plan.finishing.music_start_seconds:.3f}"] if plan.finishing and plan.finishing.music_start_seconds else []), "-i", str(music_source)])
     effect_sources = selected_effects(
         context, plan, settings, len(plan.clips) + (1 if music_source is not None else 0)
     )
@@ -337,7 +348,11 @@ def _render(
     broll_sources = selected_broll(context, plan, settings,
         len(plan.clips) + (1 if music_source is not None else 0) + len(effect_sources))
     common.extend(broll_input_arguments(broll_sources))
-    if broll_sources:
+    picture_layers = selected_picture_layers(context, plan, settings, len(plan.clips)+(1 if music_source else 0)+len(effect_sources)+len(broll_sources))
+    common.extend(picture_layer_inputs(picture_layers))
+    joins=audio_join_sources(plan,render_sources,len(plan.clips)+(1 if music_source else 0)+len(effect_sources)+len(broll_sources)+len(picture_layers))
+    common.extend(audio_join_inputs(joins))
+    if broll_sources or picture_layers:
         common.extend(["-t", f"{sum(float(clip.duration) for clip in plan.clips):.3f}"])
     probe_cache: dict[Path, str | None] = {}
     hdr_modes: list[str | None] = []
@@ -353,7 +368,7 @@ def _render(
     common.extend(
         [
             "-filter_complex",
-            append_effect_filters(append_broll_filters(_filter_graph(
+            append_picture_layers(append_effect_filters(append_broll_filters(_filter_graph(
                 plan,
                 inventory,
                 width=width,
@@ -361,9 +376,9 @@ def _render(
                 fps=30,
                 music_input_index=len(plan.clips) if music_source is not None else None,
                 captions_path=captions_path,
-                hdr_modes=hdr_modes,
+                hdr_modes=hdr_modes, join_sources=joins,
             ), broll_sources, width=width, height=height, fps=30), effect_sources, width=width, height=height,
-                total_duration=sum(float(clip.duration) for clip in plan.clips)),
+                total_duration=sum(float(clip.duration) for clip in plan.clips)), picture_layers, width=width, height=height, fps=30),
             "-map",
             "[vout]",
             "-map",
@@ -543,6 +558,7 @@ def render_montage_preview(
         montage_caption_events(plan, context["assets"], caption_corrections),
         float(plan.caption_timing_offset_seconds),
     )
+    events = finish_caption_events(events, plan.finishing)
     if events:
         _atomic_text(
             captions_ass,
@@ -622,6 +638,7 @@ def render_montage_delivery(
         montage_caption_events(plan, context["assets"], caption_corrections),
         float(plan.caption_timing_offset_seconds),
     )
+    events = finish_caption_events(events, plan.finishing)
     _atomic_text(captions, render_webvtt(events))
     if events:
         _atomic_text(

@@ -201,11 +201,52 @@ def _public_context(context: dict[str, Any], max_characters: int) -> dict[str, A
     for asset in public.get("assets", []):
         evidence = asset.get("source_evidence")
         if isinstance(evidence, dict):
-            evidence.pop("source_hash", None)
-            # Full recognized words already live in transcript_segments. Keep
-            # cut boundaries without doubling the dialogue token cost.
-            evidence["thoughts"] = [{key: value for key, value in thought.items() if key != "text"}
-                                    for thought in evidence.get("thoughts", [])]
+            library = evidence.get("library") or {}
+            ranges = sorted(
+                evidence.get("user_ranges", []),
+                key=lambda item: item.get("role") != "avoid",
+            )
+            # Keep the richer evidence locally; do not resend dialogue, long notes,
+            # fingerprints or verbose per-word provenance to the hosted planner.
+            compact_evidence = {
+                "v": evidence.get("version"),
+                "library": {
+                    key: library[key]
+                    for key in ("role", "category")
+                    if library.get(key) not in (None, "auto")
+                },
+                "thought_boundaries": [
+                    [thought["start"], thought["end"]]
+                    for thought in (
+                        evidence.get("thoughts", [])[:6]
+                        + evidence.get("thoughts", [])[-6:]
+                        if len(evidence.get("thoughts", [])) > 12
+                        else evidence.get("thoughts", [])
+                    )
+                ],
+                "text_mentions": [
+                    product["name"]
+                    for product in evidence.get("mentioned_products", [])[:6]
+                ],
+                "ocr": [
+                    str(line.get("text", ""))[:160]
+                    for line in evidence.get("recognized_text", [])[:4]
+                ],
+                "ranges": [
+                    {
+                        key: item[key]
+                        for key in ("start_seconds", "end_seconds", "role")
+                        if key in item
+                    }
+                    for item in ranges[:16]
+                ],
+                "range_coverage": [min(16, len(ranges)), len(ranges)],
+            }
+            if library.get("notes"):
+                compact_evidence["library"]["notes"] = library["notes"][:240]
+            if library.get("tags"):
+                compact_evidence["library"]["tags"] = library["tags"][:6]
+            asset["source_evidence"] = compact_evidence
         checksum = asset.get("sha256")
         if isinstance(checksum, str) and checksum:
             if checksum in source_checksums:
@@ -213,7 +254,12 @@ def _public_context(context: dict[str, Any], max_characters: int) -> dict[str, A
             else:
                 source_checksums[checksum] = str(asset.get("asset_id"))
         for key in list(asset):
-            if key.startswith("_") or key in {"sha256", "byte_size", "asset_status", "analysis_status"}:
+            if key.startswith("_") or key in {
+                "sha256",
+                "byte_size",
+                "asset_status",
+                "analysis_status",
+            }:
                 del asset[key]
         simplified: list[dict[str, Any]] = []
         for segment in asset.get("transcript_segments", []):
@@ -244,7 +290,8 @@ def _public_context(context: dict[str, Any], max_characters: int) -> dict[str, A
                     components = moment.get("score_components")
                     if isinstance(roles, dict) and isinstance(components, dict):
                         moment["score_components"] = {
-                            key: value for key, value in components.items()
+                            key: value
+                            for key, value in components.items()
                             if key not in roles or roles[key] != value
                         }
 
@@ -255,15 +302,21 @@ def _public_context(context: dict[str, Any], max_characters: int) -> dict[str, A
         for item in public.get(library_name, []):
             for key in list(item):
                 if key.startswith("_") or key in {
-                    "license_source_url", "license_proof_recorded", "allowed_platforms", "attribution",
+                    "license_source_url",
+                    "license_proof_recorded",
+                    "allowed_platforms",
+                    "attribution",
                 }:
                     del item[key]
     direction = public.get("job") or {}
     if direction.get("music_mode") == "none":
         public["music_library"] = []
     elif direction.get("selected_music_track_id"):
-        selected = [track for track in public.get("music_library", [])
-                    if str(track.get("track_id")) == str(direction["selected_music_track_id"])]
+        selected = [
+            track
+            for track in public.get("music_library", [])
+            if str(track.get("track_id")) == str(direction["selected_music_track_id"])
+        ]
         if selected:
             public["music_library"] = selected
     if direction.get("effect_level") == "off":
@@ -278,19 +331,28 @@ def _public_context(context: dict[str, Any], max_characters: int) -> dict[str, A
     # evidence before considering any reduction of the complete dialogue.
     for asset in public.get("assets", []):
         story_index = asset.get("story_index")
-        if isinstance(story_index, dict) and isinstance(story_index.get("moments"), list):
+        if isinstance(story_index, dict) and isinstance(
+            story_index.get("moments"), list
+        ):
             for moment in story_index["moments"]:
                 if not isinstance(moment, dict):
                     continue
-                for key in ("score_components", "intrinsic_score", "retrieval_score",
-                            "selection_reasons"):
+                for key in (
+                    "score_components",
+                    "intrinsic_score",
+                    "retrieval_score",
+                    "selection_reasons",
+                ):
                     moment.pop(key, None)
                 if moment.get("suggested_roles"):
                     moment.pop("role_scores", None)
                 if moment.get("kind") == "spoken":
                     moment.pop("evidence", None)
     public["analysis_detail"] = "compact_moment_cards; full_dialogue_retained"
-    if len(json.dumps(public, ensure_ascii=False, separators=(",", ":"))) <= max_characters:
+    if (
+        len(json.dumps(public, ensure_ascii=False, separators=(",", ":")))
+        <= max_characters
+    ):
         return public
 
     # Apply the same hint budget to every source, keeping the full transcripts
@@ -300,7 +362,9 @@ def _public_context(context: dict[str, Any], max_characters: int) -> dict[str, A
     for spoken_limit in (8, 4, 2, 0):
         for asset in public.get("assets", []):
             story_index = asset.get("story_index")
-            if not isinstance(story_index, dict) or not isinstance(story_index.get("moments"), list):
+            if not isinstance(story_index, dict) or not isinstance(
+                story_index.get("moments"), list
+            ):
                 continue
             moments = story_index["moments"]
             spoken_count = 0
@@ -314,7 +378,10 @@ def _public_context(context: dict[str, Any], max_characters: int) -> dict[str, A
             if len(retained_moments) < len(moments):
                 story_index["moments_truncated"] = True
             story_index["moments"] = retained_moments
-        if len(json.dumps(public, ensure_ascii=False, separators=(",", ":"))) <= max_characters:
+        if (
+            len(json.dumps(public, ensure_ascii=False, separators=(",", ":")))
+            <= max_characters
+        ):
             return public
 
     # Share the remaining budget across sources and across each source's
@@ -330,7 +397,9 @@ def _public_context(context: dict[str, Any], max_characters: int) -> dict[str, A
     base_size = len(json.dumps(public, ensure_ascii=False, separators=(",", ":")))
     remaining = max_characters - base_size
     if remaining < 0:
-        raise ProviderResponseError("editor inventory exceeds the configured context limit after compaction")
+        raise ProviderResponseError(
+            "editor inventory exceeds the configured context limit after compaction"
+        )
     queues = []
     for segments in originals:
         # Endpoints first, then recursively fill the largest temporal gaps.
@@ -352,7 +421,9 @@ def _public_context(context: dict[str, Any], max_characters: int) -> dict[str, A
                 continue
             segment_index = queue.pop(0)
             segment = originals[index][segment_index]
-            cost = len(json.dumps(segment, ensure_ascii=False, separators=(",", ":"))) + 1
+            cost = (
+                len(json.dumps(segment, ensure_ascii=False, separators=(",", ":"))) + 1
+            )
             if cost <= remaining:
                 retained[index].add(segment_index)
                 remaining -= cost

@@ -1,3 +1,14 @@
+from app.finishing_tools import (
+    apply_graph_finishing,
+    finish_caption_events,
+    selected_picture_layers,
+    picture_layer_inputs,
+    append_picture_layers,
+    audio_join_sources,
+    audio_join_inputs,
+    clip_audio_window,
+    assemble_clip_graph,
+)
 import hashlib
 import json
 import os
@@ -203,12 +214,12 @@ def caption_events(
     inventory = {str(asset["asset_id"]): asset for asset in assets}
     events: list[dict[str, Any]] = []
     timeline_start = 0.0
-    for clip in plan.clips:
+    for index,clip in enumerate(plan.clips):
         source_in = float(clip.source_in)
         source_out = float(clip.source_out)
         asset = inventory[str(clip.asset_id)]
         events.extend(
-            clip_caption_events(asset, source_in, source_out, timeline_start, corrections)
+            clip_caption_events(asset, *clip_audio_window(plan,index,timeline_start), corrections)
         )
         timeline_start += source_out - source_in
     return events
@@ -286,10 +297,15 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
     lines = [header]
     for event in events:
+        override = ""
+        if event.get("position"):
+            positions = {"lower_safe": (2, round(height*.72)), "middle": (5, round(height*.48)), "upper": (8, round(height*.14))}
+            align,y = positions.get(event["position"], (alignment, height-vertical_margin))
+            override = f"{{\\an{align}\\pos({width//2},{y})}}"
         lines.append(
             "Dialogue: 0,"
             f"{_ass_timestamp(float(event['start']))},{_ass_timestamp(float(event['end']))},"
-            f"GMBlue,,0,0,0,,{_ass_text(str(event['text']))}\n"
+            f"GMBlue,,0,0,0,,{override}{_ass_text(str(event['text']))}\n"
         )
     return "".join(lines)
 
@@ -370,6 +386,7 @@ def _ffmpeg_filter(
     frames_per_second: int,
     music_input_index: int | None = None,
     hdr_modes: list[str | None] | None = None,
+    join_sources: list[dict] | None = None,
 ) -> str:
     filters: list[str] = []
     concat_inputs: list[str] = []
@@ -407,7 +424,7 @@ def _ffmpeg_filter(
         filters.append(audio + f"[a{index}]")
         concat_inputs.extend((f"[v{index}]", f"[a{index}]"))
     filters.append(
-        "".join(concat_inputs) + f"concat=n={len(plan.clips)}:v=1:a=1[vcat][acat]"
+        assemble_clip_graph(plan,concat_inputs,frames_per_second)
     )
     safe_caption_path = str(captions_path).replace("\\", r"\\").replace(":", r"\:").replace("'", r"\'")
     filters.append(f"[vcat]subtitles=filename='{safe_caption_path}'[vout]")
@@ -436,7 +453,7 @@ def _ffmpeg_filter(
         filters.append(
             "[voice][ducked]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]"
         )
-    return ";".join(filters)
+    return apply_graph_finishing(";".join(filters), plan, width=width, height=height, fps=frames_per_second, join_sources=join_sources)
 
 
 def _ffmpeg_failure_detail(stderr: str) -> str:
@@ -478,6 +495,7 @@ def _render_video(
     music_source: Path | None = None,
     effect_sources: list[dict[str, Any]] | None = None,
     broll_sources: list[dict[str, Any]] | None = None,
+    picture_layers: list[dict[str, Any]] | None = None,
 ) -> str:
     common = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-y"]
     for source, source_in, source_out in sources:
@@ -485,12 +503,16 @@ def _render_video(
             ["-ss", f"{source_in:.3f}", "-t", f"{source_out - source_in:.3f}", "-i", str(source)]
         )
     if music_source is not None:
-        common.extend(["-stream_loop", "-1", "-i", str(music_source)])
+        common.extend(["-stream_loop", "-1", *(["-ss", f"{plan.finishing.music_start_seconds:.3f}"] if plan.finishing and plan.finishing.music_start_seconds else []), "-i", str(music_source)])
     effects = effect_sources or []
     common.extend(effect_input_arguments(effects))
     overlays = broll_sources or []
     common.extend(broll_input_arguments(overlays))
-    if overlays:
+    layers = picture_layers or []
+    common.extend(picture_layer_inputs(layers))
+    joins = audio_join_sources(plan,[source[0] for source in sources],len(sources)+(1 if music_source else 0)+len(effects)+len(overlays)+len(layers))
+    common.extend(audio_join_inputs(joins))
+    if overlays or layers:
         common.extend(["-t", f"{sum(float(clip.source_out - clip.source_in) for clip in plan.clips):.3f}"])
     probe_cache: dict[Path, str | None] = {}
     hdr_modes: list[str | None] = []
@@ -501,16 +523,16 @@ def _render_video(
     common.extend(
         [
             "-filter_complex",
-            append_effect_filters(append_broll_filters(_ffmpeg_filter(
+            append_picture_layers(append_effect_filters(append_broll_filters(_ffmpeg_filter(
                 plan,
                 captions_path,
                 width=width,
                 height=height,
                 frames_per_second=frames_per_second,
                 music_input_index=len(sources) if music_source is not None else None,
-                hdr_modes=hdr_modes,
+                hdr_modes=hdr_modes, join_sources=joins,
             ), overlays, width=width, height=height, fps=frames_per_second), effects, width=width, height=height,
-                total_duration=sum(float(clip.source_out - clip.source_in) for clip in plan.clips)),
+                total_duration=sum(float(clip.source_out - clip.source_in) for clip in plan.clips)), layers, width=width, height=height, fps=frames_per_second),
             "-map",
             "[vout]",
             "-map",
@@ -647,6 +669,7 @@ def render_edit_preview(
         caption_events(plan, context["assets"], caption_corrections),
         float(plan.caption_timing_offset_seconds),
     )
+    events = finish_caption_events(events, plan.finishing)
     _atomic_text(
         captions_path,
         render_ass(
@@ -669,6 +692,7 @@ def render_edit_preview(
         music_source=music_source,
         effect_sources=effect_sources,
         broll_sources=broll_sources,
+        picture_layers=selected_picture_layers(context,plan,settings,len(sources)+(1 if music_source else 0)+len(effect_sources)+len(broll_sources)),
     )
 
     document = plan.model_dump(mode="json")
@@ -855,6 +879,7 @@ def render_final_delivery(
         caption_events(plan, context["assets"], caption_corrections),
         float(plan.caption_timing_offset_seconds),
     )
+    events = finish_caption_events(events, plan.finishing)
     _atomic_text(
         captions_ass_path,
         render_ass(
@@ -880,6 +905,7 @@ def render_final_delivery(
         music_source=music_source,
         effect_sources=effect_sources,
         broll_sources=broll_sources,
+        picture_layers=selected_picture_layers(context,plan,settings,len(sources)+(1 if music_source else 0)+len(effect_sources)+len(broll_sources)),
     )
     technical_probe = probe_media(video_path, settings.analysis_command_timeout_seconds)
     video_stream = next(

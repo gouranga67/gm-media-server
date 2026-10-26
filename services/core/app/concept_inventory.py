@@ -1,3 +1,4 @@
+from app.source_evidence import product_mentions
 """Compact local discovery inventory and source-backed concept validation."""
 import json
 import math
@@ -65,18 +66,24 @@ def balanced_sources(rows: list[dict], focus: str, limit: int = MAX_SOURCES) -> 
 
 def public_inventory(inventory: dict) -> dict:
     assets = []
+    compact = bool(inventory.get("compact_metadata"))
     for source in inventory["assets"]:
         assets.append({"asset_id": source["asset_id"], "name": source["library_name"][:96],
                        "project": source["project_name"][:48], "mime_type": source["mime_type"],
                        "role": source["library_role"], "notes": source["notes"][:64],
                        "tags": [tag[:32] for tag in source["tags"][:5]], "used_in_jobs": source["job_uses"],
                        "category": source.get("library_category", "auto"),
-                       "recognized_text": source.get("recognized_text", [])})
+                       "recognized_text": source.get("recognized_text", [])[:2]})
+    if compact:
+        assets = [{key:value for key,value in asset.items() if key in {"asset_id","name","mime_type","role","category","recognized_text"}} for asset in assets]
+        for asset in assets:
+            asset["name"] = asset["name"][:48]
+            asset["recognized_text"] = [text[:64] for text in asset["recognized_text"][:1]]
     return {"focus": inventory.get("focus", ""), "audience": inventory.get("audience", ""), "reel_kind": inventory.get("reel_kind", "story"),
-            "assets": assets, "evidence": inventory["evidence"], "recent_concepts": inventory.get("recent_concepts", [])}
+            "metadata_compacted": compact, "product_mentions": inventory.get("product_mentions", []), "assets": assets, "evidence": inventory["evidence"], "recent_concepts": inventory.get("recent_concepts", [])}
 
 
-def compact_inventory(rows: list[dict], segments: list[dict], payload: ConceptRequestCreate, recent: list[dict] | None = None) -> dict:
+def compact_inventory(rows: list[dict], segments: list[dict], payload: ConceptRequestCreate, recent: list[dict] | None = None, products: list[dict] | None = None) -> dict:
     sources = []
     by_asset = defaultdict(list)
     bloopers = payload.reel_kind == "bloopers"
@@ -102,7 +109,7 @@ def compact_inventory(rows: list[dict], segments: list[dict], payload: ConceptRe
                         "project_name": row["project_name"], "mime_type": row["mime_type"],
                         "library_role": row["media_role"], "notes": str(row.get("notes") or "")[:400],
                         "library_category": row.get("media_category") or "auto",
-                        "recognized_text": [line["text"] for line in (derived.get("ocr") or {}).get("lines", [])[:12]],
+                        "recognized_text": [line["text"][:96] for line in (derived.get("ocr") or {}).get("lines", [])[:4]],
                         "tags": row.get("tags") or [], "job_uses": int(row.get("job_uses") or 0),
                         "_preview_key": derived.get("preview") or derived.get("thumbnail"),
                         "_contact_sheet_key": derived.get("contact_sheet"),
@@ -111,7 +118,12 @@ def compact_inventory(rows: list[dict], segments: list[dict], payload: ConceptRe
                         "_storage_key": row.get("storage_key")})
     inventory = {"focus": payload.focus, "audience": payload.audience, "reel_kind": payload.reel_kind,
                  "assets": sources, "evidence": [], "recent_concepts": (recent or [])[:6]}
+    text = " ".join([*(str(segment.get("text", "")) for segment in segments), *(str(row.get("display_name", "")) + " " + str(row.get("notes", "")) for row in rows)])
+    inventory["product_mentions"] = [item["name"] for item in product_mentions(text, products or [])]
     used = len(json.dumps(public_inventory(inventory), ensure_ascii=False))
+    if used > MAX_INVENTORY_CHARACTERS - 6000:
+        inventory["compact_metadata"] = True
+        used = len(json.dumps(public_inventory(inventory), ensure_ascii=False))
     eligible = [source for source in sources if source["has_video"] and source["library_role"] != "broll"]
     queues = []
     for source in eligible:
@@ -163,10 +175,13 @@ def load_inventory(database: Any, payload: ConceptRequestCreate) -> tuple[dict, 
         WHERE asset_id=ANY(%s) AND segment_kind='transcript'
         ORDER BY asset_id, start_seconds, segment_index
     """, ([row["id"] for row in chosen],)).fetchall()
+    excluded = database.execute("SELECT asset_id,start_seconds,end_seconds FROM asset_range_annotations WHERE asset_id=ANY(%s) AND role='avoid'", ([row["id"] for row in chosen],)).fetchall()
+    segments = [segment for segment in segments if not any(str(mark["asset_id"]) == str(segment["asset_id"]) and max(float(mark["start_seconds"]),float(segment["start_seconds"])) < min(float(mark["end_seconds"]),float(segment["end_seconds"])) for mark in excluded)]
     prior = database.execute("SELECT concepts FROM reel_concept_requests WHERE status='ready' AND reel_kind=%s AND (%s::uuid IS NULL OR collection_id=%s) ORDER BY created_at DESC LIMIT 3", (payload.reel_kind, payload.collection_id, payload.collection_id)).fetchall()
     recent = [{"title": option["title"][:100], "speech_evidence_ids": [beat["evidence_id"] for beat in option["script"][:10]]}
               for row in prior for option in row["concepts"]][:6]
-    inventory = compact_inventory(chosen, list(segments), payload, recent=recent)
+    products = list(database.execute("SELECT id,name,aliases FROM source_products ORDER BY name LIMIT 100").fetchall())
+    inventory = compact_inventory(chosen, list(segments), payload, recent=recent, products=products)
     coverage = {"unique_sources_available": len({row["sha256"] for row in rows}),
                 "sources_considered": len(chosen), "speech_passages": len(inventory["evidence"]),
                 "inventory_character_limit": MAX_INVENTORY_CHARACTERS,

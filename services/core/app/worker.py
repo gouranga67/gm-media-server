@@ -30,7 +30,7 @@ from app.editor_context import build_editor_context
 from app.editor_provider import create_edit_plan, list_chatgpt_models
 from app.finalize_upload import finalize_original, upload_source_path
 from app.media_analysis import ANALYSIS_VERSION, analysis_profile, analyze_asset, atomic_write, resolve_source
-from app.runtime_metrics import measure_task
+from app.runtime_metrics import measure_task, measure_processing
 from app.productization import assert_ai_budget
 from app.story_intelligence import STORY_INTELLIGENCE_VERSION, build_story_moments
 from app.take_quality import editing_policy
@@ -1021,6 +1021,9 @@ def process_one_edit(state: WorkerState) -> bool:
                     if adjustments
                     else previous_plan
                 )
+                if run.get("finishing_settings") is not None:
+                    from app.finishing_tools import FinishingTools
+                    proposed = proposed.model_copy(update={"schema_version": "1.5", "finishing": FinishingTools.model_validate(run["finishing_settings"])}, deep=True)
                 caption_settings = dict(run.get("caption_settings") or {})
                 if caption_settings:
                     proposed = proposed.model_copy(
@@ -1041,7 +1044,9 @@ def process_one_edit(state: WorkerState) -> bool:
                     proposed = proposed.model_copy(update={"broll": []}, deep=True)
                 provenance = {
                     "provider": (
-                        "local_timeline"
+                        "local_finishing"
+                        if run.get("finishing_settings") is not None
+                        else "local_timeline"
                         if adjustments
                         else "local_caption_layout"
                         if caption_settings
@@ -1056,7 +1061,9 @@ def process_one_edit(state: WorkerState) -> bool:
                 }
             else:
                 assert_ai_budget()
-                proposed, provenance = create_edit_plan(context)
+                with measure_processing("model_planning") as timing:
+                    timing["did_work"] = True
+                    proposed, provenance = create_edit_plan(context)
                 proposed = _guard_generated_broll(context, proposed)
             request_kind = "revision" if run.get("based_on_run_id") else "initial_plan"
             _record_plan_usage(run, provenance, request_kind)
@@ -1122,7 +1129,9 @@ def process_one_edit(state: WorkerState) -> bool:
                         "rejected_plan": repaired_document,
                     }
                     assert_ai_budget()
-                    proposed, provenance = create_edit_plan(context)
+                    with measure_processing("model_planning") as timing:
+                        timing["did_work"] = True
+                        proposed, provenance = create_edit_plan(context)
                     proposed = _guard_generated_broll(context, proposed)
                     _record_plan_usage(run, provenance, "repair")
                     final_document, final_repairs = repair_predictable_plan_defaults(
@@ -1195,23 +1204,27 @@ def process_one_edit(state: WorkerState) -> bool:
                     context["revision_report"]["notice"] = ""
 
         if isinstance(plan, MontageEditPlan):
-            manifest = render_montage_preview(
-                context,
-                plan,
-                int(run["version"]),
-                provider,
-                model,
-                list(run.get("caption_corrections") or []),
-            )
+            with measure_processing("rendering") as timing:
+                timing["did_work"] = True
+                manifest = render_montage_preview(
+                    context,
+                    plan,
+                    int(run["version"]),
+                    provider,
+                    model,
+                    list(run.get("caption_corrections") or []),
+                )
         else:
-            manifest = render_edit_preview(
-                context,
-                plan,
-                int(run["version"]),
-                provider,
-                model,
-                list(run.get("caption_corrections") or []),
-            )
+            with measure_processing("rendering") as timing:
+                timing["did_work"] = True
+                manifest = render_edit_preview(
+                    context,
+                    plan,
+                    int(run["version"]),
+                    provider,
+                    model,
+                    list(run.get("caption_corrections") or []),
+                )
         with connection() as database:
             database.execute(
                 """
@@ -1349,25 +1362,29 @@ def process_one_final_export(state: WorkerState) -> bool:
         if approved_at is None:
             raise RuntimeError("the selected edit version is not approved")
         if isinstance(plan, MontageEditPlan):
-            manifest = render_montage_delivery(
-                context,
-                plan,
-                int(export["version"]),
-                str(export["provider"]),
-                str(export["model"]),
-                list(export.get("caption_corrections") or []),
-                approved_at.isoformat(),
-            )
+            with measure_processing("rendering") as timing:
+                timing["did_work"] = True
+                manifest = render_montage_delivery(
+                    context,
+                    plan,
+                    int(export["version"]),
+                    str(export["provider"]),
+                    str(export["model"]),
+                    list(export.get("caption_corrections") or []),
+                    approved_at.isoformat(),
+                )
         else:
-            manifest = render_final_delivery(
-                context,
-                plan,
-                int(export["version"]),
-                str(export["provider"]),
-                str(export["model"]),
-                list(export.get("caption_corrections") or []),
-                approved_at.isoformat(),
-            )
+            with measure_processing("rendering") as timing:
+                timing["did_work"] = True
+                manifest = render_final_delivery(
+                    context,
+                    plan,
+                    int(export["version"]),
+                    str(export["provider"]),
+                    str(export["model"]),
+                    list(export.get("caption_corrections") or []),
+                    approved_at.isoformat(),
+                )
         outputs = manifest["outputs"]
         with connection() as database:
             database.execute(
@@ -1536,13 +1553,17 @@ def process_one_delivery_variant(state: WorkerState) -> bool:
             "target_duration_seconds": variant["target_duration_seconds"],
         }
         if isinstance(plan, MontageEditPlan):
-            manifest = render_montage_delivery(
-                *arguments, delivery_slug=slug, variant_metadata=variant_metadata
-            )
+            with measure_processing("rendering") as timing:
+                timing["did_work"] = True
+                manifest = render_montage_delivery(
+                    *arguments, delivery_slug=slug, variant_metadata=variant_metadata
+                )
         else:
-            manifest = render_final_delivery(
-                *arguments, delivery_slug=slug, variant_metadata=variant_metadata
-            )
+            with measure_processing("rendering") as timing:
+                timing["did_work"] = True
+                manifest = render_final_delivery(
+                    *arguments, delivery_slug=slug, variant_metadata=variant_metadata
+                )
         outputs = manifest["outputs"]
         with connection() as database:
             database.execute(

@@ -16,6 +16,8 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { HookAuditions } from "./hook-auditions";
+import { FinishingWorkspace } from "./finishing-workspace";
 import { PreciseClipEditor } from "./precise-clip-editor";
 import { EditFeedbackCard } from "@/app/_components/edit-feedback-card";
 import { RenderQualityCard } from "@/app/_components/render-quality-card";
@@ -297,7 +299,7 @@ export function JobReviewControls({
       <RenderQualityCard review={currentFinal.manifest.quality_review} />
       <section className="space-y-4 rounded-md border border-[#BFE3FF] bg-white p-5">
         <div>
-          <p className="flex items-center gap-2 font-mono text-xs font-bold tracking-wide text-[#3A8F63] uppercase">
+          <p className="flex items-center gap-2 font-mono text-xs font-bold tracking-wide text-[#215B43] uppercase">
             <CheckIcon aria-hidden="true" className="size-4" /> Final delivery ready
           </p>
           <h2 className="mt-2 text-xl font-bold text-[#173F5F]">Download the finished {deliverable}</h2>
@@ -384,6 +386,13 @@ export function JobReviewControls({
         </div>
         {error ? <p className="text-xs text-[#A23B2A]" role="alert">{error}</p> : null}
       </section>
+      <details className="rounded-md border border-[#D7D9D3] bg-white p-4">
+        <summary className="min-h-11 cursor-pointer content-center text-sm font-bold text-[#173F5F]">Make another version</summary>
+        <p className="my-3 text-xs leading-5 text-[#666862]">A new preview keeps this delivery available. Review the new version before exporting again.</p>
+        <HookAuditions key={`delivery-hooks-${run.version}`} jobId={jobId} version={run.version} onUpdated={onUpdated} />
+        <FinishingWorkspace key={`delivery-tools-${run.version}`} jobId={jobId} version={run.version} clips={editorialTimeline} onUpdated={onUpdated} />
+        {editorialTimeline.map((clip) => <PreciseClipEditor key={`delivery-clip-${run.version}-${clip.clip_id}`} jobId={jobId} version={run.version} clip={clip} onUpdated={onUpdated} />)}
+      </details>
       <EditFeedbackCard editRunId={run.id} initialFeedback={initialFeedback} jobId={jobId} key={run.id} onSaved={onUpdated} version={run.version} />
       </div>
     );
@@ -442,6 +451,8 @@ export function JobReviewControls({
             {storyAssessment.duplicate_idea_groups.length ? <p className="mt-2 text-[11px] text-[#666862]">Repeated ideas detected: {storyAssessment.duplicate_idea_groups.length}. The editor was instructed to choose one strong version of each.</p> : null}
           </div>
         ) : null}
+        <HookAuditions key={`hooks-${run.version}`} jobId={jobId} version={run.version} onUpdated={onUpdated} />
+        <FinishingWorkspace key={run.version} jobId={jobId} version={run.version} clips={editorialTimeline} onUpdated={onUpdated} />
         <div className="mb-5">
           <p className="font-mono text-xs font-bold tracking-wide text-[#173F5F] uppercase">Edit breakdown</p>
           <p className="mt-2 text-sm text-[#666862]">Every change here makes a new local preview with zero additional model tokens.</p>

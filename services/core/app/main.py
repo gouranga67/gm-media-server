@@ -16,6 +16,8 @@ from app.editing import router as editing_router
 from app.library import router as library_router
 from app.library_organization import router as library_organization_router
 from app.learning import router as learning_router
+from app.learning_lab import router as learning_lab_router
+from app.pilot_readiness import router as pilot_readiness_router
 from app.projects import router as projects_router
 from app.productization import router as productization_router
 from app.upload_hooks import router as upload_hooks_router
@@ -44,6 +46,8 @@ app.include_router(editing_router)
 app.include_router(library_router)
 app.include_router(library_organization_router)
 app.include_router(knowledge_router)
+app.include_router(learning_lab_router)
+app.include_router(pilot_readiness_router)
 app.include_router(concepts_router)
 app.include_router(learning_router)
 app.include_router(upload_hooks_router)

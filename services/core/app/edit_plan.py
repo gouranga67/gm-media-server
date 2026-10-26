@@ -10,6 +10,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 
 from app.take_quality import validate_story_content
+from app.finishing_tools import FinishingTools, validate_finishing, retime_finishing
 
 
 EDIT_PLAN_SCHEMA_VERSION = "1.4"
@@ -32,7 +33,7 @@ class EditClip(BaseModel):
     source_in: float = Field(ge=0)
     source_out: float = Field(gt=0)
     crop: Literal["center_fill"]
-    transition: Literal["cut", "dip_to_black"] = "cut"
+    transition: Literal["cut", "dip_to_black", "cross_dissolve"] = "cut"
     visual_preset: Literal[
         "standard",
         "punch_in",
@@ -78,7 +79,9 @@ class _CompatibleEditPlan(BaseModel):
     @model_serializer(mode="wrap")
     def serialize_legacy_plan(self, handler: Any) -> dict[str, Any]:
         document = handler(self)
-        if document.get("schema_version") != "1.4" and not document.get("broll"):
+        if document.get("finishing") is None:
+            document.pop("finishing", None)
+        if document.get("schema_version") not in {"1.4", "1.5"} and not document.get("broll"):
             document.pop("broll", None)
         return document
 
@@ -86,7 +89,7 @@ class _CompatibleEditPlan(BaseModel):
 class TalkingHeadEditPlan(_CompatibleEditPlan):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal["1.0", "1.1", "1.2", "1.3", "1.4"]
+    schema_version: Literal["1.0", "1.1", "1.2", "1.3", "1.4", "1.5"]
     recipe: Literal["talking_head"]
     clips: list[EditClip] = Field(min_length=1, max_length=MAX_CLIPS)
     caption_style: Literal["clean_blue_v1"]
@@ -100,6 +103,7 @@ class TalkingHeadEditPlan(_CompatibleEditPlan):
     caption_timing_offset_seconds: float = Field(default=0.0, ge=-0.5, le=0.5)
     effects: list[CreativeEffectCue] = Field(default_factory=list, max_length=8)
     broll: list[BrollCue] = Field(default_factory=list, max_length=8)
+    finishing: FinishingTools | None = None
 
 
 class MontageClip(BaseModel):
@@ -111,7 +115,7 @@ class MontageClip(BaseModel):
     source_out: float = Field(ge=0)
     duration: float = Field(ge=0.5, le=8.0)
     crop: Literal["center_fill"]
-    transition: Literal["cut", "dip_to_black"] = "cut"
+    transition: Literal["cut", "dip_to_black", "cross_dissolve"] = "cut"
     visual_preset: Literal[
         "standard",
         "punch_in",
@@ -128,7 +132,7 @@ class MontageClip(BaseModel):
 class MontageEditPlan(_CompatibleEditPlan):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal["1.0", "1.1", "1.2", "1.3", "1.4"]
+    schema_version: Literal["1.0", "1.1", "1.2", "1.3", "1.4", "1.5"]
     recipe: Literal["montage"]
     clips: list[MontageClip] = Field(min_length=2, max_length=MAX_MONTAGE_CLIPS)
     audio_preset: Literal["montage_mix_v1"]
@@ -141,6 +145,7 @@ class MontageEditPlan(_CompatibleEditPlan):
     caption_timing_offset_seconds: float = Field(default=0.0, ge=-0.5, le=0.5)
     effects: list[CreativeEffectCue] = Field(default_factory=list, max_length=8)
     broll: list[BrollCue] = Field(default_factory=list, max_length=8)
+    finishing: FinishingTools | None = None
 
 
 EditPlan: TypeAlias = TalkingHeadEditPlan | MontageEditPlan
@@ -205,7 +210,13 @@ def derive_duration_variant(plan: EditPlan, target_seconds: int) -> EditPlan:
             if source_cue.media_kind == "video":
                 updates["source_out"] = source_cue.source_in + duration
             broll.append(source_cue.model_copy(update=updates, deep=True))
-    return plan.model_copy(update={"clips": clips, "effects": effects, "broll": broll}, deep=True)
+    finishing = plan.finishing.model_copy(update={"audio_joins": []}, deep=True) if plan.finishing else None
+    tools = retime_finishing(finishing, [[0,variant_duration,0]], clips,
+        [(i,0,float(c.duration if isinstance(plan,MontageEditPlan) else c.source_out-c.source_in)) for i,c in enumerate(clips)])
+    if tools and plan.finishing:
+        tools.audio_joins = [join.model_copy(update={"tail_seconds": min(join.tail_seconds, max(0, variant_duration-sum(float(c.duration if isinstance(plan,MontageEditPlan) else c.source_out-c.source_in) for c in clips[:join.clip_index+1])))})
+                            for join in plan.finishing.audio_joins if join.clip_index < len(clips)]
+    return plan.model_copy(update={"clips": clips, "effects": effects, "broll": broll, "finishing":tools}, deep=True)
 
 
 def source_word_gaps(
@@ -345,6 +356,12 @@ def apply_timeline_adjustments(
             if replacement_id not in inventory:
                 raise ValueError("replacement take must belong to this job")
             clips[index].asset_id = UUID(replacement_id)
+            if isinstance(plan, MontageEditPlan):
+                is_image = str(inventory[replacement_id].get("mime_type") or "").startswith("image/")
+                clips[index].media_kind = "image" if is_image else "video"
+                clips[index].include_source_audio = not is_image and bool(inventory[replacement_id].get("has_audio"))
+                clips[index].source_audio_gain_db = 0
+
         if adjustment.get("source_in") is not None:
             clips[index].source_in = float(adjustment["source_in"])
         if adjustment.get("source_out") is not None:
@@ -367,6 +384,10 @@ def apply_timeline_adjustments(
             clips[index:index+1] = [left, right]
             origins[index:index+1] = [origins[index], origins[index]]
             handles[index:index+1] = [handles[index], handles[index] + ":split"]
+        if adjustment.get("transition") is not None:
+            if index == 0 and adjustment["transition"] != "cut":
+                raise ValueError("the first clip must begin with a cut")
+            clips[index].transition = adjustment["transition"]
         visual_preset = adjustment.get("visual_preset")
         if visual_preset is not None:
             clips[index].visual_preset = visual_preset
@@ -430,8 +451,13 @@ def apply_timeline_adjustments(
                         updates["source_out"] = cue.source_in + duration
                     broll.append(cue.model_copy(update=updates, deep=True))
                 break
+    tool_origins = [(next((i for i,original in enumerate(plan.clips) if original is old_clip),None),
+                     float(clip.source_in-old_clip.source_in),
+                     float(clip.duration if isinstance(plan,MontageEditPlan) else clip.source_out-clip.source_in))
+                    for clip,(_old_time,old_clip) in zip(clips,origins,strict=True)]
+    tools = retime_finishing(plan.finishing, mapping, clips, tool_origins)
     return plan.model_copy(
-        update={"clips": clips, "effects": effects, "broll": broll,
+        update={"clips": clips, "effects": effects, "broll": broll, "finishing":tools,
                 "editorial_summary": (plan.editorial_summary[:540] + " Adjusted in the local editorial workspace.")},
         deep=True,
     )
@@ -821,8 +847,8 @@ def _validate_broll(plan: EditPlan, assets: list[dict[str, Any]], duration: floa
         plan.broll = []
     if not plan.broll:
         return
-    if plan.schema_version != "1.4":
-        raise ValueError("B-roll overlays require edit-plan schema 1.4")
+    if plan.schema_version not in {"1.4", "1.5"}:
+        raise ValueError("B-roll overlays require edit-plan schema 1.4 or newer")
     if direction.get("edit_style") != "high_impact":
         raise ValueError("B-roll overlays require the High impact style")
     inventory = {str(asset["asset_id"]): asset for asset in assets}
@@ -894,6 +920,15 @@ def validate_edit_plan(
     creative_effects: list[dict[str, Any]] | None = None,
     enforce_story_quality: bool = False,
 ) -> EditPlan:
+    if enforce_story_quality:
+        for asset in assets:
+            avoided = [r for r in asset.get("source_evidence", {}).get("user_ranges", []) if r.get("role") == "avoid"]
+            for clip in document.get("clips", []) + document.get("broll", []):
+                if str(clip.get("asset_id")) != str(asset["asset_id"]):
+                    continue
+                a,b=float(clip.get("source_in",0)),float(clip.get("source_out",0))
+                if any(max(a,float(r["start_seconds"])) < min(b,float(r["end_seconds"])) for r in avoided):
+                    raise ValueError("new source selection overlaps a human-marked avoid range")
     if document.get("recipe") == "montage":
         return validate_montage_plan(
             document,
@@ -988,6 +1023,7 @@ def validate_edit_plan(
 
     _validate_effect_cues(plan, total_duration, direction, creative_effects or [])
     _validate_broll(plan, assets, total_duration, direction)
+    validate_finishing(plan, assets, music_tracks)
 
     for asset_id, asset_ranges in ranges.items():
         ordered = sorted(asset_ranges)
@@ -1122,6 +1158,7 @@ def validate_montage_plan(
             raise ValueError("the montage did not use the specifically selected music track")
     _validate_effect_cues(plan, total_duration, direction, creative_effects or [])
     _validate_broll(plan, assets, total_duration, direction)
+    validate_finishing(plan, assets, music_tracks)
     return plan
 
 

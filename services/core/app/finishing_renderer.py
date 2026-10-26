@@ -134,9 +134,18 @@ def finishing_manifest(context: dict[str, Any], plan: EditPlan) -> dict[str, Any
                 beats.append(round(timeline + at, 3))
                 at += 2.5
         timeline += duration
+    source_inventory = {str(asset["asset_id"]): asset for asset in context.get("assets", [])}
+    picture_layers = [{**layer.model_dump(mode="json"),
+                       "sha256": source_inventory[str(layer.asset_id)].get("sha256"),
+                       "source_name": source_inventory[str(layer.asset_id)].get("source_name"),
+                       "source_audio_used": False}
+                      for layer in plan.finishing.layers] if plan.finishing else []
     return {"mode": context["job"].get("edit_style"), "target_visual_beat_seconds": 2.5,
             "rhythmic_punch_beats": beats, "broll_count": len(plan.broll),
             "image_broll_framing": "contain_card_v1",
-            "creative_effect_count": len(plan.effects), "dialogue_timeline_preserved": True,
+            "creative_effect_count": len(plan.effects), "picture_timeline_preserved": True,
+            "dialogue_timeline_preserved": not bool(plan.finishing and plan.finishing.audio_joins),
+            "picture_layers": picture_layers, "speech_playback_rate": 1.0,
             "broll_selection_review": context.get("broll_selection_review", []),
+            "local_tools": plan.finishing.model_dump(mode="json") if plan.finishing else None,
             "additional_model_calls": 0}

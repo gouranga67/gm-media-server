@@ -11,8 +11,8 @@ CREATE UNIQUE INDEX source_products_name_idx ON source_products(lower(name));
 CREATE TABLE asset_range_annotations (
     id uuid PRIMARY KEY,
     asset_id uuid NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
-    start_seconds double precision NOT NULL CHECK (start_seconds>=0),
-    end_seconds double precision NOT NULL CHECK (end_seconds>start_seconds),
+    start_seconds double precision NOT NULL CHECK (start_seconds>=0 AND start_seconds<'Infinity'::float8),
+    end_seconds double precision NOT NULL CHECK (end_seconds>start_seconds AND end_seconds<'Infinity'::float8),
     role text NOT NULL CHECK (role IN ('talking','broll','product','reaction','avoid')),
     note text NOT NULL DEFAULT '' CHECK (length(note)<=1200),
     created_at timestamptz NOT NULL DEFAULT now()

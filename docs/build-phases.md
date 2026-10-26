@@ -34,21 +34,21 @@ The 2026-10-26 [system audit and roadmap](system-audit-and-roadmap.md) reviews t
 
 The current improvement-loop increment is Phase 17A: inspect the rendered file and retain a versioned report without changing the edit. Its remaining repair/evaluation ambitions are carried into proposed Phase 24. Preserve the current successful model and deterministic render path while measuring changes.
 
-## Proposed next build sequence
+## Continuous sprint status
 
 | Phase | Outcome | Status |
 |---|---|---|
 | 19 | Stage/cost measurement, fair scheduling, bounded frame extraction, analysis reuse and accessibility fixes | Source checkpoint implemented; live measurement pending |
 | 20 | Shared source evidence, product identity, OCR, complete thoughts and consistent retrieval | Source checkpoint implemented; live acceptance pending |
-| 21 | Unified studio navigation, shared media basket and precise transcript/audio/caption editing | In progress; navigation and precise trim/split checkpoint |
-| 22 | Purposeful cadence, framing, audio joins, transitions and cue-level finishing | Proposed |
-| 23 | Layered compositor, picture-in-picture, green-screen keying and a gated segmentation prototype | Proposed |
-| 24 | Scoped feedback lessons, held-out evaluation, reversible promotion and bounded repair | Proposed |
-| 25 | Real-user pilot, workspace isolation, onboarding and recovery acceptance | Proposed |
+| 21 | Unified studio navigation, shared media basket and precise transcript/audio/caption editing | Main source checkpoint implemented; live acceptance pending |
+| 22 | Purposeful cadence, framing, audio joins, transitions and cue-level finishing | Main local tools implemented; automatic tracking and shot matching remain gated |
+| 23 | Layered compositor, picture-in-picture, green-screen keying and a gated segmentation prototype | Compositor/keying implemented; learned segmentation remains unimplemented and gated |
+| 24 | Scoped feedback lessons, held-out evaluation, reversible promotion and bounded repair | Source checkpoint implemented; prospective playback evaluation pending |
+| 25 | Real-user pilot, workspace isolation, onboarding and recovery acceptance | Private pilot checklist/verifier implemented; human acceptance and public workspace isolation outstanding |
 
 Start with Phase 19 and the shared metadata contract in Phase 20, then deliver precise pause controls and the consolidated shell as the first Phase 21 slice. The audit records dependencies, acceptance criteria, current limitations and deferred ideas. No default model migration, whole-library reanalysis or automatic critique loop is part of this planning update.
 
-The [agent editing toolkit](agent-editing-toolkit.md) adds a CapCut capability comparison and concrete slices: 21A precise word/pause/take changes; 22A anchor animation, readable proof cards, cue captions and phrase audio; 22B independent audio/picture joins and controlled retiming; 22C selected-shot tracking, color/audio quality and hook auditions; then Phase 23 layered composition. These remain proposed work, with local processing and evidence reuse preferred over additional default model calls. Read the [toolkit PDF](GM-Studio-Agent-Editing-Toolkit.pdf) for the full shortlist.
+The [agent editing toolkit](agent-editing-toolkit.md) adds a CapCut capability comparison and concrete slices: 21A precise word/pause/take changes; 22A anchor animation, readable proof cards, cue captions and phrase audio; 22B independent audio/picture joins and controlled retiming; 22C selected-shot tracking, color/audio quality and hook auditions; then Phase 23 layered composition. The continuous sprint implements the main local-tool slices; its report identifies the unimplemented model/isolation gates and live checks. Local processing and evidence reuse remain preferred over additional default model calls. Read the [toolkit PDF](GM-Studio-Agent-Editing-Toolkit.pdf) for the full shortlist.
 
 ## Phase 0 — inventory and guardrails
 
