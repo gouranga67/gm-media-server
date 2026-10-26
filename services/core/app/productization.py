@@ -388,7 +388,7 @@ def managed_jobs(state: Literal["active", "archived", "all"] = "active", query: 
     with connection() as database:
         rows = database.execute(
             """
-            SELECT jobs.id, jobs.recipe, jobs.status, jobs.revision, jobs.created_at, jobs.updated_at,
+            SELECT jobs.id, jobs.recipe, jobs.reel_intent, jobs.status, jobs.revision, jobs.created_at, jobs.updated_at,
                    jobs.archived_at, jobs.output_aspect, jobs.target_duration_seconds,
                    projects.name AS project_name, projects.brief,
                    COALESCE(usage.requests,0) AS requests, COALESCE(usage.tokens,0) AS total_tokens,

@@ -186,10 +186,11 @@ def render_selected_concepts(request_id: UUID, payload: ConceptSelection, x_gm_u
                              (project_id, concept["title"], concept_brief(concept), session["privacy_mode"]))
             target = next((value for value in (20,30,45,60) if value >= concept["estimated_seconds"]), 60)
             database.execute("""INSERT INTO jobs (id,project_id,recipe,status,target_duration_seconds,edit_style,
-                music_mode,effect_level,target_platform,story_goal,audience,editor_model,reasoning_effort,output_aspect,created_by_login)
-                VALUES (%s,%s,'talking_head','planning',%s,'high_impact',%s,%s,%s,%s,%s,%s,'medium','vertical',%s)""",
+                music_mode,effect_level,target_platform,story_goal,audience,editor_model,reasoning_effort,output_aspect,created_by_login,reel_intent)
+                VALUES (%s,%s,'talking_head','planning',%s,'high_impact',%s,%s,%s,%s,%s,%s,'medium','vertical',%s,%s)""",
                              (job_id, project_id, target, payload.music_mode.value, payload.effect_level.value,
-                              payload.target_platform.value, concept["angle"][:1200], session["audience"], get_settings().chatgpt_model, actor_login(x_gm_user_login)))
+                              payload.target_platform.value, concept["angle"][:1200], session["audience"], get_settings().chatgpt_model, actor_login(x_gm_user_login),
+                              "bloopers" if session.get("reel_kind") == "bloopers" else "story"))
             for asset_id in concept["asset_ids"]:
                 database.execute("INSERT INTO job_assets (job_id,asset_id) VALUES (%s,%s)", (job_id, UUID(asset_id)))
             database.execute("INSERT INTO edit_runs (job_id,version) VALUES (%s,1)", (job_id,))

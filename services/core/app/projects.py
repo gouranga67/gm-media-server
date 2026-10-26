@@ -1001,11 +1001,11 @@ def create_job(
                     target_platform, must_include,
                     audience, story_goal, desired_feeling, ending_instruction,
                     editor_model, reasoning_effort, output_aspect, creative_profile_id,
-                    brand_kit_id, publishing_preset, created_by_login
+                    brand_kit_id, publishing_preset, created_by_login, reel_intent
                 )
                 VALUES (
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                 )
                 RETURNING *
                 """,
@@ -1031,6 +1031,7 @@ def create_job(
                     payload.brand_kit_id,
                     payload.publishing_preset.value,
                     actor_login(x_gm_user_login),
+                    payload.reel_intent.value,
                 ),
             ).fetchone()
     except ForeignKeyViolation as error:
@@ -1041,6 +1042,7 @@ def create_job(
         if row is None or (
             row["project_id"] != project_id
             or row["recipe"] != payload.recipe.value
+            or row.get("reel_intent", "auto") != payload.reel_intent.value
             or row["target_duration_seconds"] != payload.target_duration_seconds
             or row["edit_style"] != payload.edit_style.value
             or row["music_mode"] != payload.music_mode.value

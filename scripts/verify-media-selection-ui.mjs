@@ -276,6 +276,22 @@ async function chooseOption(selector, value) {
   assert.ok(select, `Missing select: ${selector}`);
   await act(async () => { select.value = value; select.dispatchEvent(new Event("change", { bubbles: true })); });
 }
+
+test("blooper purpose is separate from format and waits for explicit job submission", async () => {
+  await act(async () => root.render(React.createElement(NewJobForm)));
+  await waitFor(() => document.getElementById("reel-intent"));
+  await chooseOption("#reel-intent", "bloopers");
+  assert.match(document.body.textContent, /No sales payoff or call to action is required/);
+  assert.equal(posts("/jobs").length, 0);
+  await click(document.querySelector(`input[aria-label="Use ${serverAsset.source_name}"]`));
+  await type("#project-name", "Soap ad outtakes");
+  await type("#project-brief", "Keep the lost line and real reaction.");
+  await act(async () => document.querySelector("form").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+  await waitFor(() => posts("/jobs").length === 1);
+  assert.equal(posts("/jobs")[0].body.reel_intent, "bloopers");
+  assert.equal(posts("/jobs")[0].body.recipe, "talking_head");
+  assert.equal(posts("/preview").length, 0);
+});
 async function mountBrowser() {
   await act(async () => root.render(React.createElement(MediaLibrary)));
   await waitFor(() => document.querySelector('input[aria-label="Select Product introduction"]'));

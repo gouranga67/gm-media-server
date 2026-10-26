@@ -165,7 +165,7 @@ def usage_dashboard(days: int = Query(default=0, ge=0, le=3650)) -> dict[str, An
         ).fetchall()
         job_history = database.execute(
             """
-            SELECT jobs.id, projects.name AS project_name, jobs.recipe,
+            SELECT jobs.id, projects.name AS project_name, jobs.recipe, jobs.reel_intent,
                    jobs.status, jobs.created_at,
                    COALESCE(latest_usage.model, latest_run.model, jobs.editor_model) AS model,
                    count(ai_usage_events.id) AS requests,

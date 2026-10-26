@@ -10,6 +10,7 @@ from psycopg.types.json import Jsonb
 from pydantic import BaseModel, ConfigDict, Field
 from app.database import connection
 from app.productization import actor_login, require_owner
+from app.take_quality import editing_policy
 
 router = APIRouter(prefix="/api/v1/learning/lab", tags=["evaluated learning"])
 NOTE_RULES = {
@@ -35,6 +36,8 @@ NOTE_RULES = {
 def propose_from_notes(rows: list[dict]) -> list[dict]:
     grouped = defaultdict(list)
     for row in rows:
+        if editing_policy(row)["bloopers_requested"]:
+            continue
         for key, (pattern, _directive) in NOTE_RULES.items():
             allowed = {
                 "clean_pauses": {"edit", "story", "pacing"},
@@ -147,7 +150,8 @@ def propose(x_gm_user_login: str | None = Header(default=None)):
     require_owner(actor_login(x_gm_user_login))
     with connection() as database:
         rows = list(
-            database.execute("""SELECT f.id,f.job_id,f.note,f.scope,j.recipe,j.edit_style FROM edit_feedback f
+            database.execute("""SELECT f.id,f.job_id,f.note,f.scope,j.recipe,j.edit_style,j.reel_intent,
+            j.story_goal,j.must_include,j.ending_instruction,p.brief,p.name AS project_name FROM edit_feedback f
             JOIN jobs j ON j.id=f.job_id JOIN projects p ON p.id=j.project_id
             WHERE btrim(f.note)<>'' AND p.name !~* '^Phase[[:space:]]+[0-9]'
             ORDER BY f.updated_at DESC LIMIT 500""").fetchall()
@@ -186,15 +190,17 @@ def assert_holdout(database: Any, item: dict, job_id: UUID):
             detail="use a job with footage not used to propose this lesson; training sources are excluded from held-out evaluation",
         )
     job = database.execute(
-        "SELECT recipe,edit_style FROM jobs WHERE id=%s", (job_id,)
+        """SELECT j.recipe,j.edit_style,j.reel_intent,j.story_goal,j.must_include,j.ending_instruction,
+        p.brief,p.name AS project_name FROM jobs j JOIN projects p ON p.id=j.project_id WHERE j.id=%s""", (job_id,)
     ).fetchone()
     if (
         not job
+        or editing_policy(job)["bloopers_requested"]
         or str(job["recipe"]) != item["recipe"]
         or str(job["edit_style"]) != item["edit_style"]
     ):
         raise HTTPException(
-            status_code=409, detail="choose a job matching this lesson recipe and style"
+            status_code=409, detail="choose a non-blooper job matching this lesson recipe and style; clean-take lessons do not apply to outtakes"
         )
 
 

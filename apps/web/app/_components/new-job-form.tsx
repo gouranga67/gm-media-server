@@ -709,6 +709,7 @@ function NewJobFormContent() {
   const [privacyMode, setPrivacyMode] = useState<PrivacyMode>("hybrid");
   const [aiCopyAllowed, setAiCopyAllowed] = useState(false);
   const [recipe, setRecipe] = useState<Recipe>("talking_head");
+  const [reelIntent, setReelIntent] = useState<"auto" | "story" | "promotion" | "bloopers">("auto");
   const [targetDuration, setTargetDuration] = useState<TargetDuration>(45);
   const [editStyle, setEditStyle] = useState<EditStyle>("energetic");
   const [musicMode, setMusicMode] = useState<MusicMode>("none");
@@ -1200,6 +1201,7 @@ function NewJobFormContent() {
         const job = await createMediaJob(activeProjectId, {
           id: jobRequestIdRef.current,
           recipe,
+          reelIntent,
           targetDurationSeconds: targetDuration,
           editStyle,
           musicMode,
@@ -1332,12 +1334,12 @@ function NewJobFormContent() {
         </section>
 
         <fieldset className="space-y-4" disabled={formLocked}>
-          <legend className="sr-only">Recipe</legend>
-          <SectionHeading number="01">Recipe</SectionHeading>
+          <legend className="sr-only">Edit format and purpose</legend>
+          <SectionHeading number="01">Edit format</SectionHeading>
           <div className="space-y-2">
             <RecipeCard
               detail="20–60 sec · transcript-led"
-              name="Talking-head Reel"
+              name="Speech-led reel"
               onChange={selectRecipe}
               selected={recipe === "talking_head"}
               value="talking_head"
@@ -1349,6 +1351,26 @@ function NewJobFormContent() {
               selected={recipe === "montage"}
               value="montage"
             />
+          </div>
+          <p className="text-xs text-[#666862]">The format controls how footage is assembled. It does not make the reel an ad.</p>
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-[#173F5F]" htmlFor="reel-intent">REEL PURPOSE</label>
+            <select
+              className="h-12 w-full rounded-md border border-[#D7D9D3] bg-white px-3 text-sm"
+              id="reel-intent"
+              value={reelIntent}
+              onChange={(event) => setReelIntent(event.currentTarget.value as typeof reelIntent)}
+            >
+              <option value="auto">Follow my brief</option>
+              <option value="story">Story / explanation</option>
+              <option value="promotion">Product / promotion</option>
+              <option value="bloopers">Bloopers / outtakes</option>
+            </select>
+            <p className="text-xs leading-relaxed text-[#666862]">
+              {reelIntent === "bloopers"
+                ? "Keep the recorded setup, stumble and real reaction. No sales payoff or call to action is required."
+                : "Purpose guides the story; pacing, effects and publishing presets control presentation. Saved creative profiles do not change this choice."}
+            </p>
           </div>
         </fieldset>
 

@@ -323,6 +323,8 @@ def select_story_moments(
     moments: list[dict[str, Any]],
     query: str,
     limit: int = MAX_CONTEXT_MOMENTS,
+    *,
+    preserve_outtakes: bool = False,
 ) -> list[dict[str, Any]]:
     """Retrieve relevant, structurally useful moments while suppressing repetition."""
 
@@ -333,7 +335,7 @@ def select_story_moments(
     moments = [dict(moment) for moment in moments]
     for moment in moments:
         reason = production_chatter_reason(str(moment.get("text") or ""))
-        if moment.get("kind") == "spoken" and reason is not None and reason != "possible_script_discussion":
+        if not preserve_outtakes and moment.get("kind") == "spoken" and reason is not None and reason != "possible_script_discussion":
             moment["signals"] = [*(moment.get("signals") or []), "production_chatter"]
             moment["role_scores"] = {role: 0.0 for role in _ROLE_ORDER}
             moment["suggested_roles"] = []
@@ -349,6 +351,8 @@ def select_story_moments(
         intrinsic = float(moment.get("intrinsic_score") or 0)
         engagement = float(moment.get("engagement_score") or 0)
         base_scores[index] = intrinsic + engagement * 0.35 + relevance * 1.5
+        if preserve_outtakes and production_chatter_reason(str(moment.get("text") or "")):
+            base_scores[index] += 1.0
         if moment.get("kind") == "spoken" and "production_chatter" not in (moment.get("signals") or []):
             spoken_indexes.append(index)
 
@@ -362,7 +366,7 @@ def select_story_moments(
             remaining,
             key=lambda index: (
                 base_scores[index]
-                - 0.65 * max((_similarity(moments[index], moments[chosen]) for chosen in selected_indexes), default=0),
+                - (0 if preserve_outtakes else 0.65) * max((_similarity(moments[index], moments[chosen]) for chosen in selected_indexes), default=0),
                 -index,
             ),
         )
@@ -385,8 +389,23 @@ def select_story_moments(
     return selected[:limit]
 
 
-def build_story_assessment(moments: list[dict[str, Any]]) -> dict[str, Any]:
+def build_story_assessment(moments: list[dict[str, Any]], policy: dict[str, Any] | None = None) -> dict[str, Any]:
     """Summarize story coverage and source-backed alternatives for the editor."""
+
+    if policy and policy.get("bloopers_requested"):
+        return {
+            "version": STORY_INTELLIGENCE_VERSION,
+            "intent": "bloopers", "review_mode": "outtake_review",
+            "coverage": {}, "gaps": [], "candidate_moments": {},
+            "duplicate_idea_groups": [], "clean_spoken_edit_points": 0,
+            "source_moments_considered": len(moments), "hosted_model_calls": 0,
+            "recommendations": [
+                "Keep enough setup to understand the recorded stumble, restart or line loss.",
+                "Preserve its real reaction or recovery in source order; an unresolved question can be the ending.",
+                "Keep a short earned comic beat and trim empty waiting. A restart can be the joke, not a duplicate to remove.",
+                "Do not add a product benefit, sales payoff or call to action unless explicitly requested.",
+            ],
+        }
 
     candidates: dict[str, list[dict[str, Any]]] = {role: [] for role in _ROLE_ORDER}
     spoken = [moment for moment in moments if moment.get("kind") == "spoken"]

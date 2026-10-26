@@ -428,30 +428,32 @@ export function JobReviewControls({
           <div className="mb-5 rounded-md border border-[#BFE3FF] bg-[#EFF6FA] p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="font-mono text-[10px] font-bold tracking-wide text-[#174D73] uppercase">Source story hints</p>
-                <p className="mt-1 text-xs text-[#53646F]">Coverage in your uploaded footage, rather than a score of the finished edit.</p>
+                <p className="font-mono text-[10px] font-bold tracking-wide text-[#174D73] uppercase">{storyAssessment.review_mode === "outtake_review" ? "Blooper review guidance" : "Source story hints"}</p>
+                <p className="mt-1 text-xs text-[#53646F]">{storyAssessment.review_mode === "outtake_review"
+                  ? "Review the actual setup, stumble and reaction. These are playback questions, not an automatic comedy score."
+                  : "Coverage in your uploaded footage, rather than a score of the finished edit."}</p>
                 <p className="mt-1 text-xs leading-relaxed text-[#53646F]">
-                  {storyAssessment.source_moments_considered} source moments · {storyAssessment.clean_spoken_edit_points} clean speech edits · zero extra model calls
+                  {storyAssessment.source_moments_considered} source moments · {storyAssessment.review_mode !== "outtake_review" ? `${storyAssessment.clean_spoken_edit_points} clean speech edits · ` : ""}zero extra model calls
                 </p>
               </div>
               <span className="rounded-full bg-white px-2 py-1 font-mono text-[9px] font-bold text-[#174D73]">v{storyAssessment.version}</span>
             </div>
-            <div className="mt-3 flex flex-wrap gap-2">
+            {storyAssessment.review_mode !== "outtake_review" ? <div className="mt-3 flex flex-wrap gap-2">
               {(["hook", "context", "development", "payoff", "ending"] as const).map((role) => (
                 <span className={`rounded-full px-2 py-1 font-mono text-[9px] font-bold uppercase ${storyAssessment.coverage[role] ? "bg-[#E4F1E9] text-[#307455]" : "bg-[#FFF0EC] text-[#A23B2A]"}`} key={role}>
                   {storyAssessment.coverage[role] ? "✓" : "!"} {role}
                 </span>
               ))}
-            </div>
+            </div> : null}
             {storyAssessment.recommendations.length ? (
               <ul className="mt-3 space-y-1 text-xs leading-relaxed text-[#53646F]">
                 {storyAssessment.recommendations.map((recommendation) => <li key={recommendation}>• {recommendation}</li>)}
               </ul>
-            ) : <p className="mt-3 text-xs font-bold text-[#307455]">The selected evidence can support a complete story shape.</p>}
+            ) : storyAssessment.review_mode !== "outtake_review" ? <p className="mt-3 text-xs font-bold text-[#307455]">The selected evidence can support a complete story shape.</p> : null}
             {storyAssessment.duplicate_idea_groups.length ? <p className="mt-2 text-[11px] text-[#666862]">Repeated ideas detected: {storyAssessment.duplicate_idea_groups.length}. The editor was instructed to choose one strong version of each.</p> : null}
           </div>
         ) : null}
-        <HookAuditions key={`hooks-${run.version}`} jobId={jobId} version={run.version} onUpdated={onUpdated} />
+        {storyAssessment?.review_mode !== "outtake_review" ? <HookAuditions key={`hooks-${run.version}`} jobId={jobId} version={run.version} onUpdated={onUpdated} /> : null}
         <FinishingWorkspace key={run.version} jobId={jobId} version={run.version} clips={editorialTimeline} onUpdated={onUpdated} />
         <div className="mb-5">
           <p className="font-mono text-xs font-bold tracking-wide text-[#173F5F] uppercase">Edit breakdown</p>

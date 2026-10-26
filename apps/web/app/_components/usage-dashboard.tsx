@@ -22,8 +22,9 @@ function date(value: string) {
   return new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short" }).format(new Date(value));
 }
 
-function recipe(value: UsageJobSummary["recipe"]) {
-  return value === "montage" ? "Montage" : "Talking-head";
+function recipe(job: UsageJobSummary) {
+  const format = job.recipe === "montage" ? "Montage" : "Speech-led";
+  return job.reel_intent === "bloopers" ? `Bloopers · ${format}` : format;
 }
 
 function status(value: string) {
@@ -67,7 +68,7 @@ function JobRow({ job }: { readonly job: UsageJobSummary }) {
     <Link className="group block rounded-md border border-[#D7D9D3] bg-white p-4 transition-colors hover:bg-[#EFF6FA] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#173F5F] md:rounded-none md:border-x-0 md:border-t-0 md:p-0 md:last:border-b-0" href={`/jobs/${job.id}`}>
       <div className="grid grid-cols-1 gap-y-3 text-sm md:grid-cols-12 md:items-center md:gap-4 md:px-4 md:py-3">
         <div className="md:col-span-3"><div className="flex min-w-0 items-center gap-2"><p className="truncate font-bold text-[#173F5F] group-hover:underline group-hover:underline-offset-2">{job.project_name}</p>{job.history_kind === "verification" ? <span className="shrink-0 rounded-full bg-[#E9EDF0] px-2 py-0.5 font-mono text-[9px] font-bold text-[#53646F] uppercase">Test</span> : null}</div><p className="mt-0.5 font-mono text-[10px] text-[#666862]">{job.id.slice(0, 8)}</p></div>
-        <JobCell label="Recipe">{recipe(job.recipe)}</JobCell>
+        <JobCell label="Format">{recipe(job)}</JobCell>
         <div className="flex items-center justify-between md:col-span-2 md:justify-start"><MobileLabel>Status</MobileLabel><span className="inline-flex items-center gap-1.5"><span aria-hidden="true" className={`size-1.5 rounded-full ${jobStatus.dot}`} />{jobStatus.label}</span></div>
         <JobCell label="Date" mono narrow>{date(job.created_at)}</JobCell>
         <JobCell label="Model">{job.model ?? "No model call"}</JobCell>
@@ -139,7 +140,7 @@ export function UsageDashboard() {
               </div>
               {visibleJobs.length ? (
                 <div className="flex flex-col gap-3 md:gap-0 md:overflow-hidden md:rounded-md md:border md:border-[#D7D9D3] md:bg-white">
-                  <div className="hidden grid-cols-12 gap-4 border-b border-[#D7D9D3] px-4 py-3 font-mono text-[10px] font-bold text-[#666862] uppercase md:grid"><div className="col-span-3">Job</div><div className="col-span-2">Recipe</div><div className="col-span-2">Status</div><div>Date</div><div className="col-span-2">Model</div><div className="text-right">Requests</div><div className="text-right">Tokens</div></div>
+                  <div className="hidden grid-cols-12 gap-4 border-b border-[#D7D9D3] px-4 py-3 font-mono text-[10px] font-bold text-[#666862] uppercase md:grid"><div className="col-span-3">Job</div><div className="col-span-2">Format</div><div className="col-span-2">Status</div><div>Date</div><div className="col-span-2">Model</div><div className="text-right">Requests</div><div className="text-right">Tokens</div></div>
                   {visibleJobs.map((job) => <JobRow job={job} key={job.id} />)}
                 </div>
               ) : <div className="rounded-md border border-[#D7D9D3] bg-white p-5 text-sm text-[#666862]">No {jobFilter === "verification" ? "test" : jobFilter === "editing" ? "editing" : ""} jobs in this period.</div>}

@@ -32,7 +32,7 @@ from app.finalize_upload import finalize_original, upload_source_path
 from app.media_analysis import ANALYSIS_VERSION, analysis_profile, analyze_asset, atomic_write, resolve_source
 from app.runtime_metrics import measure_task, measure_processing
 from app.productization import assert_ai_budget
-from app.story_intelligence import STORY_INTELLIGENCE_VERSION, build_story_moments
+from app.story_intelligence import STORY_INTELLIGENCE_VERSION, build_story_moments, build_story_assessment
 from app.take_quality import editing_policy
 from app.montage_renderer import render_montage_delivery, render_montage_preview
 from app.music_analysis import analyze_music_beats
@@ -999,6 +999,14 @@ def process_one_edit(state: WorkerState) -> bool:
                     **context["job"], "project_name": context["project"]["name"],
                     "brief": context["project"]["brief"] + " " + str(run.get("revision_note") or ""),
                 })
+                policy = context["job"]["editorial_policy"]
+                if policy.get("bloopers_requested"):
+                    context.setdefault("story_spine", {}).update(
+                        recommended_shape=["setup", "recorded_stumble_or_restart", "real_reaction_or_recovery"],
+                        engagement_assessment=build_story_assessment(
+                            [moment for asset in context["assets"] for moment in asset.get("story_index", {}).get("moments", [])], policy),
+                    )
+                    context["learning_preferences"] = {"directives": [], "scope": "bloopers", "hosted_model_calls": 0}
             adjustments = list(run.get("clip_adjustments") or [])
             deterministic_revision = bool(run.get("based_on_run_id")) and not run.get("revision_note")
             if deterministic_revision:

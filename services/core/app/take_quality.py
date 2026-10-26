@@ -32,10 +32,15 @@ def editing_policy(job: dict[str, Any]) -> dict[str, Any]:
     requests_bloopers = bool(re.search(r"\b(?:bloopers?|outtakes?|behind.the.scenes|making.of)\b", instruction))
     promotional = bool(re.search(r"\b(?:ad|ads|advert|advertisement|commercial|promo|promotional|product demo)\b",
                                  instruction + " " + str(job.get("project_name") or "").lower()))
+    explicit = str(job.get("reel_intent") or "auto")
+    inferred = "bloopers" if requests_bloopers and not excludes_bloopers else "promotion" if promotional else "story"
+    intent = explicit if explicit in {"bloopers", "promotion", "story"} else inferred
     return {
+        "intent": intent,
+        "intent_source": "brief" if explicit == "auto" else "selection",
         "story_first": True,
-        "promotional": promotional,
-        "bloopers_requested": requests_bloopers and not excludes_bloopers,
+        "promotional": intent == "promotion",
+        "bloopers_requested": intent == "bloopers",
         "preserve_pauses_requested": bool(re.search(
             r"\b(?:keep|preserve|hold|leave)\b.{0,35}\b(?:pause|pauses|silence|reaction)\b", instruction)),
         "effects_change_story_goal": False,

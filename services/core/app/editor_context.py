@@ -113,6 +113,7 @@ def build_editor_context(
             job.get("ending_instruction"),
         )
     )
+    policy = editing_policy(job)
     assets: list[dict[str, Any]] = []
     retrieved_story_moments: list[dict[str, Any]] = []
     for row in rows:
@@ -123,6 +124,7 @@ def build_editor_context(
         story_moments = select_story_moments(
             row.get("story_moments") if isinstance(row.get("story_moments"), list) else [],
             story_query,
+            preserve_outtakes=bool(policy.get("bloopers_requested")),
         )
         for moment in story_moments:
             moment["asset_id"] = str(row["id"])
@@ -215,7 +217,7 @@ def build_editor_context(
         if include_internal_paths:
             track["_storage_key"] = row["storage_key"]
         music_library.append(track)
-    story_assessment = build_story_assessment(retrieved_story_moments)
+    story_assessment = build_story_assessment(retrieved_story_moments, policy)
     creative_library: list[dict[str, Any]] = []
     for row in creative_rows:
         allowed_platforms = row.get("allowed_platforms") or []
@@ -236,6 +238,7 @@ def build_editor_context(
             "id": str(job["id"]),
             "project_id": str(job["project_id"]),
             "recipe": job["recipe"],
+            "reel_intent": job.get("reel_intent") or "auto",
             "status": job["status"],
             "revision": job["revision"],
             "target_duration_seconds": job["target_duration_seconds"],
@@ -257,7 +260,7 @@ def build_editor_context(
             "brand_kit_id": str(job["brand_kit_id"]) if job.get("brand_kit_id") else None,
             "publishing_preset": job.get("publishing_preset") or "custom",
             "cover_time_seconds": float(job.get("cover_time_seconds") or 0),
-            "editorial_policy": editing_policy(job),
+            "editorial_policy": policy,
         },
         "project": {
             "name": job["project_name"],
@@ -272,6 +275,8 @@ def build_editor_context(
             "must_include": job["must_include"],
             "ending": job.get("ending_instruction") or "",
             "recommended_shape": (
+                ["setup", "recorded_stumble_or_restart", "real_reaction_or_recovery"]
+                if policy.get("bloopers_requested") else
                 ["tease", "establish", "build", "best_moment", "reaction", "finish"]
                 if job["recipe"] == "montage"
                 else ["hook", "context", "development", "payoff", "ending"]

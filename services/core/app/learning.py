@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException, status
 from psycopg.types.json import Jsonb
 
 from app.database import connection
+from app.take_quality import editing_policy
 from app.schemas import (
     EditFeedbackCreate,
     EditFeedbackResponse,
@@ -181,6 +182,12 @@ def _settings(database: Any) -> dict[str, Any]:
 
 def learning_context_for_job(database: Any, job: dict[str, Any]) -> dict[str, Any]:
     settings = _settings(database)
+    if editing_policy(job)["bloopers_requested"]:
+        # Historical recipe-level lessons were trained on clean speech and ads.
+        # Do not silently transfer them to outtakes before purpose-scoped trials.
+        return {"enabled": bool(settings["enabled"]), "scope": "bloopers",
+                "sample_size": 0, "preferences": [], "directives": [],
+                "evaluated_lessons": 0, "source": "purpose_isolation", "hosted_model_calls": 0}
     if not settings["enabled"]:
         return {
             "enabled": False,
@@ -190,7 +197,9 @@ def learning_context_for_job(database: Any, job: dict[str, Any]) -> dict[str, An
         }
     rows = database.execute(
         """
-        SELECT edit_feedback.rating, edit_feedback.tags
+        SELECT edit_feedback.rating, edit_feedback.tags, jobs.reel_intent,
+               jobs.story_goal, jobs.must_include, jobs.ending_instruction,
+               projects.brief, projects.name AS project_name
         FROM edit_feedback
         JOIN jobs ON jobs.id = edit_feedback.job_id
         JOIN projects ON projects.id = jobs.project_id
@@ -202,7 +211,8 @@ def learning_context_for_job(database: Any, job: dict[str, Any]) -> dict[str, An
         (job["recipe"],),
     ).fetchall()
     learned = derive_learning_preferences(
-        list(rows), minimum_samples=int(settings["minimum_samples"])
+        [row for row in rows if not editing_policy(row)["bloopers_requested"]],
+        minimum_samples=int(settings["minimum_samples"])
     )
     approved = database.execute("SELECT directive FROM learning_lessons WHERE status='promoted' AND recipe=%s AND edit_style=%s ORDER BY updated_at DESC LIMIT 6", (str(job["recipe"]), str(job.get("edit_style") or "clean"))).fetchall()
     return {

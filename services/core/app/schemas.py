@@ -25,6 +25,13 @@ class Recipe(StringEnum):
     MONTAGE = "montage"
 
 
+class ReelIntent(StringEnum):
+    AUTO = "auto"
+    STORY = "story"
+    PROMOTION = "promotion"
+    BLOOPERS = "bloopers"
+
+
 class EditStyle(StringEnum):
     CLEAN = "clean"
     ENERGETIC = "energetic"
@@ -124,6 +131,7 @@ class ProjectResponse(BaseModel):
 class JobCreate(BaseModel):
     id: UUID | None = None
     recipe: Recipe = Recipe.TALKING_HEAD
+    reel_intent: ReelIntent = ReelIntent.AUTO
     target_duration_seconds: Literal[15, 20, 30, 45, 60] = 45
     edit_style: EditStyle = EditStyle.ENERGETIC
     music_mode: MusicMode = MusicMode.NONE
@@ -167,6 +175,7 @@ class JobResponse(BaseModel):
     id: UUID
     project_id: UUID
     recipe: Recipe
+    reel_intent: ReelIntent = ReelIntent.AUTO
     status: str
     revision: int
     target_duration_seconds: int | None = None
@@ -1095,6 +1104,7 @@ class UsageJobSummary(BaseModel):
     id: UUID
     project_name: str
     recipe: Recipe
+    reel_intent: ReelIntent = ReelIntent.AUTO
     status: str
     created_at: datetime
     model: str | None = None

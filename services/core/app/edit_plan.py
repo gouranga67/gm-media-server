@@ -684,7 +684,8 @@ def repair_predictable_plan_defaults(
 
     repaired = deepcopy(document)
     repairs: list[str] = []
-    if complete_creative_defaults and (creative_direction or {}).get("edit_style") in {"energetic", "high_impact"}:
+    outtakes = bool((creative_direction or {}).get("editorial_policy", {}).get("bloopers_requested"))
+    if complete_creative_defaults and not outtakes and (creative_direction or {}).get("edit_style") in {"energetic", "high_impact"}:
         # Only complete newly generated plans. Exact re-renders and local
         # revisions keep their saved transitions. Never split or retime a cut.
         if repaired.get("recipe") == "talking_head":
@@ -992,9 +993,10 @@ def validate_edit_plan(
         raise ValueError("the calm style does not permit strong punch-ins")
     if strong_punches > 5:
         raise ValueError("an edit may contain at most five strong punch-ins")
-    if style in {"energetic", "high_impact"} and total_duration >= 8 and visual_emphasis_count == 0:
+    outtakes = bool(direction.get("editorial_policy", {}).get("bloopers_requested"))
+    if not outtakes and style in {"energetic", "high_impact"} and total_duration >= 8 and visual_emphasis_count == 0:
         raise ValueError("the energetic style requires at least one bounded visual emphasis")
-    if style in {"energetic", "high_impact"} and total_duration >= 20 and transition_count == 0:
+    if not outtakes and style in {"energetic", "high_impact"} and total_duration >= 20 and transition_count == 0:
         raise ValueError("an energetic edit of 20 seconds or longer requires a transition beat")
 
     tracks = {str(track["track_id"]): track for track in music_tracks or []}

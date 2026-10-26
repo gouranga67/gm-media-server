@@ -4,6 +4,7 @@ export type MusicMode = "none" | "subtle" | "present";
 export type EffectLevel = "off" | "subtle" | "social" | "meme_heavy";
 export type TargetDuration = 15 | 20 | 30 | 45 | 60;
 export type Recipe = "talking_head" | "montage";
+export type ReelIntent = "auto" | "story" | "promotion" | "bloopers";
 export type ReasoningEffort = "low" | "medium" | "high";
 export type OutputAspect = "vertical" | "landscape" | "square";
 export type TargetPlatform = "all_social" | "facebook" | "instagram" | "linkedin" | "tiktok" | "youtube";
@@ -23,6 +24,7 @@ export type MediaJob = {
   readonly id: string;
   readonly project_id: string;
   readonly recipe: Recipe;
+  readonly reel_intent?: ReelIntent;
   readonly status: string;
   readonly revision: number;
   readonly target_duration_seconds: TargetDuration | null;
@@ -393,6 +395,8 @@ export type JobReview = {
   readonly editorial_timeline: readonly EditorialClip[];
   readonly story_assessment: {
     readonly version: string;
+    readonly intent?: string;
+    readonly review_mode?: "outtake_review";
     readonly coverage: Readonly<Record<"hook" | "context" | "development" | "payoff" | "ending", boolean>>;
     readonly gaps: readonly string[];
     readonly clean_spoken_edit_points: number;
@@ -551,6 +555,7 @@ export type UsageJobSummary = {
   readonly id: string;
   readonly project_name: string;
   readonly recipe: Recipe;
+  readonly reel_intent?: ReelIntent;
   readonly status: string;
   readonly created_at: string;
   readonly model: string | null;
@@ -650,6 +655,7 @@ export type ManagedJob = {
   readonly project_name: string;
   readonly brief: string;
   readonly recipe: Recipe;
+  readonly reel_intent?: ReelIntent;
   readonly status: string;
   readonly revision: number;
   readonly output_aspect: OutputAspect;
@@ -716,6 +722,7 @@ export function createMediaJob(
   input: {
     readonly id?: string;
     readonly recipe: Recipe;
+    readonly reelIntent?: ReelIntent;
     readonly targetDurationSeconds: TargetDuration;
     readonly editStyle: EditStyle;
     readonly musicMode: MusicMode;
@@ -740,6 +747,7 @@ export function createMediaJob(
     body: JSON.stringify({
       id: input.id,
       recipe: input.recipe,
+      reel_intent: input.reelIntent ?? "auto",
       target_duration_seconds: input.targetDurationSeconds,
       edit_style: input.editStyle,
       music_mode: input.musicMode,

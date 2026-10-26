@@ -197,6 +197,8 @@ def list_chatgpt_models(settings: Settings | None = None) -> list[dict[str, str]
 
 def _public_context(context: dict[str, Any], max_characters: int) -> dict[str, Any]:
     public = deepcopy(context)
+    if public.get("job", {}).get("editorial_policy", {}).get("bloopers_requested"):
+        public["learning_preferences"] = {"directives": [], "scope": "bloopers", "hosted_model_calls": 0}
     source_checksums: dict[str, str] = {}
     for asset in public.get("assets", []):
         evidence = asset.get("source_evidence")
@@ -436,6 +438,7 @@ def _public_context(context: dict[str, Any], max_characters: int) -> dict[str, A
 def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str, Any]]:
     public = _public_context(context, settings.editor_max_context_characters)
     revision = public.get("revision")
+    bloopers = bool(public.get("job", {}).get("editorial_policy", {}).get("bloopers_requested"))
     concept_instruction = (
         "The user selected the source-backed concept in selected_concept. Preserve its recorded script order, "
         "source identities, and narrative meaning. Use the cited speech ranges as guides, preserving complete "
@@ -453,6 +456,10 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
             if locked else ""
         )
         scope_instruction = (
+            "Rebuild the outtake sequence from the recorded setup, actual stumble and genuine reaction. "
+            "The previous plan is a rejected draft, not a template. Preserve chronology within each gag; "
+            "do not turn it into a clean sales explanation or invent a recovery. "
+            if revision.get("mode") == "rebuild_story" and bloopers else
             "Rebuild the story from all available source transcripts and the original brief. "
             "The previous plan is a rejected draft, not a template: you may replace, reorder, "
             "and retime unlocked clips. Identify the supported beginning, development, and payoff "
@@ -474,7 +481,7 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
     learning = public.get("learning_preferences")
     learning_directives = learning.get("directives") if isinstance(learning, dict) else []
     learning_instruction = ""
-    if isinstance(learning_directives, list) and learning_directives:
+    if not bloopers and isinstance(learning_directives, list) and learning_directives:
         learning_instruction = (
             "These preferences were learned locally from repeated explicit user feedback for this recipe. "
             "Apply them when compatible with the current brief and source evidence; never invent material or "
@@ -510,6 +517,12 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
         if len([asset for asset in public.get("assets", []) if not asset.get("duplicate_of_asset_id")]) > 1
         else ""
     )
+    if bloopers:
+        source_instruction = (
+            "For multiple outtakes, preserve each gag's own setup and reaction together. Do not splice "
+            "unrelated reactions into a mistake, force a connecting product story, or include every file. "
+            "A selected concept's cited source order takes precedence over generic hook ranking.\n\n"
+        )
     take_instruction = (
         "Story quality takes precedence over humour, music, and effects. A funny tone or meme_heavy "
         "effect level is not a request for a blooper reel. Read every source's take_quality report and "
@@ -526,7 +539,7 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
         "dialogue cuts receive local pause tightening by default; explicit instructions to preserve "
         "pauses or make a blooper reel take precedence.\n\n"
     )
-    if public.get("job", {}).get("editorial_policy", {}).get("bloopers_requested"):
+    if bloopers:
         take_instruction = (
             "The user explicitly requested a bloopers reel. The outtakes are the subject: preserve each gag's "
             "setup, recorded mistake/restart, and genuine reaction or recovery. Do not replace selected failed "
@@ -543,7 +556,30 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
         "A product text mention does not verify its visual identity or attach all nearby claims to it. "
         + take_instruction
     )
-    if recipe == "montage":
+    if bloopers:
+        task_instruction = (
+            f"Create one source-led {recipe} JSON edit plan for recorded bloopers. Rendering format is "
+            "independent of editorial purpose: a talking_head schema does not mean an advertisement. "
+            "Build each gag as enough setup, the recorded stumble/restart/line loss, and its real reaction "
+            "or recovery if one exists. An unresolved question or candid admission can be the final beat. "
+            "Do not tick off a generic hook/development/sales-payoff/ending checklist, add a call to action, "
+            "demand a clean product explanation, or replace the failed take with a successful one. "
+            "Repeated starts can be essential comic evidence. Preserve meaning and chronology within each gag. "
+            "Use the selected concept's recorded ranges and complete word boundaries. Local clues do not "
+            "prove a mistake; never manufacture dialogue, laughter, reactions or product claims. "
+            "Use story_role=context for setup, development for the stumble and reaction/payoff for the "
+            "actual comic beat; these are schema labels, not requirements to add missing material. "
+            "No role quota or minimum duration applies. Trim empty waiting and noise-only tails while "
+            "allowing the earned reaction to land. Explain the chosen gags in editorial_summary. "
+            "Use only supplied IDs, valid source bounds, nonoverlapping source ranges, and named presets. "
+            "The reel must remain at most 60 seconds. Select music only from music_library when requested; "
+            "otherwise return no music. Creative effects require job.effect_level to be enabled and must "
+            "support the actual gag: subtle allows 2 cues, social 4 and meme_heavy 8. Protect speech. "
+            + ("Montage video durations equal source_out minus source_in; images use zero source times. "
+               "Keep montage clips between 0.5 and 8 seconds, preserving whole phrases across clips. "
+               "Enable source audio for recorded dialogue; muted clips/images use 0 dB gain. " if recipe == "montage" else "")
+        )
+    elif recipe == "montage":
         task_instruction = (
             "Create one source-led montage JSON edit plan. Choose only uploaded video and image assets. "
             "Build a deliberate story spine from job.story direction and the locally retrieved story_index "
@@ -632,6 +668,12 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
     )
     if public.get("job", {}).get("broll_enabled") is False:
         finishing_instruction += "The user removed B-roll. Return broll as [] and preserve the main speech.\n\n"
+    if bloopers:
+        finishing_instruction += (
+            "Outtake timing takes precedence over the high-impact rhythm. Keep the actual mistake and "
+            "visible reaction in sync and visible; do not cover them with unrelated B-roll or insert a "
+            "transition simply to satisfy a pacing quota.\n\n"
+        )
     content: list[dict[str, Any]] = [
         {
             "type": "input_text",
@@ -710,6 +752,11 @@ def _parse_sse_response(response: Any) -> tuple[str, dict[str, Any]]:
             code = error.get("code") if isinstance(error, dict) else None
             message = error.get("message") if isinstance(error, dict) else None
             detail = str(code or message or event_type)
+            if code == "server_is_overloaded":
+                raise ProviderUnavailable(
+                    "The editor service is temporarily busy (server_is_overloaded). Try again later; "
+                    "changing the reel purpose or reducing your footage is not required for this error."
+                )
             if detail in {
                 "subscription_sharing_usage_limit_exceeded",
                 "subscription_sharing_usage_unavailable",

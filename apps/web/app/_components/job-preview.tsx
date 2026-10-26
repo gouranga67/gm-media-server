@@ -170,7 +170,7 @@ export function JobPreview({ jobId }: { readonly jobId: string }) {
                   <CheckIcon aria-hidden="true" className="size-4" /> Preview ready
                 </p>
                 <h1 className="mt-2 text-2xl font-bold tracking-tight text-[#173F5F]">
-                  Your {isMontage ? "montage" : "reel"} is ready to review
+                  Your {review?.story_assessment.review_mode === "outtake_review" ? "blooper reel" : isMontage ? "montage" : "reel"} is ready to review
                 </h1>
               </div>
               <video

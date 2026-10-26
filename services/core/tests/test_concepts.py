@@ -201,6 +201,16 @@ class ConceptSelectionTests(unittest.TestCase):
         self.assertEqual(error.exception.status_code, 409)
         self.assertFalse(self.db.writes)
 
+    def test_blooper_selection_persists_editorial_purpose_separately_from_render_recipe(self):
+        self.session["reel_kind"] = "bloopers"
+        render_selected_concepts(self.session["id"], self.selection, "editor@example.invalid")
+        inserts = [(sql, args) for sql, args in self.db.writes if "INSERT INTO jobs" in sql]
+        self.assertEqual(len(inserts), 2)
+        for sql, args in inserts:
+            self.assertIn("reel_intent", sql)
+            self.assertEqual(args[-1], "bloopers")
+            self.assertIn("'talking_head'", sql)
+
     def test_selected_concept_with_music_creates_a_preview_and_retry_reuses_it(self):
         selection = ConceptSelection(concept_ids=self.selection.concept_ids[:1], music_mode="subtle", effect_level="meme_heavy")
         first = render_selected_concepts(self.session["id"], selection, "editor@example.invalid")
