@@ -229,6 +229,8 @@ class LibraryAssetResponse(BaseModel):
     project_id: UUID
     project_name: str
     source_name: str
+    display_name: str | None = None
+    media_role: Literal["auto", "talking", "broll"] = "auto"
     mime_type: str
     byte_size: int
     sha256: str
@@ -303,11 +305,14 @@ class VisualReindexResponse(BaseModel):
 class ManagedLibraryAssetResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
+    canonical_asset_id: UUID | None = None
+
     id: UUID
     project_id: UUID
     project_name: str
     source_name: str
     display_name: str
+    media_role: Literal["auto", "talking", "broll"] = "auto"
     notes: str = ""
     favorite: bool = False
     tags: list[str] = Field(default_factory=list)
@@ -327,6 +332,7 @@ class ManagedLibraryAssetResponse(BaseModel):
 class LibraryAssetUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    media_role: Literal["auto", "talking", "broll"] | None = None
     display_name: str | None = Field(default=None, min_length=1, max_length=255)
     notes: str = Field(default="", max_length=4000)
     favorite: bool = False
@@ -355,6 +361,32 @@ class LibraryAssetUpdate(BaseModel):
                 normalized.append(tag)
                 seen.add(tag)
         return normalized
+
+
+class LibraryBatchUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    asset_ids: list[UUID] = Field(min_length=1, max_length=500)
+    action: Literal["rename", "role", "trash", "restore"]
+    name_prefix: str | None = Field(default=None, min_length=1, max_length=255)
+    media_role: Literal["auto", "talking", "broll"] | None = None
+
+    @field_validator("asset_ids")
+    @classmethod
+    def unique_assets(cls, value: list[UUID]) -> list[UUID]:
+        if len(value) != len(set(value)):
+            raise ValueError("select each original only once")
+        return value
+
+    @field_validator("name_prefix")
+    @classmethod
+    def clean_prefix(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = " ".join(value.split())
+        if not value:
+            raise ValueError("enter a name for this batch")
+        return value
 
 
 class LibraryEvidenceSegment(BaseModel):

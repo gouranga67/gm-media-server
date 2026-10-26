@@ -73,7 +73,10 @@ def main() -> int:
     assets = require("library/assets?state=all&limit=500", 200)
     if not isinstance(assets, list) or not assets:
         raise RuntimeError("managed media library contains no analyzed originals")
-    asset = next((item for item in assets if item.get("library_status") == "active"), assets[0])
+    picker = require("assets/library?limit=500", 200)
+    picker_ids = {str(item["id"]) for item in picker} if isinstance(picker, list) else set()
+    asset = next((item for item in assets if str(item["id"]) in picker_ids and str(item.get("mime_type", "")).startswith("video/")),
+                 next((item for item in assets if item.get("library_status") == "active"), assets[0]))
     asset_id = str(asset["id"])
     detail = require(f"library/assets/{asset_id}", 200)
     if not isinstance(detail, dict) or not isinstance(detail.get("asset"), dict):
@@ -88,6 +91,7 @@ def main() -> int:
         test_tags = list(original.get("tags", []))
         if "phase-8-verified" not in test_tags:
             test_tags.append("phase-8-verified")
+        metadata_changed = True
         updated = require(
             f"library/assets/{asset_id}",
             200,
@@ -99,11 +103,30 @@ def main() -> int:
                 "tags": test_tags,
             },
         )
-        metadata_changed = True
         if not isinstance(updated, dict) or "phase-8-verified" not in updated.get("tags", []):
             raise RuntimeError("library metadata update was not stored")
         if updated.get("sha256") != original_hash:
             raise RuntimeError("metadata update changed original provenance")
+
+        test_name = f"Library acceptance {str(uuid4())[:8]}"
+        require("library/assets/batch", 200, method="POST", payload={"asset_ids": [asset_id], "action": "rename", "name_prefix": test_name})
+        renamed = require(f"library/assets/{asset_id}", 200)["asset"]
+        if renamed["display_name"] != test_name or renamed["source_name"] != original["source_name"]:
+            raise RuntimeError("batch rename did not preserve the original filename")
+        if renamed["sha256"] != original_hash or renamed["notes"] != original["notes"] or renamed["tags"] != test_tags:
+            raise RuntimeError("batch rename changed unrelated metadata or provenance")
+        # Failed selections must leave every existing record untouched.
+        require("library/assets/batch", 409, method="POST", payload={"asset_ids": [asset_id, str(uuid4())], "action": "rename", "name_prefix": "Must not apply"})
+        if require(f"library/assets/{asset_id}", 200)["asset"]["display_name"] != test_name:
+            raise RuntimeError("failed batch selection partially changed a file")
+        if str(original["mime_type"]).startswith("video/"):
+            require("library/assets/batch", 200, method="POST", payload={"asset_ids": [asset_id], "action": "role", "media_role": "broll"})
+            if require(f"library/assets/{asset_id}", 200)["asset"].get("media_role") != "broll":
+                raise RuntimeError("footage role was not saved")
+        if asset_id in picker_ids:
+            results = require("assets/library?query=" + urllib.parse.quote(test_name), 200)
+            if not any(item["id"] == asset_id and item.get("display_name") == test_name for item in results):
+                raise RuntimeError("new-job picker cannot find a renamed source")
 
         collection = require(
             "library/collections",
@@ -118,17 +141,21 @@ def main() -> int:
         attached = require(f"library/assets/{asset_id}", 200)
         if not isinstance(attached, dict) or not any(item.get("id") == collection_id for item in attached.get("collections", [])):
             raise RuntimeError("collection membership was not visible on the original")
+        filtered = require(f"library/assets?state=all&collection_id={collection_id}", 200)
+        if [item["id"] for item in filtered] != [asset_id]:
+            raise RuntimeError("collection filter did not return exactly its members")
         require(f"library/collections/{collection_id}/assets/{asset_id}", 204, method="DELETE")
 
         if original.get("library_status") == "active":
-            archived = require(f"library/assets/{asset_id}/archive", 200, method="POST", payload={})
             state_changed = True
+            require("library/assets/batch", 200, method="POST", payload={"asset_ids": [asset_id], "action": "trash"})
+            archived = require(f"library/assets/{asset_id}", 200)["asset"]
             if not isinstance(archived, dict) or archived.get("library_status") != "archived":
                 raise RuntimeError("original was not reversibly archived")
             archived_detail = require(f"library/assets/{asset_id}", 200)
             if not isinstance(archived_detail, dict) or archived_detail["asset"].get("sha256") != original_hash:
                 raise RuntimeError("archived original was not retained with its provenance")
-            require(f"library/assets/{asset_id}/restore", 200, method="POST", payload={})
+            require("library/assets/batch", 200, method="POST", payload={"asset_ids": [asset_id], "action": "restore"})
             state_changed = False
 
         preview_status, preview = request(f"library/assets/{asset_id}/preview")
@@ -146,6 +173,7 @@ def main() -> int:
                     "notes": original.get("notes", ""),
                     "favorite": bool(original.get("favorite", False)),
                     "tags": original.get("tags", []),
+                    "media_role": original.get("media_role", "auto"),
                 },
             )
         if collection_id:
@@ -155,6 +183,10 @@ def main() -> int:
     if not isinstance(restored, dict) or restored["asset"].get("sha256") != original_hash:
         raise RuntimeError("verification cleanup did not preserve the original")
 
+    for field in ("display_name", "source_name", "media_role", "notes", "tags", "favorite", "library_status", "job_references"):
+        if restored["asset"].get(field) != original.get(field):
+            raise RuntimeError(f"verification cleanup did not restore {field}")
+
     print(
         json.dumps(
             {
@@ -162,6 +194,9 @@ def main() -> int:
                 "asset_id": asset_id,
                 "sha256_preserved": True,
                 "metadata_round_trip": True,
+                "batch_rename_and_trash": True,
+                "failed_batch_atomic": True,
+                "footage_role_round_trip": str(original["mime_type"]).startswith("video/"),
                 "collection_round_trip": True,
                 "archive_restore_round_trip": original.get("library_status") == "active",
                 "preview_verified": True,

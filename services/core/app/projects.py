@@ -298,9 +298,9 @@ def list_library_assets(
     ]
     parameters: list[Any] = []
     if normalized_query:
-        clauses.append("(assets.source_name ILIKE %s OR projects.name ILIKE %s)")
+        clauses.append("(assets.source_name ILIKE %s OR projects.name ILIKE %s OR asset_library_metadata.display_name ILIKE %s)")
         pattern = f"%{normalized_query}%"
-        parameters.extend((pattern, pattern))
+        parameters.extend((pattern, pattern, pattern))
     if media_kind != "all":
         clauses.append("assets.mime_type LIKE %s")
         parameters.append(f"{media_kind}/%")
@@ -325,6 +325,8 @@ def list_library_assets(
             )
             SELECT assets.id, assets.project_id, projects.name AS project_name,
                    assets.source_name, assets.mime_type, assets.byte_size,
+                   COALESCE(asset_library_metadata.display_name, assets.source_name) AS display_name,
+                   COALESCE(asset_library_metadata.media_role, 'auto') AS media_role,
                    assets.sha256, assets.created_at,
                    NULLIF(
                        asset_ingests.manifest #>> '{{probe,format,duration_seconds}}',
@@ -337,6 +339,7 @@ def list_library_assets(
             FROM assets
             JOIN projects ON projects.id = assets.project_id
             JOIN asset_ingests ON asset_ingests.asset_id = assets.id
+            LEFT JOIN asset_library_metadata ON asset_library_metadata.asset_id = assets.id
             LEFT JOIN active_hash_counts ON active_hash_counts.sha256 = assets.sha256
             LEFT JOIN asset_duplicate_reviews
               ON asset_duplicate_reviews.sha256 = assets.sha256

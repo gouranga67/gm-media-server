@@ -89,6 +89,16 @@ The interface identifies work that used the ChatGPT plan and links to ChatGPT us
 
 For the upstream requirements, see OpenAI's [open-source token sharing guide](https://developers.openai.com/siwc/token-sharing-open-source) and [self-hosted VM flow](https://developers.openai.com/siwc/token-sharing-open-source/self-hosted-vms).
 
+## Organize source media
+
+Open `/library` to browse Talking footage, B-roll, Photos, Audio, or Unsorted videos. Select videos and choose **Label videos as…** to separate spoken footage from visual cutaways. These labels reach the editor as user intent; they do not replace source evidence or the checks against using a different speaking take as silent B-roll.
+
+Use the pencil beside a file for a readable display name, or select several and **Rename batch** (for example, `Cream close-up 001`). Original filenames, storage paths, hashes, and existing edits remain unchanged. New uploads can receive a name prefix and footage role before transfer. Names and roles also appear in the New job picker.
+
+**Move to Trash** hides selected originals from the library and future jobs after confirmation. Restore them from the Trash view. This keeps originals on disk and preserves existing jobs; it is not permanent deletion or disk reclamation. Reviewed exact duplicates are grouped by default, with **Show repeated uploads** available when managing copies. Use **Duplicate audit** for the separate verified storage-sharing workflow.
+
+After deploying migration 025, `python3 scripts/verify-phase8.py` checks names, roles, collection filtering, atomic batch failures, Trash/restore, provenance, and preview download. It restores the original metadata afterward and makes no AI calls.
+
 ## Import rights-approved music
 
 GM Studio can install the reviewed starter catalogue or accept your own non-synthetic audio files with recorded licence, commercial-use confirmation, attribution, and permitted platforms.

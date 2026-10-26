@@ -1,5 +1,6 @@
 "use client";
 
+import { libraryRoleLabel } from "@/lib/library-organization";
 import { Component, type DragEvent, type ErrorInfo, type FormEvent, type ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -650,7 +651,8 @@ function LibraryAssetRow({
         )}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block truncate font-mono text-xs font-bold text-[#20211F]">{asset.source_name}</span>
+        <span className="block truncate font-mono text-xs font-bold text-[#20211F]">{asset.display_name || asset.source_name}</span>
+        <span className="block truncate text-xs text-[#666862]">{libraryRoleLabel(asset)}{asset.display_name && asset.display_name !== asset.source_name ? ` · ${asset.source_name}` : ""}</span>
         <span className="mt-1 block truncate font-mono text-[10px] text-[#666862]">
           {[formatBytes(asset.byte_size), duration, asset.project_name].filter(Boolean).join(" · ")}
         </span>
@@ -728,6 +730,7 @@ function NewJobFormContent() {
   const [musicTracks, setMusicTracks] = useState<readonly MusicTrack[]>([]);
   const [creativeAssets, setCreativeAssets] = useState<readonly CreativeAsset[]>([]);
   const [entries, setEntries] = useState<UploadEntry[]>([]);
+  const [libraryPurpose, setLibraryPurpose] = useState("all");
   const [libraryAssets, setLibraryAssets] = useState<readonly LibraryAsset[]>([]);
   const [selectedLibraryAssetIds, setSelectedLibraryAssetIds] = useState<ReadonlySet<string>>(new Set());
   const [libraryQuery, setLibraryQuery] = useState("");
@@ -936,12 +939,14 @@ function NewJobFormContent() {
   const filteredLibraryAssets = libraryAssets
     .filter((asset) => {
       const matchesQuery = normalizedLibraryQuery.length === 0
+        || (asset.display_name ?? "").toLocaleLowerCase().includes(normalizedLibraryQuery)
         || asset.source_name.toLocaleLowerCase().includes(normalizedLibraryQuery)
         || asset.project_name.toLocaleLowerCase().includes(normalizedLibraryQuery)
         || catalogMatches.has(asset.id);
       const matchesKind = libraryKind === "all" || asset.mime_type.startsWith(`${libraryKind}/`);
       const matchesProject = libraryProjectId === "all" || asset.project_id === libraryProjectId;
-      return matchesQuery && matchesKind && matchesProject;
+      const matchesPurpose = libraryPurpose === "all" || (asset.mime_type.startsWith("video/") && (asset.media_role ?? "auto") === libraryPurpose);
+      return matchesQuery && matchesKind && matchesProject && matchesPurpose;
     })
     .sort((left, right) => {
       const leftMatch = catalogMatches.get(left.id);
@@ -1945,6 +1950,11 @@ function NewJobFormContent() {
                   </button>
                 ))}
               </div>
+              <label className="block space-y-2 text-xs font-bold text-[#173F5F]" htmlFor="library-purpose">FOOTAGE ROLE
+                <select className="h-11 w-full rounded-md border border-[#D7D9D3] bg-white px-3 text-sm text-[#20211F]" id="library-purpose" onChange={(event) => setLibraryPurpose(event.currentTarget.value)} value={libraryPurpose}>
+                  <option value="all">All roles</option><option value="talking">Talking footage</option><option value="broll">B-roll</option><option value="auto">Unsorted video</option>
+                </select>
+              </label>
               <label className="block space-y-2 text-xs font-bold text-[#173F5F]" htmlFor="library-project">
                 PROJECT
                 <select

@@ -61,11 +61,15 @@ export type Asset = {
   readonly updated_at: string;
 };
 
+export type MediaRole = "auto" | "talking" | "broll";
+
 export type LibraryAsset = {
   readonly id: string;
   readonly project_id: string;
   readonly project_name: string;
   readonly source_name: string;
+  readonly display_name?: string | null;
+  readonly media_role?: MediaRole;
   readonly mime_type: string;
   readonly byte_size: number;
   readonly sha256: string;
@@ -159,11 +163,13 @@ export type VisualIndexStatus = {
 };
 
 export type ManagedLibraryAsset = {
+  readonly canonical_asset_id?: string | null;
   readonly id: string;
   readonly project_id: string;
   readonly project_name: string;
   readonly source_name: string;
   readonly display_name: string;
+  readonly media_role: MediaRole;
   readonly notes: string;
   readonly favorite: boolean;
   readonly tags: readonly string[];
@@ -889,14 +895,18 @@ export function getManagedLibraryAssets(input: {
   readonly mediaKind?: "all" | "video" | "image" | "audio";
   readonly favorite?: boolean;
   readonly tag?: string;
+  readonly offset?: number;
+  readonly collectionId?: string;
 } = {}) {
   const parameters = new URLSearchParams({
     query: input.query ?? "",
     state: input.state ?? "active",
     media_kind: input.mediaKind ?? "all",
     limit: "500",
+    offset: String(input.offset ?? 0),
   });
   if (input.favorite !== undefined) parameters.set("favorite", String(input.favorite));
+  if (input.collectionId) parameters.set("collection_id", input.collectionId);
   if (input.tag) parameters.set("tag", input.tag);
   return apiRequest<readonly ManagedLibraryAsset[]>(`library/assets?${parameters.toString()}`, { cache: "no-store" });
 }
@@ -907,6 +917,7 @@ export function getLibraryAssetDetail(assetId: string) {
 
 export function updateLibraryAsset(assetId: string, input: {
   readonly displayName: string;
+  readonly mediaRole?: MediaRole;
   readonly notes: string;
   readonly favorite: boolean;
   readonly tags: readonly string[];
@@ -915,6 +926,7 @@ export function updateLibraryAsset(assetId: string, input: {
     method: "PATCH",
     body: JSON.stringify({
       display_name: input.displayName,
+      media_role: input.mediaRole,
       notes: input.notes,
       favorite: input.favorite,
       tags: input.tags,
@@ -927,6 +939,23 @@ export function setLibraryAssetState(assetId: string, state: "active" | "archive
     `library/assets/${encodeURIComponent(assetId)}/${state === "active" ? "restore" : "archive"}`,
     { method: "POST", body: "{}" },
   );
+}
+
+export async function getAllManagedLibraryAssets(collectionId?: string) {
+  const assets: ManagedLibraryAsset[] = [];
+  for (let offset = 0; ; offset += 500) {
+    const page = await getManagedLibraryAssets({ state: "all", offset, collectionId });
+    assets.push(...page);
+    if (page.length < 500) return assets;
+  }
+}
+
+export function updateLibraryBatch(assetIds: readonly string[], action: "rename" | "role" | "trash" | "restore", options: {
+  readonly namePrefix?: string; readonly mediaRole?: MediaRole;
+} = {}) {
+  return apiRequest<{ readonly updated: number; readonly action: string }>("library/assets/batch", {
+    method: "POST", body: JSON.stringify({ asset_ids: assetIds, action, name_prefix: options.namePrefix, media_role: options.mediaRole }),
+  });
 }
 
 export function libraryAssetPreviewUrl(assetId: string) {

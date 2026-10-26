@@ -60,12 +60,14 @@ def build_editor_context(
             """
             SELECT assets.id, assets.source_name, assets.mime_type, assets.byte_size,
                    assets.sha256, assets.storage_key, assets.status AS asset_status,
+                   asset_library_metadata.display_name, asset_library_metadata.media_role,
                    asset_ingests.status AS analysis_status, asset_ingests.manifest,
                    asset_story_indexes.status AS story_status,
                    asset_story_indexes.story_version,
                    asset_story_indexes.moments AS story_moments
             FROM job_assets
             JOIN assets ON assets.id = job_assets.asset_id
+            LEFT JOIN asset_library_metadata ON asset_library_metadata.asset_id = assets.id
             LEFT JOIN asset_ingests ON asset_ingests.asset_id = assets.id
             LEFT JOIN asset_story_indexes ON asset_story_indexes.asset_id = assets.id
             WHERE job_assets.job_id = %s
@@ -140,6 +142,10 @@ def build_editor_context(
                 "moments": story_moments,
             },
         }
+        if row.get("display_name"):
+            asset["library_name"] = row["display_name"]
+        if row.get("media_role") in ("talking", "broll"):
+            asset["library_role"] = row["media_role"]
         gaps = source_word_gaps(asset, 0, float(asset.get("duration_seconds") or 0))
         longest = sorted((gap for gap in gaps if gap[2] >= 0.65),
                          key=lambda gap: gap[2], reverse=True)[:24]

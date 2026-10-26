@@ -14,6 +14,7 @@ from app.schemas import (
     LibraryAssetDetailResponse,
     LibraryAssetStateResponse,
     LibraryAssetUpdate,
+    LibraryBatchUpdate,
     LibraryCollectionCreate,
     LibraryCollectionResponse,
     ManagedLibraryAssetResponse,
@@ -26,8 +27,10 @@ router = APIRouter(prefix="/api/v1/library", tags=["library"])
 MANAGED_ASSET_SELECT = """
     SELECT assets.id, assets.project_id, projects.name AS project_name,
            assets.source_name,
+           asset_duplicate_reviews.canonical_asset_id,
            COALESCE(asset_library_metadata.display_name, assets.source_name) AS display_name,
            COALESCE(asset_library_metadata.notes, '') AS notes,
+           COALESCE(asset_library_metadata.media_role, 'auto') AS media_role,
            COALESCE(asset_library_metadata.favorite, false) AS favorite,
            COALESCE(asset_library_metadata.tags, ARRAY[]::text[]) AS tags,
            assets.library_status, assets.mime_type, assets.byte_size,
@@ -46,6 +49,7 @@ MANAGED_ASSET_SELECT = """
     FROM assets
     JOIN projects ON projects.id = assets.project_id
     JOIN asset_ingests ON asset_ingests.asset_id = assets.id
+    LEFT JOIN asset_duplicate_reviews ON asset_duplicate_reviews.sha256 = assets.sha256
     LEFT JOIN asset_library_metadata ON asset_library_metadata.asset_id = assets.id
     LEFT JOIN job_assets ON job_assets.asset_id = assets.id
     LEFT JOIN library_collection_assets ON library_collection_assets.asset_id = assets.id
@@ -61,7 +65,8 @@ def _managed_asset(database: Any, asset_id: UUID) -> dict[str, Any] | None:
           AND assets.status = 'ready'
           AND asset_ingests.status = 'ready'
         GROUP BY assets.id, projects.name, asset_ingests.manifest,
-                 asset_library_metadata.asset_id, asset_visual_indexes.status
+                 asset_library_metadata.asset_id, asset_visual_indexes.status,
+                 asset_duplicate_reviews.canonical_asset_id
         """,
         (asset_id,),
     ).fetchone()
@@ -73,11 +78,16 @@ def list_managed_assets(
     state: Literal["active", "archived", "all"] = "active",
     media_kind: Literal["all", "video", "image", "audio"] = "all",
     favorite: bool | None = None,
+    collection_id: UUID | None = None,
     tag: str | None = Query(default=None, max_length=40),
     limit: int = Query(default=250, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
 ) -> list[dict[str, Any]]:
     clauses = ["assets.status = 'ready'", "asset_ingests.status = 'ready'"]
     parameters: list[Any] = []
+    if collection_id is not None:
+        clauses.append("EXISTS (SELECT 1 FROM library_collection_assets member WHERE member.asset_id = assets.id AND member.collection_id = %s)")
+        parameters.append(collection_id)
     if state != "all":
         clauses.append("assets.library_status = %s")
         parameters.append(state)
@@ -101,7 +111,7 @@ def list_managed_assets(
             "OR array_to_string(asset_library_metadata.tags, ' ') ILIKE %s)"
         )
         parameters.extend([pattern] * 5)
-    parameters.append(limit)
+    parameters.extend((limit, offset))
 
     with connection() as database:
         rows = database.execute(
@@ -109,15 +119,61 @@ def list_managed_assets(
             {MANAGED_ASSET_SELECT}
             WHERE {' AND '.join(clauses)}
             GROUP BY assets.id, projects.name, asset_ingests.manifest,
-                     asset_library_metadata.asset_id, asset_visual_indexes.status
+                     asset_library_metadata.asset_id, asset_visual_indexes.status,
+                     asset_duplicate_reviews.canonical_asset_id
             ORDER BY COALESCE(asset_library_metadata.favorite, false) DESC,
                      COALESCE(asset_library_metadata.updated_at, assets.created_at) DESC,
                      assets.id DESC
-            LIMIT %s
+            LIMIT %s OFFSET %s
             """,
             parameters,
         ).fetchall()
     return list(rows)
+
+
+@router.post("/assets/batch")
+def update_library_batch(payload: LibraryBatchUpdate) -> dict[str, Any]:
+    """Apply one explicit action atomically, preserving all other metadata."""
+    if payload.action == "rename" and not payload.name_prefix:
+        raise HTTPException(status_code=422, detail="enter a batch name")
+    if payload.action == "rename" and len(payload.asset_ids) > 1 and len(payload.name_prefix or "") > 251:
+        raise HTTPException(status_code=422, detail="batch names must be 251 characters or fewer to leave room for numbering")
+    if payload.action == "role" and payload.media_role is None:
+        raise HTTPException(status_code=422, detail="choose a footage label")
+    with connection() as database:
+        # Stable locking order avoids deadlocks between overlapping selections.
+        rows = database.execute(
+            "SELECT id, mime_type FROM assets WHERE id = ANY(%s) AND status = 'ready' "
+            "ORDER BY id FOR UPDATE",
+            (payload.asset_ids,),
+        ).fetchall()
+        if len(rows) != len(payload.asset_ids):
+            raise HTTPException(status_code=409, detail="some selected originals are no longer available; refresh the library")
+        if payload.action == "role" and payload.media_role != "auto" and any(
+            not str(row["mime_type"]).startswith("video/") for row in rows
+        ):
+            raise HTTPException(status_code=422, detail="Talking footage and B-roll labels apply to videos; select videos only")
+        if payload.action in ("trash", "restore"):
+            database.execute(
+                "UPDATE assets SET library_status = %s, updated_at = now() WHERE id = ANY(%s)",
+                ("archived" if payload.action == "trash" else "active", payload.asset_ids),
+            )
+        else:
+            for index, asset_id in enumerate(payload.asset_ids, 1):
+                if payload.action == "rename":
+                    name = payload.name_prefix if len(payload.asset_ids) == 1 else f"{payload.name_prefix} {index:03d}"
+                    database.execute(
+                        "INSERT INTO asset_library_metadata (asset_id, display_name) VALUES (%s, %s) "
+                        "ON CONFLICT (asset_id) DO UPDATE SET display_name = EXCLUDED.display_name, updated_at = now()",
+                        (asset_id, name),
+                    )
+                else:
+                    database.execute(
+                        "INSERT INTO asset_library_metadata (asset_id, media_role) VALUES (%s, %s) "
+                        "ON CONFLICT (asset_id) DO UPDATE SET media_role = EXCLUDED.media_role, updated_at = now()",
+                        (asset_id, payload.media_role),
+                    )
+    return {"updated": len(payload.asset_ids), "action": payload.action}
 
 
 @router.get("/assets/{asset_id}", response_model=LibraryAssetDetailResponse)
@@ -183,13 +239,14 @@ def update_library_asset(asset_id: UUID, payload: LibraryAssetUpdate) -> dict[st
         database.execute(
             """
             INSERT INTO asset_library_metadata (
-                asset_id, display_name, notes, favorite, tags
-            ) VALUES (%s, %s, %s, %s, %s)
+                asset_id, display_name, notes, favorite, tags, media_role
+            ) VALUES (%s, %s, %s, %s, %s, COALESCE(%s, 'auto'))
             ON CONFLICT (asset_id) DO UPDATE SET
                 display_name = EXCLUDED.display_name,
                 notes = EXCLUDED.notes,
                 favorite = EXCLUDED.favorite,
                 tags = EXCLUDED.tags,
+                media_role = COALESCE(%s, asset_library_metadata.media_role),
                 updated_at = now()
             """,
             (
@@ -198,6 +255,8 @@ def update_library_asset(asset_id: UUID, payload: LibraryAssetUpdate) -> dict[st
                 payload.notes,
                 payload.favorite,
                 payload.tags,
+                payload.media_role,
+                payload.media_role,
             ),
         )
         row = _managed_asset(database, asset_id)

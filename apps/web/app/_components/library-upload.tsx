@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Upload } from "tus-js-client";
 import { CheckIcon, LoaderCircleIcon, PauseIcon, PlayIcon, UploadCloudIcon, XIcon } from "lucide-react";
 
-import { createProject, getAsset, getAssetAnalysis, mediaTypeForFile, registerAsset } from "@/lib/media-api";
+import { createProject, getAsset, getAssetAnalysis, mediaTypeForFile, registerAsset, updateLibraryBatch, type MediaRole } from "@/lib/media-api";
 import { startResumableUpload } from "@/lib/resumable-upload";
 
 type Phase = "queued" | "preparing" | "uploading" | "paused" | "indexing" | "ready" | "error";
@@ -25,6 +25,9 @@ function message(error: unknown): string {
 export function LibraryUpload({ onReady }: { readonly onReady: () => Promise<void> }) {
   const [entries, setEntries] = useState<readonly Entry[]>([]);
   const [batchName, setBatchName] = useState("Library uploads");
+  const [namePrefix, setNamePrefix] = useState("");
+  const [mediaRole, setMediaRole] = useState<MediaRole>("auto");
+  const preferences = useRef(new Map<string, { name?: string; role: MediaRole }>());
   const [starting, setStarting] = useState(false);
   const [hasProject, setHasProject] = useState(false);
   const [error, setError] = useState<string>();
@@ -63,6 +66,11 @@ export function LibraryUpload({ onReady }: { readonly onReady: () => Promise<voi
           const analysis = await getAssetAnalysis(assetId);
           if (!mounted.current) return;
           if (analysis.status === "ready") {
+            const preference = preferences.current.get(entry.id);
+            if (preference?.name) await updateLibraryBatch([assetId], "rename", { namePrefix: preference.name });
+            if (preference?.role && preference.role !== "auto" && mediaTypeForFile(entry.file).startsWith("video/")) {
+              await updateLibraryBatch([assetId], "role", { mediaRole: preference.role });
+            }
             update(entry.id, { phase: "ready", progress: 100, error: undefined });
             if (mounted.current) void readyCallback.current().catch(() => undefined);
             return;
@@ -147,6 +155,12 @@ export function LibraryUpload({ onReady }: { readonly onReady: () => Promise<voi
         if (mounted.current) setHasProject(true);
       }
       const activeProjectId = projectId.current;
+      for (const entry of queued) {
+        if (!preferences.current.has(entry.id)) preferences.current.set(entry.id, {
+          name: namePrefix.trim() ? `${namePrefix.trim()} ${String(entries.indexOf(entry) + 1).padStart(3, "0")}` : undefined,
+          role: mediaRole,
+        });
+      }
       await Promise.all(queued.map((entry) => transfer(entry, activeProjectId)));
     } catch (requestError) {
       if (mounted.current) setError(message(requestError));
@@ -194,6 +208,11 @@ export function LibraryUpload({ onReady }: { readonly onReady: () => Promise<voi
           {starting ? "Starting uploads…" : queuedCount ? `Upload ${queuedCount} ${queuedCount === 1 ? "file" : "files"} to library` : "Upload to library"}
         </button>
       </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="text-xs font-bold text-[#666862]">Name these files <span className="font-normal">(optional)</span><input aria-label="Upload file name prefix" className="mt-1 min-h-11 w-full rounded-md border border-[#D7D9D3] px-3 text-sm text-[#20211F]" disabled={starting || hasProject} maxLength={230} onChange={(event) => setNamePrefix(event.currentTarget.value)} placeholder="e.g. Cream close-up → Cream close-up 001" value={namePrefix} /></label>
+        <label className="text-xs font-bold text-[#666862]">Footage role<select aria-label="Upload footage role" className="mt-1 min-h-11 w-full rounded-md border border-[#D7D9D3] bg-white px-3 text-sm text-[#20211F]" disabled={starting || hasProject} onChange={(event) => setMediaRole(event.currentTarget.value as MediaRole)} value={mediaRole}><option value="auto">Unsorted video</option><option value="talking">Talking footage</option><option value="broll">B-roll</option></select></label>
+      </div>
+      <p className="text-xs text-[#666862]">Names are numbered in upload order. Footage roles apply to videos; photos and audio keep their own views.</p>
       {error ? <p className="text-sm text-[#A23B2A]" role="alert">{error}</p> : null}
       {entries.length ? <ul aria-label="Library uploads" className="space-y-2">{entries.map((entry) => (
         <li className="rounded-md border border-[#D7D9D3] bg-white p-3" key={entry.id}>
