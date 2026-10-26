@@ -13,6 +13,7 @@ class ConceptRequestCreate(BaseModel):
     audience: str = Field(default="", max_length=600)
     collection_id: UUID | None = None
     privacy_mode: Literal["hybrid", "text_only"] = "hybrid"
+    reel_kind: Literal["story", "bloopers"] = "story"
 
     @field_validator("focus", "audience")
     @classmethod
@@ -59,10 +60,10 @@ class ConceptProposal(BaseModel):
             raise ValueError("concept titles and angles cannot be blank")
         return value
 
-    script: list[ConceptBeatProposal] = Field(min_length=2, max_length=10)
+    script: list[ConceptBeatProposal] = Field(min_length=1, max_length=10)
     visuals: list[ConceptVisualProposal] = Field(max_length=6)
 
 
 class ConceptProposals(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    concepts: list[ConceptProposal] = Field(min_length=1, max_length=3)
+    concepts: list[ConceptProposal] = Field(min_length=0, max_length=3)

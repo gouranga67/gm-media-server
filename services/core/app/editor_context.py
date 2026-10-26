@@ -301,7 +301,8 @@ def build_editor_context(
         selected = next((item for item in concept_selection["concepts"] if item["id"] == str(concept_selection["concept_id"])), None)
         if selected:
             context["selected_concept"] = {"request_id": str(concept_selection["request_id"]),
-                "title": selected["title"], "script": selected["script"], "visuals": selected["visuals"]}
+                "title": selected["title"], "script": selected["script"], "visuals": selected["visuals"],
+                "reel_kind": selected.get("reel_kind", "story")}
     return context
 
 

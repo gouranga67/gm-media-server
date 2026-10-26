@@ -7,6 +7,7 @@ from typing import Any
 from uuid import UUID, uuid5
 
 from app.concept_schemas import ConceptProposals, ConceptRequestCreate
+from app.blooper_detection import find_blooper_evidence
 from app.take_quality import production_chatter_reason
 
 MAX_SOURCES = 60
@@ -69,21 +70,27 @@ def public_inventory(inventory: dict) -> dict:
                        "project": source["project_name"][:48], "mime_type": source["mime_type"],
                        "role": source["library_role"], "notes": source["notes"][:64],
                        "tags": [tag[:32] for tag in source["tags"][:2]], "used_in_jobs": source["job_uses"]})
-    return {"focus": inventory.get("focus", ""), "audience": inventory.get("audience", ""),
+    return {"focus": inventory.get("focus", ""), "audience": inventory.get("audience", ""), "reel_kind": inventory.get("reel_kind", "story"),
             "assets": assets, "evidence": inventory["evidence"], "recent_concepts": inventory.get("recent_concepts", [])}
 
 
 def compact_inventory(rows: list[dict], segments: list[dict], payload: ConceptRequestCreate, recent: list[dict] | None = None) -> dict:
     sources = []
     by_asset = defaultdict(list)
+    bloopers = payload.reel_kind == "bloopers"
+    clues = find_blooper_evidence(segments) if bloopers else {}
     for segment in segments:
         text = " ".join(str(segment.get("text") or "").split())
         start, end = float(segment["start_seconds"]), float(segment["end_seconds"])
-        if not math.isfinite(start + end) or len(text) < 12 or len(text) > 900 or end - start < 0.5 or end - start > 25 or production_chatter_reason(text):
+        if not math.isfinite(start + end) or start < 0 or len(text) > 900 or end - start <= 0 or end - start > 25:
+            continue
+        if bloopers and int(segment["id"]) not in clues:
+            continue
+        if not bloopers and (len(text) < 12 or end - start < 0.5 or production_chatter_reason(text)):
             continue
         by_asset[str(segment["asset_id"])].append({
             "evidence_id": int(segment["id"]), "asset_id": str(segment["asset_id"]),
-            "start": start, "end": end, "text": text,
+            "start": start, "end": end, "text": text, **clues.get(int(segment["id"]), {}),
         })
     for row in rows:
         manifest = row.get("manifest") or {}
@@ -98,10 +105,19 @@ def compact_inventory(rows: list[dict], segments: list[dict], payload: ConceptRe
                         "has_video": str(row["mime_type"]).startswith("video/"),
                         "_visual_available": bool(derived.get("preview") or derived.get("thumbnail") or derived.get("contact_sheet")),
                         "_storage_key": row.get("storage_key")})
-    inventory = {"focus": payload.focus, "audience": payload.audience, "assets": sources, "evidence": [], "recent_concepts": (recent or [])[:6]}
+    inventory = {"focus": payload.focus, "audience": payload.audience, "reel_kind": payload.reel_kind,
+                 "assets": sources, "evidence": [], "recent_concepts": (recent or [])[:6]}
     used = len(json.dumps(public_inventory(inventory), ensure_ascii=False))
     eligible = [source for source in sources if source["has_video"] and source["library_role"] != "broll"]
-    queues = [deque(_sample(by_asset[source["asset_id"]], 12)) for source in eligible if by_asset[source["asset_id"]]]
+    queues = []
+    for source in eligible:
+        passages = by_asset[source["asset_id"]]
+        if not passages:
+            continue
+        # Retain candidate anchors before contextual passages under a tight budget.
+        sampled = (_sample([item for item in passages if item.get("blooper_candidate")], 8)
+                   + _sample([item for item in passages if not item.get("blooper_candidate")], 4)) if bloopers else _sample(passages, 12)
+        queues.append(deque(sampled))
     # Round-robin means a long first recording cannot crowd every other source out.
     while queues:
         next_queues = []
@@ -142,7 +158,7 @@ def load_inventory(database: Any, payload: ConceptRequestCreate) -> tuple[dict, 
         WHERE asset_id=ANY(%s) AND segment_kind='transcript'
         ORDER BY asset_id, start_seconds, segment_index
     """, ([row["id"] for row in chosen],)).fetchall()
-    prior = database.execute("SELECT concepts FROM reel_concept_requests WHERE status='ready' AND (%s::uuid IS NULL OR collection_id=%s) ORDER BY created_at DESC LIMIT 3", (payload.collection_id, payload.collection_id)).fetchall()
+    prior = database.execute("SELECT concepts FROM reel_concept_requests WHERE status='ready' AND reel_kind=%s AND (%s::uuid IS NULL OR collection_id=%s) ORDER BY created_at DESC LIMIT 3", (payload.reel_kind, payload.collection_id, payload.collection_id)).fetchall()
     recent = [{"title": option["title"][:100], "speech_evidence_ids": [beat["evidence_id"] for beat in option["script"][:10]]}
               for row in prior for option in row["concepts"]][:6]
     inventory = compact_inventory(chosen, list(segments), payload, recent=recent)
@@ -150,22 +166,31 @@ def load_inventory(database: Any, payload: ConceptRequestCreate) -> tuple[dict, 
                 "sources_considered": len(chosen), "speech_passages": len(inventory["evidence"]),
                 "inventory_character_limit": MAX_INVENTORY_CHARACTERS,
                 "scope": "collection" if payload.collection_id else "library"}
+    if payload.reel_kind == "bloopers":
+        coverage["possible_blooper_passages"] = sum(bool(item.get("blooper_candidate")) for item in inventory["evidence"])
     return inventory, coverage
 
 
 def validate_concepts(document: dict, inventory: dict, request_id: UUID) -> list[dict]:
     proposals = ConceptProposals.model_validate(document)
+    bloopers = inventory.get("reel_kind") == "bloopers"
+    if not bloopers and not proposals.concepts:
+        raise ValueError("no supported recorded story was proposed")
     evidence = {item["evidence_id"]: item for item in inventory["evidence"]}
     assets = {item["asset_id"]: item for item in inventory["assets"]}
     output, seen = [], set()
     for index, proposal in enumerate(proposals.concepts):
         ids = [beat.evidence_id for beat in proposal.script]
+        if not bloopers and len(ids) < 2:
+            raise ValueError("a story needs at least two recorded passages")
         if len(set(ids)) != len(ids) or any(id not in evidence for id in ids):
             raise ValueError("a concept cited unknown or repeated speech evidence")
         script = [{**evidence[beat.evidence_id], "role": beat.role,
                    "source_name": assets[evidence[beat.evidence_id]["asset_id"]]["source_name"],
                    "display_name": assets[evidence[beat.evidence_id]["asset_id"]]["library_name"]}
                   for beat in proposal.script]
+        if bloopers and not any(beat.get("blooper_candidate") for beat in script):
+            raise ValueError("a blooper concept must cite a possible outtake, not only clean setup")
         seconds = sum(beat["end"] - beat["start"] for beat in script)
         if not 5 <= seconds <= 55 or sum(len(beat["text"]) for beat in script) > 2200:
             raise ValueError("a concept's recorded script does not fit a short complete reel")
@@ -182,13 +207,17 @@ def validate_concepts(document: dict, inventory: dict, request_id: UUID) -> list
         output.append({"id": str(uuid5(request_id, f"concept-{index}")), "title": proposal.title,
                        "angle": proposal.angle, "script": script, "visuals": visuals,
                        "asset_ids": source_ids, "estimated_seconds": round(seconds, 1),
-                       "source_backed": True})
+                       "source_backed": True, "reel_kind": "bloopers" if bloopers else "story"})
     return output
 
 
 def concept_brief(concept: dict) -> str:
     lines = [f"Selected library concept: {concept['title']}", concept["angle"],
              "Build this selected story using the recorded lines below in this order. Preserve complete words and meaning. Use the supporting pictures where relevant; never invent dialogue or transfer product claims."]
+    if concept.get("reel_kind") == "bloopers":
+        lines[2] = ("Make a bloopers reel from these recorded outtakes. Keep the mistake, enough setup to understand it, "
+                    "and its real reaction or recovery. Keep the selected order and speech in sync; trim empty waiting. "
+                    "Never invent a mistake, laughter, dialogue or a reaction. Clues are possible outtakes, not proven errors.")
     lines.extend(f"{beat['role']}: {beat['text']}" for beat in concept["script"])
     lines.extend(f"Supporting picture — {visual['display_name'][:80]}" for visual in concept["visuals"])
     result = "\n".join(lines)

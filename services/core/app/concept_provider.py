@@ -8,12 +8,26 @@ from app.editor_provider import OPENAI_RESPONSES_URL, _request_plan, usable_chat
 
 
 def generate_concepts(inventory: dict, privacy_mode: str, settings: Settings) -> tuple[dict, dict]:
-    content = [{"type": "input_text", "text": (
+    direction = (
+        "Suggest up to three distinct short blooper reels from the possible outtake passages supplied. "
+        "Local clues are fallible: retake directions, self-corrections, repeated starts, transcribed laughter "
+        "or possible alternate takes do not prove a mistake or that a moment is funny. Inspect the actual "
+        "recorded text with adjacent setup and recovery. Each concept must include a blooper_candidate passage. "
+        "Preserve setup → stumble → real reaction/recovery within each gag; order separate gags for a satisfying ending. "
+        "Do not turn ordinary speech, intentional repetition, or a correct product claim into a supposed error. "
+        "Keep useful laughter and a brief earned reaction, trim empty waiting, and never pad to a target length. "
+        "No invented dialogue, laugh track, new reaction or misleading splice. Return concepts=[] if no worthwhile "
+        "blooper reel is actually supported, even when weak clues are present. "
+        if inventory.get("reel_kind") == "bloopers" else
         "Suggest up to three distinct, compelling short reels we can genuinely make from this library. "
+        "Build hook, explanation and a supported ending with clear referents. Do not mix claims between products, "
+        "include bloopers, or pad the story to hit a duration. Each story needs at least two recorded passages. "
+    )
+    content = [{"type": "input_text", "text": (
+        direction +
         "Use existing recorded speech only: script entries cite supplied evidence IDs in narrative order. "
         "The server displays those exact words; never invent quotes, claims, new narration, or source IDs. "
-        "Build hook, explanation and a supported ending with clear referents. Do not mix claims between products, "
-        "include bloopers, or pad the story to hit a duration. Each complete recorded script must total 5–55s "
+        "Each complete recorded script must total 5–55s "
         "and no more than 2200 characters. Consider related sources across upload groups; do not force unrelated "
         "recordings together. Recent concept titles and speech evidence IDs are supplied to avoid recycling the "
         "same recorded script when fresh supported stories are available. Prefer fresh angles. Return fewer options "

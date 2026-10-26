@@ -64,7 +64,7 @@ globalThis.fetch = async (url, options = {}) => {
   if (route === "concepts/library-status") payload = { unique_sources: 3, catalogued_sources: 3, spoken_sources: 2, visually_indexed_sources: 3, still_processing: 0 };
   else if (route === "concepts" && (options.method ?? "GET") === "GET") payload = conceptHistory;
   else if (route === "concepts") {
-    const created = conceptSession(body.id, body.focus);
+    const created = conceptSession(body.id, body.focus, body.reel_kind);
     conceptHistory.unshift(created);
     conceptCounter += 1;
     payload = { ...created, status: "pending" };
@@ -341,8 +341,8 @@ test("new-job picker shows readable names and filters footage roles without drop
   } finally { delete serverAsset.display_name; delete serverAsset.media_role; }
 });
 
-function conceptSession(id = crypto.randomUUID(), focus = "") {
-  return { id, focus, audience: "", privacy_mode: "hybrid", status: "ready", total_tokens: 1200,
+function conceptSession(id = crypto.randomUUID(), focus = "", reelKind = "story") {
+  const session = { id, focus, reel_kind: reelKind, audience: "", privacy_mode: "hybrid", status: "ready", total_tokens: 1200,
     created_at: "2026-01-01T00:00:00Z", error: null, model: "fixture-model", jobs: [],
     coverage: { unique_sources_available: 3, sources_considered: 3, speech_passages: 6 },
     concepts: [1,2,3].map((index) => ({ id: `option-${index}`, title: `Recorded story ${index}`,
@@ -350,6 +350,14 @@ function conceptSession(id = crypto.randomUUID(), focus = "") {
       asset_ids: [serverId], visuals: [{ asset_id: serverId, display_name: "Product detail", reason: "Shows this recorded demonstration.", mime_type: "video/mp4" }],
       script: [{ evidence_id: index * 2, asset_id: serverId, start: 0, end: 6, role: "hook", text: "These are the exact opening words from the recording.", display_name: "Product introduction", source_name: "talking.mp4" },
                { evidence_id: index * 2 + 1, asset_id: serverId, start: 6, end: 12, role: "ending", text: "Here is the supported ending already recorded.", display_name: "Product introduction", source_name: "talking.mp4" }] })) };
+  if (reelKind === "bloopers") {
+    session.coverage.possible_blooper_passages = 3;
+    for (const concept of session.concepts) {
+      concept.reel_kind = "bloopers";
+      Object.assign(concept.script[0], { text: "I can't pronounce that! Start again.", blooper_candidate: true, blooper_signals: ["word_stumble", "retake_direction"] });
+    }
+  }
+  return session;
 }
 async function mountConcepts() {
   await act(async () => root.render(React.createElement(ConceptDesk)));
@@ -389,4 +397,33 @@ test("saved concepts reopen without a model call and a failed render retains the
   assert.equal(document.querySelector('input[aria-label="Choose Recorded story 1"]').checked, true);
   assert.equal(posts("concepts").length, 0);
   assert.equal(conceptHistory[0].jobs.length, 0);
+});
+
+test("bloopers are an explicit mode with visible clues and no preview until selection", async () => {
+  await mountConcepts();
+  assert.equal(document.querySelector('select[aria-label="Reel type"]').value, "story");
+  await chooseOption('select[aria-label="Reel type"]', 'bloopers');
+  assert.equal(posts("concepts").length, 0);
+  assert.match(document.body.textContent, /Purely visual gags.*may be missed/);
+  await click(button("Find blooper reel ideas"));
+  await waitFor(() => document.querySelector('input[aria-label="Choose Recorded story 1"]'));
+  assert.equal(posts("concepts")[0].body.reel_kind, "bloopers");
+  assert.match(document.body.textContent, /Possible outtake · word stumble, retake direction/);
+  assert.match(document.body.textContent, /3 possible outtake passages/);
+  assert.equal(calls.some((call) => call.route.endsWith('/render')), false);
+  await click(document.querySelector('input[aria-label="Choose Recorded story 1"]'));
+  await click(button("Create 1 preview"));
+  await waitFor(() => [...document.querySelectorAll('a')].some((item) => item.textContent === "Open edit"));
+  assert.deepEqual(calls.find((call) => call.route.endsWith('/render')).body.concept_ids, ["option-1"]);
+});
+
+test("a saved blooper session can honestly decline weak evidence without creating a job", async () => {
+  const session = conceptSession(crypto.randomUUID(), "", "bloopers");
+  session.concepts = [];
+  conceptHistory = [session];
+  await mountConcepts();
+  await waitFor(() => document.body.textContent.includes("No worthwhile blooper reel was supported"));
+  assert.equal(posts("concepts").length, 0);
+  assert.equal(button("Create selected previews").disabled, true);
+  assert.equal(calls.some((call) => call.route.endsWith('/render')), false);
 });

@@ -25,12 +25,15 @@ def main():
             raise RuntimeError("concept response leaked internal inventory or has invalid state")
         if detail["status"] == "ready":
             ready += 1
-            if not 1 <= len(detail["concepts"]) <= 3:
+            bloopers = detail.get("reel_kind") == "bloopers"
+            if not (0 if bloopers else 1) <= len(detail["concepts"]) <= 3:
                 raise RuntimeError("ready concept session has invalid option count")
             for concept in detail["concepts"]:
                 UUID(concept["id"])
-                if not concept.get("source_backed") or not 2 <= len(concept["script"]) <= 10:
+                if not concept.get("source_backed") or not (1 if bloopers else 2) <= len(concept["script"]) <= 10:
                     raise RuntimeError("concept does not declare its recorded source script")
+                if bloopers and not any(beat.get("blooper_candidate") for beat in concept["script"]):
+                    raise RuntimeError("blooper concept has no candidate outtake")
                 for beat in concept["script"]:
                     UUID(beat["asset_id"])
                     if not beat["text"] or not 0 <= beat["start"] < beat["end"]:

@@ -109,6 +109,10 @@ Discovery considers up to 60 unique ready sources per request, spreads speech ev
 
 After deploying migration 026, run `python3 scripts/verify-library-concepts.py` for read-only readiness checks with no model calls. Generating concepts and rendering selected previews are explicit actions in the browser.
 
+Choose **Reel type → Bloopers & outtakes** to find possible mistakes, restarts, lost lines, repeated takes and laughter in the stored transcript. The local scan includes nearby setup/recovery from the same recording, excludes labelled B-roll from spoken candidates, and adds no model calls. If no clues are found, no concept request is queued. Candidate scripts show the reason and source/time links; review them, choose one or two, then create previews as usual. The editor explicitly preserves recorded outtakes rather than substituting clean takes. Empty waiting is still trimmed, and the usual approval/export step remains.
+
+These are possible outtakes, not verified mistakes or factual error detection. Repeated takes can be intentional; purely visual gags, ASR mistakes and laughter omitted by transcription may be missed. A concept request may return no worthwhile options when weak clues do not support a reel. The existing 60-source/36,000-character discovery limits apply; narrow by collection for targeted scans. Normal story discovery keeps its clean-take behavior. This addition requires migration 027.
+
 ## Import rights-approved music
 
 GM Studio can install the reviewed starter catalogue or accept your own non-synthetic audio files with recorded licence, commercial-use confirmation, attribution, and permitted platforms.

@@ -448,6 +448,17 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
         "dialogue cuts receive local pause tightening by default; explicit instructions to preserve "
         "pauses or make a blooper reel take precedence.\n\n"
     )
+    if public.get("job", {}).get("editorial_policy", {}).get("bloopers_requested"):
+        take_instruction = (
+            "The user explicitly requested a bloopers reel. The outtakes are the subject: preserve each gag's "
+            "setup, recorded mistake/restart, and genuine reaction or recovery. Do not replace selected failed "
+            "takes with the clean sales version. Local blooper clues are possible evidence, not proof: never "
+            "portray a correct claim, intentional repetition, or ordinary speech as an error. Keep source audio "
+            "and picture synchronized; captions reflect real recorded words, not invented jokes or laughter. "
+            "Allow a brief earned comedy beat, but trim empty waiting, noise-only tails and long gaps. Do not "
+            "pad to the requested duration. Use effects only when enabled and when the gag earns them. "
+            "Selected concept setup and recovery should stay in source chronology within each gag.\n\n"
+        )
     if recipe == "montage":
         task_instruction = (
             "Create one source-led montage JSON edit plan. Choose only uploaded video and image assets. "

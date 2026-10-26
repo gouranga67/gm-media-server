@@ -15,8 +15,9 @@ from app.concept_provider import generate_concepts
 from app.concept_schemas import ConceptRequestCreate, ConceptSelection
 from app.concepts import process_one_concept, render_selected_concepts, request_concepts
 from app.config import Settings
-from app.editor_provider import _request_plan
+from app.editor_provider import _model_content, _request_plan
 from app.concept_schemas import ConceptProposals
+from app.take_quality import editing_policy
 
 
 def asset(index, project="group", role="auto"):
@@ -303,3 +304,93 @@ class ConceptTransportTests(unittest.TestCase):
             if definition.get("type") == "object":
                 self.assertFalse(definition["additionalProperties"])
                 self.assertEqual(set(definition["required"]), set(definition["properties"]))
+
+
+class BlooperConceptTests(unittest.TestCase):
+    def setUp(self):
+        self.row = asset(1)
+        self.payload = ConceptRequestCreate(id=uuid4(), reel_kind="bloopers")
+        self.segments = [dict(id=index, asset_id=self.row["id"], start_seconds=(index-1)*4,
+                              end_seconds=index*4, text=text)
+                         for index, text in enumerate(("Here is the new product name.", "Start that again.",
+                                                       "[laughter] I can't say that!", "An unrelated clean product claim."), 1)]
+        self.inventory = compact_inventory([self.row], self.segments, self.payload)
+        self.document = {"concepts": [dict(title="The tongue twister", angle="An actual recorded restart and recovery.",
+                                         script=[dict(evidence_id=1, role="context"), dict(evidence_id=2, role="development"),
+                                                 dict(evidence_id=3, role="payoff")], visuals=[])]}
+
+    def test_blooper_mode_restores_retakes_with_reviewable_clues_and_exact_speech(self):
+        evidence = {item["evidence_id"]: item for item in self.inventory["evidence"]}
+        self.assertTrue(evidence[2]["blooper_candidate"])
+        self.assertEqual(evidence[2]["text"], "Start that again.")
+        concept = validate_concepts(self.document, self.inventory, self.payload.id)[0]
+        self.assertEqual(concept["reel_kind"], "bloopers")
+        self.assertEqual([item["evidence_id"] for item in concept["script"]], [1,2,3])
+        self.assertTrue(editing_policy({"brief": concept_brief(concept)})["bloopers_requested"])
+        clean = compact_inventory([self.row], self.segments, ConceptRequestCreate(id=uuid4()))
+        self.assertNotIn(2, {item["evidence_id"] for item in clean["evidence"]})
+
+    def test_no_candidates_queues_no_model_call_and_keeps_the_session_list_clean(self):
+        payload = self.payload
+        database = Mock(); database.execute.return_value.fetchone.side_effect = [None, {"count":0}]
+        @contextmanager
+        def connection(): yield database
+        with patch("app.concepts.connection", connection), patch("app.concepts.assert_ai_budget"), \
+             patch("app.concepts.load_inventory", return_value=({"assets":[],"evidence":[]},{})), \
+             patch("app.concepts.generate_concepts") as provider:
+            with self.assertRaises(HTTPException) as error:
+                request_concepts(payload)
+        self.assertIn("No possible bloopers", error.exception.detail)
+        provider.assert_not_called()
+        self.assertFalse(any("INSERT" in call.args[0] for call in database.execute.call_args_list))
+
+    def test_blooper_can_be_one_complete_passage_and_can_decline_weak_candidates(self):
+        inventory = deepcopy(self.inventory)
+        inventory["evidence"] = [dict(evidence_id=10, asset_id=str(self.row["id"]), start=0,end=6,
+                                     text="I forgot my line. [laughter] Let me try again.", blooper_candidate=True,
+                                     blooper_signals=["lost_line"], confidence="possible")]
+        doc = deepcopy(self.document); doc["concepts"][0]["script"] = [dict(evidence_id=10, role="payoff")]
+        self.assertEqual(len(validate_concepts(doc, inventory, self.payload.id)[0]["script"]), 1)
+        self.assertEqual(validate_concepts({"concepts":[]}, inventory, self.payload.id), [])
+        with self.assertRaisesRegex(ValueError, "no supported recorded story"):
+            validate_concepts({"concepts":[]}, {**inventory, "reel_kind":"story"}, self.payload.id)
+
+    def test_clean_setup_alone_cannot_be_presented_as_a_blooper(self):
+        doc = deepcopy(self.document); doc["concepts"][0]["script"] = [dict(evidence_id=1,role="hook")]
+        with self.assertRaisesRegex(ValueError, "must cite a possible outtake"):
+            validate_concepts(doc, self.inventory, self.payload.id)
+
+    def test_reusing_request_id_for_a_different_reel_type_is_rejected(self):
+        _, _, _, session = fixture()
+        session.update(focus="", collection_id=None, reel_kind="story")
+        database = Mock(); database.execute.return_value.fetchone.return_value = session
+        @contextmanager
+        def connection(): yield database
+        with patch("app.concepts.connection", connection), patch("app.concepts.load_inventory") as inventory:
+            with self.assertRaises(HTTPException):
+                request_concepts(ConceptRequestCreate(id=session["id"], reel_kind="bloopers"))
+        inventory.assert_not_called()
+
+    def test_blooper_provider_and_editor_do_not_request_clean_take_substitution(self):
+        settings = Settings(database_url="postgresql://example.invalid/test", upload_hook_secret="x"*32)
+        with patch("app.concept_provider.usable_chatgpt_credentials", return_value={"access_token":"fixture"}), \
+             patch("app.concept_provider._request_plan", return_value=({"concepts":[]},{})) as request:
+            generate_concepts(self.inventory, "text_only", settings)
+        prompt = request.call_args.kwargs["structured_task"]["content"][0]["text"]
+        self.assertIn("possible outtake", prompt)
+        self.assertIn("Return concepts=[]", prompt)
+        self.assertNotIn("include bloopers, or pad", prompt)
+        concept = validate_concepts(self.document, self.inventory, self.payload.id)[0]
+        content = _model_content({"job":{"brief": concept_brief(concept), "editorial_policy": editing_policy({"brief":concept_brief(concept)})},
+                                  "assets": [], "selected_concept": concept}, settings)
+        self.assertIn("Do not replace selected failed takes", content[0]["text"])
+        self.assertNotIn("Prefer a complete clean take over false starts", content[0]["text"])
+
+    def test_blooper_scan_stays_within_the_existing_text_budget(self):
+        rows = [asset(index) for index in range(60)]
+        segments = [dict(id=index*100+n, asset_id=row["id"], start_seconds=n*4,end_seconds=n*4+4,
+                         text="I can't pronounce that, let's try again. "*8)
+                    for index, row in enumerate(rows) for n in range(30)]
+        inventory = compact_inventory(rows, segments, self.payload)
+        self.assertLessEqual(len(json.dumps(public_inventory(inventory), ensure_ascii=False)), MAX_INVENTORY_CHARACTERS)
+        self.assertTrue(any(item.get("blooper_candidate") for item in inventory["evidence"]))

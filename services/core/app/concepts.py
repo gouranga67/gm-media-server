@@ -61,7 +61,7 @@ def request_concepts(payload: ConceptRequestCreate) -> dict:
         database.execute("SELECT pg_advisory_xact_lock(hashtext('gm:concept-request'))")
         existing = database.execute("SELECT * FROM reel_concept_requests WHERE id=%s", (payload.id,)).fetchone()
         if existing is not None:
-            if any(str(existing.get(key) or "") != str(value or "") for key, value in payload.model_dump().items() if key != "id"):
+            if any(str(existing.get(key, "story" if key == "reel_kind" else None) or "") != str(value or "") for key, value in payload.model_dump().items() if key != "id"):
                 raise HTTPException(status_code=409, detail="this concept request ID belongs to different settings")
             return _public(existing)
         pending = database.execute("SELECT count(*) AS count FROM reel_concept_requests WHERE status IN ('pending','generating')").fetchone()
@@ -69,12 +69,14 @@ def request_concepts(payload: ConceptRequestCreate) -> dict:
             raise HTTPException(status_code=429, detail="two concept requests are already queued; wait for them to finish")
         assert_ai_budget(database)
         inventory, coverage = load_inventory(database, payload)
-        if len(inventory["evidence"]) < 2:
+        if payload.reel_kind == "bloopers" and not any(item.get("blooper_candidate") for item in inventory["evidence"]):
+            raise HTTPException(status_code=409, detail="No possible bloopers were found in the scanned transcripts. No model request was queued. Try another collection or add footage with recorded mistakes, retakes or laughter; purely visual bloopers need manual review.")
+        if payload.reel_kind == "story" and len(inventory["evidence"]) < 2:
             raise HTTPException(status_code=409, detail="not enough indexed spoken video is ready in this scope; wait for analysis, choose a broader collection, or add talking footage")
         row = database.execute("""
-            INSERT INTO reel_concept_requests (id,focus,audience,collection_id,privacy_mode,inventory,coverage)
-            VALUES (%s,%s,%s,%s,%s,%s,%s) RETURNING *
-        """, (payload.id, payload.focus, payload.audience, payload.collection_id, payload.privacy_mode, Jsonb(inventory), Jsonb(coverage))).fetchone()
+            INSERT INTO reel_concept_requests (id,focus,audience,collection_id,privacy_mode,inventory,coverage,reel_kind)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *
+        """, (payload.id, payload.focus, payload.audience, payload.collection_id, payload.privacy_mode, Jsonb(inventory), Jsonb(coverage), payload.reel_kind)).fetchone()
     return _public(row)
 
 
