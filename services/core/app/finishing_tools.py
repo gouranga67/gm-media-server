@@ -607,7 +607,7 @@ def audio_join_sources(plan: Any, paths: list[Any], first_index: int) -> list[di
                 "picture_end": at + duration,
                 "gain_db": -8.0 + float(getattr(clip, "source_audio_gain_db", 0))
                 if hasattr(clip, "duration")
-                else 0.0,
+                else float(getattr(clip, "source_audio_gain_db", 0)),
             }
         )
     return result

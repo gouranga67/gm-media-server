@@ -17,14 +17,25 @@ def compare_revision(previous: dict[str, Any], current: dict[str, Any]) -> dict[
     changes = []
     if before != after:
         changes.append(f"Source selections/order changed: {added} new or retimed, {removed} replaced or removed.")
+        for index, (old, new) in enumerate(zip(before, after, strict=False)):
+            if old[0] == new[0] and old[1:3] != new[1:3]:
+                changes.append(
+                    f"Clip {index + 1} source range: {old[1]:.3f}–{old[2]:.3f}s → "
+                    f"{new[1]:.3f}–{new[2]:.3f}s."
+                )
     for key, label in (
         ("visual_preset", "Framing"), ("transition", "Transitions"),
-        ("include_source_audio", "Source audio"), ("source_audio_gain_db", "Source volume"),
+        ("include_source_audio", "Source audio"),
     ):
         if [clip.get(key) for clip in previous.get("clips", [])] != [
             clip.get(key) for clip in current.get("clips", [])
         ]:
             changes.append(f"{label} changed.")
+    for index, (old, new) in enumerate(zip(previous.get("clips", []), current.get("clips", []), strict=False)):
+        old_gain = float(old.get("source_audio_gain_db") or 0)
+        new_gain = float(new.get("source_audio_gain_db") or 0)
+        if old_gain != new_gain:
+            changes.append(f"Clip {index + 1} source volume: {old_gain:+g} → {new_gain:+g} dB.")
     for key, default, label in (
         ("music_track_id", None, "Music track"), ("music_mix", "none", "Music level"),
         ("effects", [], "Creative effects"), ("caption_position", "lower_safe", "Caption position"),

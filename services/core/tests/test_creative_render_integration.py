@@ -25,6 +25,39 @@ class CreativeRenderIntegrationTests(unittest.TestCase):
             check=True, capture_output=True, timeout=60,
         ).stdout
 
+    def test_speech_volume_revision_changes_the_selected_passage_after_rendering(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            sources = []
+            clips = []
+            for name, level in (("loud", 1), ("quiet", .1)):
+                source = root / f"{name}.mp4"
+                self.ffmpeg("-f", "lavfi", "-i", "color=black:s=180x320:r=30:d=2",
+                            "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=2",
+                            "-af", f"volume={level}", "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                            "-c:a", "aac", str(source))
+                sources.append((source, 0, 2))
+                clips.append({"asset_id": str(uuid4()), "source_in": 0, "source_out": 2, "crop": "center_fill"})
+            plan = TalkingHeadEditPlan.model_validate({
+                "schema_version": "1.4", "recipe": "talking_head", "clips": clips,
+                "caption_style": "clean_blue_v1", "audio_preset": "spoken_voice_v1",
+                "end_card": "none", "editorial_summary": "Preserve both takes; raise only the quiet ending.",
+            })
+            captions = root / "captions.ass"
+            captions.write_text(render_ass([]))
+            ratios = []
+            for gain in (0, 12):
+                plan.clips[1].source_audio_gain_db = gain
+                output = root / f"gain-{gain}.mp4"
+                _render_video(sources, plan, captions, output, 60, width=180, height=320)
+                pcm = array.array("h", self.ffmpeg("-i", str(output), "-vn", "-ac", "1", "-ar", "8000", "-f", "s16le", "pipe:1"))
+                def rms(start: float, end: float) -> float:
+                    samples = pcm[round(start*8000):round(end*8000)]
+                    return math.sqrt(sum(float(value)**2 for value in samples)/len(samples))
+                ratios.append(20*math.log10(rms(2.4, 3.6)/rms(.4, 1.6)))
+            self.assertGreater(ratios[1]-ratios[0], 8, "the requested boost must remain audible after whole-reel normalization")
+            self.assertEqual([(c.source_in, c.source_out) for c in plan.clips], [(0, 2), (0, 2)])
+
     def assert_rendered_content(self, output: Path, *, with_music: bool) -> None:
         probe = json.loads(subprocess.check_output([
             "ffprobe", "-v", "error", "-show_streams", "-show_format", "-of", "json", str(output),

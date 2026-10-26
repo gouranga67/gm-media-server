@@ -413,6 +413,8 @@ def _ffmpeg_filter(
             "aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo,"
             "asetpts=PTS-STARTPTS"
         )
+        if clip.source_audio_gain_db:
+            audio += f",volume={clip.source_audio_gain_db:.3f}dB"
         transition_seconds = min(0.18, duration / 4)
         if fade_in:
             audio += f",afade=t=in:st=0:d={transition_seconds:.3f}"
@@ -748,6 +750,7 @@ def render_edit_preview(
                 "sha256": inventory[str(clip.asset_id)].get("sha256"),
                 "source_in": clip.source_in,
                 "source_out": clip.source_out,
+                "source_audio_gain_db": clip.source_audio_gain_db,
                 "transition": clip.transition,
                 "visual_preset": clip.visual_preset,
                 "story_role": clip.story_role,
@@ -1015,6 +1018,7 @@ def render_final_delivery(
                 "sha256": inventory[str(clip.asset_id)].get("sha256"),
                 "source_in": clip.source_in,
                 "source_out": clip.source_out,
+                "source_audio_gain_db": clip.source_audio_gain_db,
                 "transition": clip.transition,
                 "visual_preset": clip.visual_preset,
                 "story_role": clip.story_role,

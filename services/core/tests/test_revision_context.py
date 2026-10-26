@@ -209,6 +209,22 @@ class RevisionContextTests(unittest.TestCase):
                                   {"clips": [], "music_mix": "present"})
         self.assertEqual(report["changes"], ["Music level changed."])
 
+    def test_audio_revision_tools_preserve_the_requested_take(self):
+        context = self.context()
+        context["revision"] = {"mode": "targeted", "instruction": "The final line is inaudible.", "previous_plan": {"clips": []}}
+        prompt = _model_content(context, SimpleNamespace(editor_max_context_characters=120_000))[0]["text"]
+        self.assertIn("source_audio_gain_db", prompt)
+        self.assertIn("instead of replacing the take", prompt)
+
+    def test_report_shows_exact_timing_and_gain_not_just_changed(self):
+        before = {"clips": [{"asset_id": "one", "source_in": 2.39, "source_out": 9.17}]}
+        after = {"clips": [{"asset_id": "one", "source_in": 2.39, "source_out": 8.85, "source_audio_gain_db": 8}]}
+        report = compare_revision(before, after)
+        self.assertIn("Clip 1 source range: 2.390–9.170s → 2.390–8.850s.", report["changes"])
+        self.assertIn("Clip 1 source volume: +0 → +8 dB.", report["changes"])
+        after["clips"][0].update(source_out=9.17, source_audio_gain_db=0)
+        self.assertFalse(compare_revision(before, after)["changed"])
+
 
 if __name__ == "__main__":
     unittest.main()

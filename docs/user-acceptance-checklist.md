@@ -85,6 +85,8 @@ Use one good test reel for this group. Precise controls refer to source time; fi
 | --- | --- | --- |
 | E1 | Type revision feedback without submitting | Nothing starts automatically; text remains available. |
 | E2 | Submit one clear natural-language change | The requested content or structure actually changes, with unrelated strengths preserved where possible. A rewritten summary alone is not enough. |
+| E2a | Ask to raise only the final quiet speech clip, keeping its words and picture | That same clip becomes louder relative to neighbouring dialogue; the change report lists its gain. The agent must not substitute a different closing take as a volume fix. |
+| E2b | Trim a dangling word at the end of a phrase | The excluded word stays excluded after rendering; protective word handles do not bring its beginning back. Check the exact range change and listen to the join. |
 | E3 | Use the story-rebuild revision option | It can replace/reorder unlocked material rather than mechanically repeating the rejected draft. |
 | E4 | Trim at word boundaries | Complete words remain audible and synchronized; source seconds are not confused with reel seconds. |
 | E5 | Split, move or remove a clip | The intended passage changes, remaining audio is continuous and retained overlays follow the content. |

@@ -45,6 +45,15 @@ class EditClip(BaseModel):
     story_role: Literal["hook", "context", "development", "payoff", "reaction", "ending"] = "development"
     editorial_intent: str = Field(default="", max_length=180)
 
+    source_audio_gain_db: float = Field(default=0.0, ge=-12.0, le=12.0)
+
+    @model_serializer(mode="wrap")
+    def preserve_legacy_zero_gain(self, handler: Any) -> dict[str, Any]:
+        document = handler(self)
+        if self.source_audio_gain_db == 0:
+            document.pop("source_audio_gain_db", None)
+        return document
+
     @model_validator(mode="after")
     def source_range_is_forward(self) -> "EditClip":
         if self.source_out - self.source_in < 0.25:
@@ -393,10 +402,9 @@ def apply_timeline_adjustments(
             clips[index].visual_preset = visual_preset
         audio_gain = adjustment.get("source_audio_gain_db")
         if audio_gain is not None:
-            if not isinstance(plan, MontageEditPlan):
-                raise ValueError("per-clip source volume is available for montages")
             clips[index].source_audio_gain_db = float(audio_gain)
-            clips[index].include_source_audio = True
+            if isinstance(plan, MontageEditPlan):
+                clips[index].include_source_audio = True
         max_pause = adjustment.get("max_pause_seconds")
         if max_pause is not None:
             asset = inventory.get(str(clips[index].asset_id))
@@ -532,6 +540,7 @@ EDIT_PLAN_JSON_SCHEMA: dict[str, Any] = {
                         "enum": ["hook", "context", "development", "payoff", "reaction", "ending"],
                     },
                     "editorial_intent": {"type": "string", "maxLength": 180},
+                    "source_audio_gain_db": {"type": "number", "minimum": -12, "maximum": 12},
                 },
                 "required": [
                     "asset_id",
@@ -542,6 +551,7 @@ EDIT_PLAN_JSON_SCHEMA: dict[str, Any] = {
                     "visual_preset",
                     "story_role",
                     "editorial_intent",
+                    "source_audio_gain_db",
                 ],
                 "additionalProperties": False,
             },
@@ -800,7 +810,7 @@ def protect_spoken_boundaries(plan: EditPlan, assets: list[dict[str, Any]]) -> E
         if asset is None:
             continue
         by_asset[asset_id].append(clip)
-        words: list[tuple[float, float]] = []
+        all_words: list[tuple[float, float]] = []
         for segment in asset.get("transcript_segments", []):
             if not isinstance(segment, dict):
                 continue
@@ -812,15 +822,20 @@ def protect_spoken_boundaries(plan: EditPlan, assets: list[dict[str, Any]]) -> E
                     end = float(word["end"])
                 except (KeyError, TypeError, ValueError):
                     continue
-                if end > float(clip.source_in) and start < float(clip.source_out):
-                    words.append((start, end))
+                if math.isfinite(start) and math.isfinite(end) and 0 <= start < end:
+                    all_words.append((start, end))
+        words = sorted((start, end) for start, end in all_words
+                       if end > float(clip.source_in) and start < float(clip.source_out))
         if not words:
             continue
-        words.sort()
         duration = float(asset.get("duration_seconds") or clip.source_out)
-        clip.source_in = round(max(0.0, min(float(clip.source_in), words[0][0] - 0.12)), 3)
+        # Handles may occupy a gap, but must not reintroduce a neighbouring word
+        # deliberately excluded by a precise cleanup revision.
+        preceding_end = max((end for start, end in all_words if end <= words[0][0]), default=0.0)
+        following_start = min((start for start, end in all_words if start >= words[-1][1]), default=duration)
+        clip.source_in = round(max(0.0, min(float(clip.source_in), max(preceding_end, words[0][0] - 0.12))), 3)
         clip.source_out = round(
-            min(duration, max(float(clip.source_out), words[-1][1] + 0.16)), 3
+            min(duration, max(float(clip.source_out), min(following_start, words[-1][1] + 0.16))), 3
         )
 
     # Adjacent selections from one source can both expand into the same silence.

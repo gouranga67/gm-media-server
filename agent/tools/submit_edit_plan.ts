@@ -20,6 +20,7 @@ const talkingHeadClip = z
     ]),
     story_role: z.enum(["hook", "context", "development", "payoff", "reaction", "ending"]),
     editorial_intent: z.string().max(180),
+    source_audio_gain_db: z.number().min(-12).max(12).default(0),
   })
   .strict();
 

@@ -8,6 +8,7 @@ from app.edit_plan import (
     derive_duration_variant,
     edit_plan_duration,
     repair_predictable_plan_defaults,
+    schema_for_recipe,
     validate_edit_plan,
 )
 
@@ -44,6 +45,24 @@ class EditPlanValidationTests(unittest.TestCase):
     def test_accepts_source_only_plan(self) -> None:
         plan = validate_edit_plan(self.document, self.assets)
         self.assertEqual(str(plan.clips[0].asset_id), str(self.asset_id))
+
+    def test_speech_volume_is_bounded_and_preserves_legacy_zero_gain_documents(self) -> None:
+        plan = validate_edit_plan(self.document, self.assets)
+        self.assertNotIn("source_audio_gain_db", plan.model_dump(mode="json")["clips"][0])
+        self.document["clips"][0]["source_audio_gain_db"] = 8
+        boosted = validate_edit_plan(self.document, self.assets)
+        self.assertEqual(boosted.clips[0].source_audio_gain_db, 8)
+        self.assertEqual(boosted.model_dump(mode="json")["clips"][0]["source_audio_gain_db"], 8)
+        adjusted = apply_timeline_adjustments(plan, [{"clip_index": 0, "source_audio_gain_db": 6}], self.assets)
+        self.assertEqual(adjusted.clips[0].source_audio_gain_db, 6)
+        self.assertEqual((adjusted.clips[0].source_in, adjusted.clips[0].source_out), (1, 8.5))
+        self.document["clips"][0]["source_audio_gain_db"] = 13
+        with self.assertRaises(ValidationError):
+            validate_edit_plan(self.document, self.assets)
+        for recipe in ("talking_head", "montage"):
+            schema = schema_for_recipe(recipe)["properties"]["clips"]["items"]
+            self.assertIn("source_audio_gain_db", schema["required"])
+            self.assertEqual(schema["properties"]["source_audio_gain_db"]["maximum"], 12)
 
     def test_rejects_invented_asset(self) -> None:
         self.document["clips"][0]["asset_id"] = str(uuid4())
@@ -253,6 +272,21 @@ class EditPlanValidationTests(unittest.TestCase):
 
         self.assertEqual(plan.clips[0].source_in, 0.88)
         self.assertEqual(plan.clips[0].source_out, 2.26)
+
+    def test_speech_handles_do_not_restore_a_trimmed_next_word_or_previous_filler(self) -> None:
+        self.assets[0]["transcript_segments"] = [{"words": [
+            {"start": .7, "end": 1, "text": "um"},
+            {"start": 1, "end": 1.5, "text": "Complete"},
+            {"start": 1.5, "end": 2.1, "text": "thought."},
+            {"start": 2.1, "end": 2.4, "text": "So"},
+            {"start": 2.4, "end": 2.8, "text": "we"},
+        ]}]
+        self.document["clips"][0].update(source_in=1, source_out=2.1)
+        plan = validate_edit_plan(self.document, self.assets)
+        self.assertEqual((plan.clips[0].source_in, plan.clips[0].source_out), (1, 2.1))
+        self.document["clips"][0].update(source_in=1.03, source_out=2.0)
+        protected = validate_edit_plan(self.document, self.assets)
+        self.assertEqual((protected.clips[0].source_in, protected.clips[0].source_out), (1, 2.1))
 
     def test_duration_variant_trims_without_changing_source_order(self) -> None:
         self.document["clips"] = [
