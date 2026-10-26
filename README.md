@@ -29,6 +29,8 @@ Editor model ---> constrained JSON edit plan ---> validator ---> FFmpeg renderer
 
 Start with the illustrated [system architecture guide](docs/system-architecture-guide.md), or open its [print-ready PDF edition](docs/GM-Studio-System-Architecture-Guide.pdf). The detailed design is in [the architecture plan](docs/architecture-plan.md), current progress and exit criteria are in [the build phases](docs/build-phases.md), and the layered acceptance process is in [the testing plan](docs/testing-plan.md).
 
+The [26 October system audit and roadmap](docs/system-audit-and-roadmap.md) reviews all page routes, model evidence, compute efficiency, editing tools and proposed next phases. Read the [illustrated audit PDF](docs/GM-Studio-System-Audit-and-Roadmap.pdf) or its [browser edition](docs/system-audit-and-roadmap.html). Proposed features are clearly separated from inspected behavior.
+
 ## Requirements
 
 - Linux host with Docker Engine and Docker Compose v2

@@ -3,6 +3,8 @@
 Status: accepted architecture; implementation tracked in `docs/build-phases.md`
 Prepared: 2026-10-20
 
+This document preserves the original architecture decisions and inventory at that date. For the implemented system, current limitations and proposed changes, read the [26 October system audit](system-audit-and-roadmap.md) and [build status](build-phases.md). Historical statements such as an empty repository describe the initial inventory, not the current application.
+
 ## 1. Goal and operating rule
 
 The server should accept original videos and photographs from a phone, create short-form video and designed social posts, and return reviewable exports. Agents make editorial decisions; deterministic media tools perform the edit.

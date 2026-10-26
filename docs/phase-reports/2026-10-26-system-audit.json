@@ -1,0 +1,429 @@
+{
+  "audit_date": "2026-10-26",
+  "timezone": "Australia/Brisbane",
+  "source_commit": "bf05b2a",
+  "deployed_commit_independently_verified": false,
+  "mode": "read_only",
+  "browser_non_get_head_requests": "blocked",
+  "hosted_model_requests_submitted": 0,
+  "production_mutations_submitted": 0,
+  "gpu": {
+    "name": "NVIDIA GeForce RTX 3050 Laptop GPU",
+    "vram_mib": 4096
+  },
+  "viewport_sizes": {
+    "desktop": {
+      "width": 1440,
+      "height": 1000
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844
+    }
+  },
+  "page_route_files_reviewed": 18,
+  "live_screen_count": 17,
+  "navigations": [
+    {
+      "viewport": "desktop",
+      "route": "/",
+      "http_status": 200,
+      "uncaught_errors": 0,
+      "observed_http_failures": 0,
+      "root_horizontal_overflow": false
+    },
+    {
+      "viewport": "desktop",
+      "route": "/jobs/new",
+      "http_status": 200,
+      "uncaught_errors": 0,
+      "observed_http_failures": 0,
+      "root_horizontal_overflow": false
+    },
+    {
+      "viewport": "desktop",
+      "route": "/jobs",
+      "http_status": 200,
+      "uncaught_errors": 0,
+      "observed_http_failures": 0,
+      "root_horizontal_overflow": false
+    },
+    {
+      "viewport": "desktop",
+      "route": "/prompts",
+      "http_status": 200,
+      "uncaught_errors": 0,
+      "observed_http_failures": 0,
+      "root_horizontal_overflow": false
+    },
+    {
+      "viewport": "desktop",
+      "route": "/library",
+      "http_status": 200,
+      "uncaught_errors": 0,
+      "observed_http_failures": 0,
+      "root_horizontal_overflow": false
+    },
+    {
+      "viewport": "desktop",
+      "route": "/library/duplicates",
+      "http_status": 200,
+      "uncaught_errors": 0,
+      "observed_http_failures": 0,
+      "root_horizontal_overflow": false
+    },
+    {
+      "viewport": "desktop",
+      "route": "/concepts",
+      "http_status": 200,
+      "uncaught_errors": 0,
+      "observed_http_failures": 0,
+      "root_horizontal_overflow": false
+    },
+    {
+      "viewport": "desktop",
+      "route": "/creative",
+      "http_status": 200,
+      "uncaught_errors": 0,
+      "observed_http_failures": 0,
+      "root_horizontal_overflow": false
+    },
+    {
+      "viewport": "desktop",
+      "route": "/settings",
+      "http_status": 200,
+      "uncaught_errors": 0,
+      "observed_http_failures": 0,
+      "root_horizontal_overflow": false
+    },
+    {
+      "viewport": "desktop",
+      "route": "/learning",
+      "http_status": 200,
+      "uncaught_errors": 0,
+      "observed_http_failures": 0,
+      "root_horizontal_overflow": false
+    },
+    {
+      "viewport": "desktop",
+      "route": "/usage",
+      "http_status": 200,
+      "uncaught_errors": 0,
+      "observed_http_failures": 0,
+      "root_horizontal_overflow": false
+    },
+    {
+      "viewport": "desktop",
+      "route": "/operations",
+      "http_status": 200,
+      "uncaught_errors": 0,
+      "observed_http_failures": 0,
+      "root_horizontal_overflow": false
+    },
+    {
+      "viewport": "desktop",
+      "route": "/access",
+      "http_status": 200,
+      "uncaught_errors": 0,
+      "observed_http_failures": 0,
+      "root_horizontal_overflow": false
+    },
+    {
+      "viewport": "desktop",
+      "route": "/system",
+      "http_status": 200,
+      "uncaught_errors": 0,
+      "observed_http_failures": 0,
+      "root_horizontal_overflow": false
+    },
+    {
+      "viewport": "desktop",
+      "route": "/welcome",
+      "http_status": 200,
+      "uncaught_errors": 0,
+      "observed_http_failures": 0,
+      "root_horizontal_overflow": false
+    },
+    {
+      "viewport": "desktop",
+      "route": "/s",
+      "http_status": 200,
+      "uncaught_errors": 0,
+      "observed_http_failures": 0,
+      "root_horizontal_overflow": false
+    },
+    {
+      "viewport": "desktop",
+      "route": "/jobs/[jobId]",
+      "http_status": 200,
+      "uncaught_errors": 0,
+      "observed_http_failures": 0,
+      "root_horizontal_overflow": false
+    },
+    {
+      "viewport": "mobile",
+      "route": "/",
+      "http_status": 200,
+      "uncaught_errors": 0,
+      "observed_http_failures": 0,
+      "root_horizontal_overflow": false
+    },
+    {
+      "viewport": "mobile",
+      "route": "/jobs/new",
+      "http_status": 200,
+      "uncaught_errors": 0,
+      "observed_http_failures": 0,
+      "root_horizontal_overflow": false
+    },
+    {
+      "viewport": "mobile",
+      "route": "/jobs",
+      "http_status": 200,
+      "uncaught_errors": 0,
+      "observed_http_failures": 0,
+      "root_horizontal_overflow": false
+    },
+    {
+      "viewport": "mobile",
+      "route": "/prompts",
+      "http_status": 200,
+      "uncaught_errors": 0,
+      "observed_http_failures": 0,
+      "root_horizontal_overflow": false
+    },
+    {
+      "viewport": "mobile",
+      "route": "/library",
+      "http_status": 200,
+      "uncaught_errors": 0,
+      "observed_http_failures": 0,
+      "root_horizontal_overflow": false
+    },
+    {
+      "viewport": "mobile",
+      "route": "/library/duplicates",
+      "http_status": 200,
+      "uncaught_errors": 0,
+      "observed_http_failures": 0,
+      "root_horizontal_overflow": false
+    },
+    {
+      "viewport": "mobile",
+      "route": "/concepts",
+      "http_status": 200,
+      "uncaught_errors": 0,
+      "observed_http_failures": 0,
+      "root_horizontal_overflow": false
+    },
+    {
+      "viewport": "mobile",
+      "route": "/creative",
+      "http_status": 200,
+      "uncaught_errors": 0,
+      "observed_http_failures": 0,
+      "root_horizontal_overflow": false
+    },
+    {
+      "viewport": "mobile",
+      "route": "/settings",
+      "http_status": 200,
+      "uncaught_errors": 0,
+      "observed_http_failures": 0,
+      "root_horizontal_overflow": false
+    },
+    {
+      "viewport": "mobile",
+      "route": "/learning",
+      "http_status": 200,
+      "uncaught_errors": 0,
+      "observed_http_failures": 0,
+      "root_horizontal_overflow": false
+    },
+    {
+      "viewport": "mobile",
+      "route": "/usage",
+      "http_status": 200,
+      "uncaught_errors": 0,
+      "observed_http_failures": 0,
+      "root_horizontal_overflow": false
+    },
+    {
+      "viewport": "mobile",
+      "route": "/operations",
+      "http_status": 200,
+      "uncaught_errors": 0,
+      "observed_http_failures": 0,
+      "root_horizontal_overflow": false
+    },
+    {
+      "viewport": "mobile",
+      "route": "/access",
+      "http_status": 200,
+      "uncaught_errors": 0,
+      "observed_http_failures": 0,
+      "root_horizontal_overflow": false
+    },
+    {
+      "viewport": "mobile",
+      "route": "/system",
+      "http_status": 200,
+      "uncaught_errors": 0,
+      "observed_http_failures": 0,
+      "root_horizontal_overflow": false
+    },
+    {
+      "viewport": "mobile",
+      "route": "/welcome",
+      "http_status": 200,
+      "uncaught_errors": 0,
+      "observed_http_failures": 0,
+      "root_horizontal_overflow": false
+    },
+    {
+      "viewport": "mobile",
+      "route": "/s",
+      "http_status": 200,
+      "uncaught_errors": 0,
+      "observed_http_failures": 0,
+      "root_horizontal_overflow": false
+    },
+    {
+      "viewport": "mobile",
+      "route": "/jobs/[jobId]",
+      "http_status": 200,
+      "uncaught_errors": 0,
+      "observed_http_failures": 0,
+      "root_horizontal_overflow": false
+    }
+  ],
+  "accessibility": [
+    {
+      "route": "/",
+      "findings": []
+    },
+    {
+      "route": "/jobs/new",
+      "findings": [
+        {
+          "rule": "color-contrast",
+          "impact": "serious",
+          "affected_nodes": 1
+        }
+      ]
+    },
+    {
+      "route": "/jobs",
+      "findings": []
+    },
+    {
+      "route": "/prompts",
+      "findings": []
+    },
+    {
+      "route": "/library",
+      "findings": [
+        {
+          "rule": "label-content-name-mismatch",
+          "impact": "serious",
+          "affected_nodes": 29
+        }
+      ]
+    },
+    {
+      "route": "/library/duplicates",
+      "findings": []
+    },
+    {
+      "route": "/concepts",
+      "findings": []
+    },
+    {
+      "route": "/creative",
+      "findings": [
+        {
+          "rule": "button-name",
+          "impact": "critical",
+          "affected_nodes": 42
+        }
+      ]
+    },
+    {
+      "route": "/settings",
+      "findings": [
+        {
+          "rule": "select-name",
+          "impact": "critical",
+          "affected_nodes": 2
+        }
+      ]
+    },
+    {
+      "route": "/learning",
+      "findings": [
+        {
+          "rule": "color-contrast",
+          "impact": "serious",
+          "affected_nodes": 1
+        }
+      ]
+    },
+    {
+      "route": "/usage",
+      "findings": []
+    },
+    {
+      "route": "/operations",
+      "findings": []
+    },
+    {
+      "route": "/access",
+      "findings": []
+    },
+    {
+      "route": "/system",
+      "findings": []
+    },
+    {
+      "route": "/welcome",
+      "findings": []
+    },
+    {
+      "route": "/s",
+      "findings": [
+        {
+          "rule": "color-contrast",
+          "impact": "serious",
+          "affected_nodes": 1
+        }
+      ]
+    },
+    {
+      "route": "/jobs/[jobId]",
+      "findings": [
+        {
+          "rule": "color-contrast",
+          "impact": "serious",
+          "affected_nodes": 1
+        }
+      ]
+    }
+  ],
+  "read_only_interactions": [
+    "Library Photos filter",
+    "Library B-roll filter"
+  ],
+  "not_exercised": [
+    "resumed chat session",
+    "uploads",
+    "metadata application",
+    "job generation",
+    "revision submission",
+    "render",
+    "export",
+    "role changes",
+    "backup restore",
+    "reboot recovery"
+  ],
+  "performance_benchmarks_run": false
+}

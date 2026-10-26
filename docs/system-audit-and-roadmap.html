@@ -1,0 +1,712 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>GM Studio System Audit and Roadmap</title><style>*{box-sizing:border-box}html{background:#e8ecee;color:#263843}body{font-family:Arial,Helvetica,sans-serif;font-size:10.3pt;line-height:1.53;margin:0}main{max-width:1030px;margin:30px auto;background:#fff;padding:55px 65px}a{color:#175c7a;text-decoration:none}h1,h2,h3{color:#173f5f;line-height:1.2}h2{font-size:23pt;letter-spacing:-.5px;margin:40px 0 18px}h3{font-size:14pt;margin:25px 0 10px}p{margin:0 0 12px}li{margin:5px 0}ul,ol{padding-left:22px}strong{color:#193f54}table{border-collapse:collapse;width:100%;font-size:8.7pt;line-height:1.38;margin:16px 0 22px;table-layout:auto}th{background:#173f5f;color:white;text-align:left;font-size:8.3pt}td,th{padding:9px 10px;vertical-align:top;border-bottom:1px solid #d5dfe3;overflow-wrap:anywhere}tr:nth-child(even) td{background:#f2f6f7}thead{display:table-header-group}tr{break-inside:avoid}code{font-family:Consolas,monospace;font-size:.87em;overflow-wrap:anywhere}pre{white-space:pre-wrap;background:#eff4f7;padding:14px}figure{margin:20px 0;break-inside:avoid}svg{display:block;width:100%;height:auto}figcaption{font-size:9pt;color:#526775;margin-top:6px}h2,h3{break-after:avoid}p,li{orphans:3;widows:3}.cover{min-height:850px;display:flex;flex-direction:column;justify-content:center;border-top:9px solid #173f5f;page-break-after:always}.brand{font-size:13pt;font-weight:bold;letter-spacing:1px;color:#173f5f}.eyebrow{margin-top:58px;font-size:10pt;letter-spacing:2px;color:#486d7c;text-transform:uppercase}.cover h1{font-size:48pt;letter-spacing:-2px;max-width:700px;margin:20px 0;line-height:1.04}.subtitle{font-size:18pt;color:#526b77;max-width:640px;margin:15px 0 35px}.note{padding:20px;background:#eef4f7;border-left:4px solid #327365;max-width:650px}.cover small{margin-top:45px;color:#647980}.contents{page-break-after:always}.contents h2{margin-top:10px}.contents li{padding:5px 0;border-bottom:1px solid #e4ebee;list-style:none}.contents ol{padding-left:0}.print-link{display:block;margin:10px 0 30px}@media print{@page{size:A4;margin:16mm 14mm 17mm}html{background:white}body{font-size:10pt}main{padding:0;margin:0;max-width:none}.cover{min-height:245mm}.cover h1{font-size:44pt}.cover .eyebrow{margin-top:25px}.print-link{display:none}h2{break-before:auto;margin-top:22pt;font-size:22pt}h2#section-1{break-before:auto}.contents h2{break-before:auto}a{color:#175c7a}table{font-size:8.3pt}td,th{padding:7px 8px}figure{margin:15px 0}}</style></head><body><main><section class="cover"><div class="brand">GM STUDIO</div><div class="eyebrow">System review · planning edition</div><h1>Better reels.<br>Clearer controls.<br>Less wasted compute.</h1><p class="subtitle">A full system audit and practical build roadmap</p><div class="note"><strong>Keep what makes the edits good.</strong><br>Build richer reusable evidence, precise editing tools and a simpler studio. Evaluate each improvement before making it the default.</div><small>26 October 2026 · Australia/Brisbane<br>Source baseline bf05b2a · Proposed phases 19–25</small></section><section class="contents"><h2>In this report</h2><ol><li><a href="#section-1">1. What the audit established</a></li><li><a href="#section-2">2. The system in plain language</a></li><li><a href="#section-3">3. Page and form review</a></li><li><a href="#section-4">4. What context the model actually receives</a></li><li><a href="#section-5">5. A better shared media memory</a></li><li><a href="#section-6">6. Compute and token efficiency</a></li><li><a href="#section-7">7. Editing quality and tools</a></li><li><a href="#section-8">8. Green screen and a reusable compositor</a></li><li><a href="#section-9">9. A measurable improvement loop</a></li><li><a href="#section-10">10. Proposed build phases</a></li><li><a href="#section-11">11. Acceptance and efficiency scorecard</a></li><li><a href="#section-12">12. Consumer-product considerations</a></li><li><a href="#section-13">13. Source evidence map</a></li></ol><a class="print-link" href="GM-Studio-System-Audit-and-Roadmap.pdf">Open the print-ready PDF</a><p>Inspected behavior, limitations and proposed work are identified separately. No hosted AI requests or production changes were submitted during the audit.</p></section><p>26 October 2026 · Australia/Brisbane · Planning edition</p>
+<p><strong>Recommendation:</strong> keep the successful source-led editor and deterministic renderer. Improve the evidence they work from, make precise changes easier, and measure quality before adding more model calls. Build a simpler studio around that foundation, then add a reusable compositing system for richer effects and background replacement.</p>
+<p>This is a plan, not a claim that the proposed features are implemented. Source review used commit <code>bf05b2a</code>. Live inspection covered 17 screens at two viewport sizes. The deployed interface exposes the recent library organization controls; an exact deployed source commit was not independently established.</p>
+<h2 id="section-1">1. What the audit established</h2>
+<p>The existing system already does the difficult part well: it turns real source speech and pictures into a versioned edit, renders locally, supports review and revision, and preserves the original material. Replacing this with a larger autonomous agent would risk the quality and token savings already achieved.</p>
+<h3>Evidence and limits</h3>
+<table>
+<thead>
+<tr>
+<th>Inspection</th>
+<th>Result</th>
+<th>What this establishes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Live browser, desktop 1440 × 1000 and phone-sized 390 × 844</td>
+<td>34 navigations across 17 screens; all returned HTTP 200; no uncaught page errors, observed HTTP failures or root horizontal overflow</td>
+<td>Current page loading and initial data rendering work at these sizes</td>
+</tr>
+<tr>
+<td>Read-only library interaction</td>
+<td>Photos and B-roll filters changed the visible view</td>
+<td>These controls respond without submitting an edit</td>
+</tr>
+<tr>
+<td>Automated WCAG A/AA checks at phone width</td>
+<td>Findings on seven screens, detailed below</td>
+<td>Specific accessibility defects; this is not a complete accessibility certification</td>
+</tr>
+<tr>
+<td>Source inspection</td>
+<td>All 18 page route files, form components, context construction, analysis, queues, rendering policy and learning rules reviewed</td>
+<td>The intended flows and important implementation limitations</td>
+</tr>
+<tr>
+<td>Hardware query</td>
+<td>NVIDIA GeForce RTX 3050 Laptop GPU, 4096 MiB VRAM</td>
+<td>Plan for a shared 4 GB GPU, not a large inference server</td>
+</tr>
+<tr>
+<td>Production writes and hosted AI</td>
+<td>None submitted by this audit</td>
+<td>Existing jobs, media, feedback and model allowance were preserved</td>
+</tr>
+</tbody>
+</table>
+<p>Non-GET/HEAD browser requests were blocked during inspection. No upload, render, metadata application, export, deletion, role change or paid generation was exercised. The resumed chat route was source-reviewed; no private chat session was created or resumed. Container/database internals and recovery drills were not rerun. Report-only navigation does not replace end-to-end write-path acceptance.</p>
+<p>Private screenshots and detailed browser results remain outside the repository. This report contains no private transcripts, media, account identifiers or deployment addresses. Performance improvements below are hypotheses until measured; no speedup or token-saving percentage is claimed.</p>
+<p>The sanitized navigation and accessibility results are recorded in <a href="phase-reports/2026-10-26-system-audit.json">the audit evidence file</a>.</p>
+<h3>Highest-priority findings</h3>
+<ol>
+<li><strong>Library knowledge is fragmented.</strong> Auto-sort can produce useful names, categories and tags, but the normal editor context currently selects display name and video role without selecting library category, tags or notes. Concept discovery has a separate metadata path. More organization does not yet mean every editing entry point receives that knowledge.</li>
+<li><strong>Visual similarity is not video understanding.</strong> CLIP helps find similar frames, but the catalogue still describes a scene as “Scene N” and a photo as “Still image.” There is no general persistent OCR, product identity or visual action description in this path. The editor sees bounded pictures rather than watching every frame.</li>
+<li><strong>Some local work is repeated unnecessarily.</strong> Whisper is instantiated inside each transcription call. Duplicate original storage is shared, but ingest still performs per-asset analysis. Visual indexing extracts frames before applying its final per-asset cap.</li>
+<li><strong>Queue ordering can make interactive work wait.</strong> The worker drains pending ingest and catalogue work before edit work. Existing-library renders can wait behind a large upload batch; the separate CLIP service also shares the GPU without a global memory scheduler.</li>
+<li><strong>Learning is currently a cautious rule system.</strong> It aggregates selected feedback tags, not written notes, and scopes preferences by recipe rather than user/brand/reel intent. It does not train model weights or autonomously improve its own code.</li>
+<li><strong>Quality checks have an honest but limited scope.</strong> They can identify technical faults. They do not establish a coherent story, correct product attribution, audible backing music relative to speech, readable burned-in captions or good skin tones.</li>
+<li><strong>The product has outgrown its navigation.</strong> There are eleven links in one shared navigation and several different custom navigations. Create, concepts, organization, creative assets and settings need a consistent home.</li>
+<li><strong>Editing policy sometimes imposes decoration.</strong> An energetic/high-impact talking-head edit of at least 20 seconds requires a transition beat; default repair can add a dip to black. Replace this requirement with editorial guidance and measured coverage of meaningful beats.</li>
+</ol>
+<h2 id="section-2">2. The system in plain language</h2>
+<p>Think of the server as a librarian, an editor and a production desk.</p>
+<p>The <strong>librarian</strong> keeps the originals and prepares transcripts, thumbnails and searchable records. The <strong>editor model</strong> receives selected evidence plus the brief and returns instructions describing which real footage to use. The <strong>production desk</strong> follows those instructions using local video tools. Your review decides whether the result is worth publishing.</p>
+<p>The model normally writes an edit decision list, or EDL. It does not generate the final video frames or synthesize the speaker’s voice. Exact re-renders and supported local adjustments can reuse that EDL with zero additional model tokens.</p>
+<!-- diagram: current-flow -->
+<figure><svg viewBox="0 0 900 508" role="img" aria-label="Current flow: local evidence, one bounded editing plan, local production" xmlns="http://www.w3.org/2000/svg"><title>Current flow: local evidence, one bounded editing plan, local production</title><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10" fill="#4e798b"/></marker></defs><rect x="20" y="20" width="860" height="64" rx="9" fill="#eef4f7" stroke="#b8cbd3"/><text x="450" y="47" text-anchor="middle" font-family="Arial,sans-serif" fill="#173f5f" font-size="15" font-weight="600"><tspan x="450" dy="0">Upload or select library media</tspan><tspan x="450" dy="21">Originals retained locally</tspan></text><path d="M450 87v22" stroke="#4e798b" marker-end="url(#arrow)"/><rect x="20" y="112" width="860" height="64" rx="9" fill="#e9f1ed" stroke="#b8cbd3"/><text x="450" y="139" text-anchor="middle" font-family="Arial,sans-serif" fill="#173f5f" font-size="15" font-weight="600"><tspan x="450" dy="0">Local analysis</tspan><tspan x="450" dy="21">Speech, pictures and technical facts</tspan></text><path d="M450 179v22" stroke="#4e798b" marker-end="url(#arrow)"/><rect x="20" y="204" width="860" height="64" rx="9" fill="#eef4f7" stroke="#b8cbd3"/><text x="450" y="231" text-anchor="middle" font-family="Arial,sans-serif" fill="#173f5f" font-size="15" font-weight="600"><tspan x="450" dy="0">Brief + bounded evidence</tspan><tspan x="450" dy="21">Editor model returns an EDL</tspan></text><path d="M450 271v22" stroke="#4e798b" marker-end="url(#arrow)"/><rect x="20" y="296" width="860" height="64" rx="9" fill="#e9f1ed" stroke="#b8cbd3"/><text x="450" y="323" text-anchor="middle" font-family="Arial,sans-serif" fill="#173f5f" font-size="15" font-weight="600"><tspan x="450" dy="0">Validation + local finishing</tspan><tspan x="450" dy="21">FFmpeg renders supplied sources</tspan></text><path d="M450 363v22" stroke="#4e798b" marker-end="url(#arrow)"/><rect x="20" y="388" width="860" height="64" rx="9" fill="#eef4f7" stroke="#b8cbd3"/><text x="450" y="415" text-anchor="middle" font-family="Arial,sans-serif" fill="#173f5f" font-size="15" font-weight="600"><tspan x="450" dy="0">Review, export and explicit feedback</tspan><tspan x="450" dy="21">Preferences can guide later edits</tspan></text></svg><figcaption>Current flow: local evidence, one bounded editing plan, local production</figcaption></figure><p>PostgreSQL holds durable records, jobs and leases. Redis wakes the worker; it is not the sole record of work. The Next.js interface talks through the API to the private FastAPI service. Local media volumes retain originals and derivatives. Tailscale protects the current private deployment. Restic and the off-site copy support recovery.</p>
+<p>These boundaries are useful. Preserve them while consolidating the user experience.</p>
+<h2 id="section-3">3. Page and form review</h2>
+<p>All paths below are existing routes. Recommended changes are proposals.</p>
+<table>
+<thead>
+<tr>
+<th>Current page</th>
+<th>Keep</th>
+<th>Consolidate or add</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Home <code>/</code></td>
+<td>Recent work, clear next actions, studio pulse</td>
+<td>Add Resume, Import footage and Find ideas as primary actions; show processing progress and real health warnings without crowding creation</td>
+</tr>
+<tr>
+<td>New Edit <code>/jobs/new</code></td>
+<td>Mixed server media and uploads, privacy choices, saved presets</td>
+<td>Use a shared media basket and progressive form; keep essential direction visible, move detailed controls into expandable sections; save recoverable drafts</td>
+</tr>
+<tr>
+<td>Jobs <code>/jobs</code></td>
+<td>Complete history and resumable links</td>
+<td>Filters for needs review, processing, delivered and failed; hide verification jobs by default; search original briefs; distinguish archive from source-media Trash</td>
+</tr>
+<tr>
+<td>Job review <code>/jobs/[jobId]</code></td>
+<td>Playback, prompt history, breakdown, local changes, revision, export and feedback</td>
+<td>Desktop player plus inspector; phone tabs for Watch/Edit/Feedback; waveform and word-level selection; version compare; explain whether each action uses AI</td>
+</tr>
+<tr>
+<td>Prompt history <code>/prompts</code></td>
+<td>Historical briefs and revision context</td>
+<td>Keep a deep link, but make this a Jobs view and a per-job panel rather than another primary destination</td>
+</tr>
+<tr>
+<td>Media library <code>/library</code></td>
+<td>Standalone import, search, roles, categories, collections, names, Trash, auto-sort</td>
+<td>Shared picker/detail panel, grid/list toggle, source preview, analysis readiness, reusable product/topic identity and per-range roles; reduce simultaneous bulk actions</td>
+</tr>
+<tr>
+<td>Duplicate audit <code>/library/duplicates</code></td>
+<td>Exact-match review and safe storage reuse</td>
+<td>Put under Library health; distinguish hiding a record from reclaiming physical bytes; show what remains referenced</td>
+</tr>
+<tr>
+<td>Concepts <code>/concepts</code></td>
+<td>Existing recorded speech first, saved options, deliberate selection before rendering, blooper mode</td>
+<td>Make it Create → From library; show script preview with source playback, inclusion/exclusion reasons, evidence coverage and estimated cost before generation</td>
+</tr>
+<tr>
+<td>Creative <code>/creative</code></td>
+<td>Rights records, music/effects catalogue, auditioning</td>
+<td>Library → Music and Effects; add mood/purpose search, favorites, duration/energy filters and contextual recommendations; label every icon button</td>
+</tr>
+<tr>
+<td>Brand <code>/settings</code></td>
+<td>Caption identity and saved recipes</td>
+<td>Studio → Brand; label selectors; add approved spellings/product dictionary, caption safe-area previews and reusable style intensity</td>
+</tr>
+<tr>
+<td>Learning <code>/learning</code></td>
+<td>Visible evidence and reversible preferences</td>
+<td>Studio → Learning; explain exactly which tags influence edits; expose proposed/active rules, their scope, evidence and rollback</td>
+</tr>
+<tr>
+<td>Usage <code>/usage</code></td>
+<td>Measured requests and tokens across editing and supporting tasks</td>
+<td>Studio → Usage; show tokens per accepted reel, cache accounting when provided, initial plan versus revision/repair, and estimated next-action allowance</td>
+</tr>
+<tr>
+<td>Operations <code>/operations</code></td>
+<td>Budgets, concurrency limits, derived-file retention and audit</td>
+<td>Combine with System under Studio → System; make active queue priority, wait reason and recovery actions understandable</td>
+</tr>
+<tr>
+<td>Access <code>/access</code></td>
+<td>Server-side access roles and member management</td>
+<td>Studio → People; role-appropriate navigation and separate UI editing permission from future media/workspace isolation</td>
+</tr>
+<tr>
+<td>System <code>/system</code></td>
+<td>Backup status, storage and work queues</td>
+<td>Merge operational overview with Operations; add CPU/GPU/VRAM, stage timings, last-good build ID and backup restore evidence</td>
+</tr>
+<tr>
+<td>Welcome <code>/welcome</code></td>
+<td>Guided readiness checks</td>
+<td>A dismissible first-run checklist with explicit completion; return to dashboard after setup</td>
+</tr>
+<tr>
+<td>Chat <code>/s</code> and <code>/s/[sessionId]</code></td>
+<td>Natural-language access to explicit tools</td>
+<td>Treat as an optional expert surface until tools match the main UI; explain chat attachments versus imported library assets and the separate gateway path</td>
+</tr>
+</tbody>
+</table>
+<h3>Concrete accessibility findings</h3>
+<p>Automated checks flagged four rule types across seven inspected screens. Counts describe this live sample and may change with catalogue size.</p>
+<table>
+<thead>
+<tr>
+<th>Location</th>
+<th>Finding</th>
+<th>Proposed correction</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Creative</td>
+<td>42 buttons without accessible names</td>
+<td>Explicit action and asset names; pressed state for favorites, clear archive/play labels</td>
+</tr>
+<tr>
+<td>Brand</td>
+<td>Two selectors without accessible names</td>
+<td>Visible associated labels and keyboard testing</td>
+</tr>
+<tr>
+<td>Library</td>
+<td>29 row buttons whose accessible names omit visible text</td>
+<td>Include the displayed media title in the accessible name; preserve independent selection and detail actions</td>
+</tr>
+<tr>
+<td>New Edit, Learning, Chat and Job review</td>
+<td>One contrast finding on each screen</td>
+<td>Adjust the affected small text colors, then recheck all states</td>
+</tr>
+</tbody>
+</table>
+<p>A browser size check is not a physical phone test. Still test software-keyboard resizing, screen readers, upload interruption, browser backgrounding, tap targets, focus return after dialogs and sticky controls covering the last form field.</p>
+<h3>Proposed navigation</h3>
+<p>Use five stable destinations: <strong>Home, Create, Library, Jobs, Studio</strong>. Studio contains Brand, Learning, Usage, People and System. Create offers “Use selected footage” and “Find ideas in my library.” Library contains media, music/effects and library health. Preserve old URLs as redirects or deep links.</p>
+<p>The same media basket should work in import, concepts and New Edit. Selection must survive switching tabs, filtering or adding files. Users should see why a source is unavailable, whether analysis is partial, and what will happen after pressing the primary action.</p>
+<p>For New Edit, ask first for footage, intended result and publishing destination. Offer a sensible saved style. Expose duration as an approximate goal, not a quota; music, FX, B-roll, caption and model controls remain available under clear sections. The inspected New Edit DOM contains 71 inputs/selects/textareas, including radio groups and file controls. This is a complexity signal, not 71 independent decisions required from the user.</p>
+<h2 id="section-4">4. What context the model actually receives</h2>
+<h3>Current extraction and use</h3>
+<table>
+<thead>
+<tr>
+<th>Evidence</th>
+<th>How it is produced</th>
+<th>How it helps</th>
+<th>Limit</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Technical metadata</td>
+<td>ffprobe: streams, dimensions, duration, orientation and color information</td>
+<td>Safe decode, crop, duration and HDR handling</td>
+<td>Describes the file, not its meaning</td>
+</tr>
+<tr>
+<td>Speech</td>
+<td>Local faster-whisper Small, VAD, word times and confidence</td>
+<td>Search phrases, choose dialogue, schedule captions and protect cut boundaries</td>
+<td>Recognition errors and timestamp errors remain possible</td>
+</tr>
+<tr>
+<td>Pictures and scene changes</td>
+<td>Thumbnails, contact sheets, FFmpeg scene boundaries</td>
+<td>Recognize broad subjects and available coverage</td>
+<td>Scene detection is not semantic scene naming</td>
+</tr>
+<tr>
+<td>Visual search</td>
+<td>Local CLIP ViT-B/32 embeddings of sampled source frames</td>
+<td>Match a text query to visually similar frames</td>
+<td>Similarity is not a verified description or product identity</td>
+</tr>
+<tr>
+<td>Story moments</td>
+<td>Local scores, keyword/position rules, repeated-idea and take-quality hints</td>
+<td>Suggest hooks, complete passages and possible repeated takes</td>
+<td>Heuristics are suggestions; they do not understand the whole story</td>
+</tr>
+<tr>
+<td>Bloopers</td>
+<td>Transcript markers, restarts and nearby setup/recovery</td>
+<td>Find possible outtake material without a new recognition pass</td>
+<td>Misses visual gags and laughter absent from the transcript; does not prove an error</td>
+</tr>
+<tr>
+<td>Direction</td>
+<td>Brief, audience, must-include, story goal, tone, ending, style and selected concept</td>
+<td>Defines what this particular edit should accomplish</td>
+<td>More fields do not help when empty, contradictory or hidden from the relevant flow</td>
+</tr>
+<tr>
+<td>Personal preferences</td>
+<td>Local aggregation of repeated feedback tags</td>
+<td>Adds cautious directives to future plans</td>
+<td>Written notes are not interpreted; scope is currently recipe-wide</td>
+</tr>
+</tbody>
+</table>
+<p><code>build_editor_context</code> assembles source transcripts, technical facts, selected story moments, direction, brand information and available approved music/effects. Private storage paths and redundant metadata are removed before sending. Word-level source timing remains useful locally even though the public transcript is simplified to segment start/end/text.</p>
+<p>The public editor context has a configured <strong>120,000-character</strong> budget. This is a character limit, not a tokenizer-aware guarantee. It first removes repeated scoring detail, then reduces spoken moment hints while retaining full dialogue. If necessary it samples transcript segments across sources and beginning/middle/end, with explicit truncation markers. A large inventory can still exceed the residual base budget and fail.</p>
+<p>Hybrid picture coverage depends on recipe and style. High impact packs up to six source thumbnails per image within four talking-head or twelve montage images, sent at low detail. Other styles use up to four/twelve source contact sheets or previews. These are not full-video inspection. Tiny review text, a product revealed later, motion and an exact speaking/non-speaking interval can be missed.</p>
+<p>Concept discovery separately caps its source inventory at 60 unique ready sources and 36,000 characters, with balanced groups and bounded speech evidence. Auto-sort handles up to 24 selected files with a separate proposal/apply flow. These bounds control requests, but the three flows should share an evidence representation and explain which evidence was omitted.</p>
+<h3>Is this the best approach?</h3>
+<p>The <strong>architecture is appropriate</strong>: analyze locally once, retrieve evidence, let the capable editor choose, then render deterministically. The opportunity is to make “analyze once” and “retrieve useful evidence” more complete and consistent.</p>
+<p>A product name in a display label is useful, but a model also needs to know which exact seconds show that product, what was said about it, and whether the image contains readable proof. Sending every frame or installing a much larger local language model would be an expensive way to fill this gap on a 4 GB card.</p>
+<h2 id="section-5">5. A better shared media memory</h2>
+<p>Build one versioned evidence layer used by search, auto-sort, concepts, editing and quality review. Keep originals immutable and editable metadata separate.</p>
+<!-- diagram: evidence-flow -->
+<figure><svg viewBox="0 0 900 430" role="img" aria-label="Proposed shared media memory: evidence is reusable across every workflow" xmlns="http://www.w3.org/2000/svg"><title>Proposed shared media memory: evidence is reusable across every workflow</title><defs><marker id="tip430" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10" fill="#4e798b"/></marker></defs><path d="M450 74L150 107" fill="none" stroke="#4e798b" stroke-width="1.5" marker-end="url(#tip430)"/><path d="M450 74L450 107" fill="none" stroke="#4e798b" stroke-width="1.5" marker-end="url(#tip430)"/><path d="M450 74L750 107" fill="none" stroke="#4e798b" stroke-width="1.5" marker-end="url(#tip430)"/><path d="M150 174L340 217" fill="none" stroke="#4e798b" stroke-width="1.5" marker-end="url(#tip430)"/><path d="M450 174L450 217" fill="none" stroke="#4e798b" stroke-width="1.5" marker-end="url(#tip430)"/><path d="M750 174L560 217" fill="none" stroke="#4e798b" stroke-width="1.5" marker-end="url(#tip430)"/><path d="M340 284L150 327" fill="none" stroke="#4e798b" stroke-width="1.5" marker-end="url(#tip430)"/><path d="M280 362L317 362" fill="none" stroke="#4e798b" stroke-width="1.5" marker-end="url(#tip430)"/><path d="M580 362L617 362" fill="none" stroke="#4e798b" stroke-width="1.5" marker-end="url(#tip430)"/><rect x="250" y="10" width="400" height="64" rx="9" fill="#eef4f7" stroke="#b8cbd3"/><text x="450" y="37" text-anchor="middle" font-family="Arial,sans-serif" fill="#173f5f" font-size="15" font-weight="600"><tspan x="450" dy="0">Source hash + analysis version</tspan></text><rect x="20" y="110" width="260" height="64" rx="9" fill="#eef4f7" stroke="#b8cbd3"/><text x="150" y="137" text-anchor="middle" font-family="Arial,sans-serif" fill="#173f5f" font-size="15" font-weight="600"><tspan x="150" dy="0">Complete speech</tspan><tspan x="150" dy="21">and word timing</tspan></text><rect x="320" y="110" width="260" height="64" rx="9" fill="#eef4f7" stroke="#b8cbd3"/><text x="450" y="137" text-anchor="middle" font-family="Arial,sans-serif" fill="#173f5f" font-size="15" font-weight="600"><tspan x="450" dy="0">Scenes + selected</tspan><tspan x="450" dy="21">keyframes</tspan></text><rect x="620" y="110" width="260" height="64" rx="9" fill="#eef4f7" stroke="#b8cbd3"/><text x="750" y="137" text-anchor="middle" font-family="Arial,sans-serif" fill="#173f5f" font-size="15" font-weight="600"><tspan x="750" dy="0">OCR + approved</tspan><tspan x="750" dy="21">product identity</tspan></text><rect x="250" y="220" width="400" height="64" rx="9" fill="#eef4f7" stroke="#b8cbd3"/><text x="450" y="247" text-anchor="middle" font-family="Arial,sans-serif" fill="#173f5f" font-size="15" font-weight="600"><tspan x="450" dy="0">Shared evidence records</tspan></text><rect x="20" y="330" width="260" height="64" rx="9" fill="#eef4f7" stroke="#b8cbd3"/><text x="150" y="357" text-anchor="middle" font-family="Arial,sans-serif" fill="#173f5f" font-size="15" font-weight="600"><tspan x="150" dy="0">Search + source selection</tspan></text><rect x="320" y="330" width="260" height="64" rx="9" fill="#eef4f7" stroke="#b8cbd3"/><text x="450" y="357" text-anchor="middle" font-family="Arial,sans-serif" fill="#173f5f" font-size="15" font-weight="600"><tspan x="450" dy="0">Bounded editor context</tspan></text><rect x="620" y="330" width="260" height="64" rx="9" fill="#eef4f7" stroke="#b8cbd3"/><text x="750" y="357" text-anchor="middle" font-family="Arial,sans-serif" fill="#173f5f" font-size="15" font-weight="600"><tspan x="750" dy="0">EDL + evidence links</tspan></text></svg><figcaption>Proposed shared media memory: evidence is reusable across every workflow</figcaption></figure><h3>Proposed evidence records</h3>
+<p>Every record needs a source hash, analysis version, exact time range where applicable, method/model version, confidence, and a reference to supporting words or frames. Distinguish <strong>measured facts</strong>, <strong>model suggestions</strong> and <strong>user-confirmed facts</strong>. An auto-sort label must not become unquestionable truth.</p>
+<p>Store these useful additions:</p>
+<ul>
+<li><strong>Complete spoken thoughts:</strong> preserve sentences, connected clauses, pronoun antecedents, source word alignment and alternate takes. Keep the original ASR separate from caption corrections and approved terminology.</li>
+<li><strong>Product/topic identity:</strong> a user-confirmed dictionary and aliases, with evidence-backed links to the ranges that mention or show each item. Review claims must stay attached to their original product and speaker.</li>
+<li><strong>Readable text:</strong> run local OCR once on review screenshots, documents and selected product frames; retain bounding boxes, confidence and original text. Do not infer tiny text from a low-detail thumbnail.</li>
+<li><strong>Visual roles by range:</strong> talking presenter, product detail, hands demonstration, review card, location, reaction or unknown. A single file may contain both talking footage and suitable B-roll.</li>
+<li><strong>Take and sound events:</strong> speech, music, silence, likely laughter, restart and production chatter as separate evidence. A gap between recognized words is not necessarily silence.</li>
+<li><strong>Useful composition:</strong> subject bounds, product bounds, shot scale, camera movement and likely crop safety. Add tracking only when a selected shot needs it.</li>
+</ul>
+<p>Start with local metadata, OCR, word grouping, verified labels and better frame selection. If semantic descriptions still have clear value, offer an opt-in, bounded enrichment pass over representative frames and reuse the result across edits. Compare a lightweight local candidate against occasional hosted enrichment on the real machine; do not assume a local VLM is cheap or accurate enough. No automatic whole-library hosted reanalysis.</p>
+<h3>Retrieval and context construction</h3>
+<ol>
+<li>Filter to permitted, active, available sources and the selected collection. Honor explicit source restrictions and locked choices.</li>
+<li>Retrieve candidates with exact words, product/topic aliases, complete-thought groups and visual similarity. Group exact duplicates and alternate takes without collapsing genuinely different scenes.</li>
+<li>Diversify across relevant products, story roles and source groups. Preserve setups, endings and requested phrases. Do not force every uploaded file into one reel.</li>
+<li>Add exact matching frames and readable OCR for selected candidates. A frame selected for the spoken topic is usually more useful than another generic opening thumbnail.</li>
+<li>Assemble one stable, bounded packet with source IDs, cited ranges, necessary neighbors, known omissions and contradictory evidence. The model can explicitly say a broader story is unsupported.</li>
+<li>Validate every returned asset and range against the full local inventory. Preserve referents and source facts even when moving passages.</li>
+</ol>
+<p>For very large libraries, retrieve locally first. An optional bounded tool can fetch a missing neighboring passage or inspect a specific source frame. Give it an explicit call/token ceiling and stop when sufficient evidence exists. Keep the normal one-plan-request path; do not make a multi-agent investigation the default for every reel.</p>
+<p>Avoid overcompression. A short packet that drops the setup or product introduction can be cheaper and produce a worse story. Evaluate source coverage and accepted-edit quality alongside tokens.</p>
+<h2 id="section-6">6. Compute and token efficiency</h2>
+<h3>What CUDA does here</h3>
+<p>CUDA lets supported programs run parallel numerical work on NVIDIA hardware. Whisper inference, CLIP embeddings and a future segmentation model can use it. GPU memory is shared by those models, their intermediate tensors and video workloads.</p>
+<p>NVENC is the GPU’s dedicated video encoding hardware. Using <code>h264_nvenc</code> does <strong>not</strong> mean every FFmpeg filter runs on CUDA: decode, tone mapping, subtitles, overlays and memory transfers may still consume CPU time. NVIDIA documents NVENC as a hardware encoder accepting frames and producing encoded video. <a href="https://docs.nvidia.com/video-technologies/video-codec-sdk/13.0/nvenc-video-encoder-api-prog-guide/index.html">NVIDIA NVENC guide</a></p>
+<h3>Verified implementation opportunities</h3>
+<table>
+<thead>
+<tr>
+<th>Current behavior</th>
+<th>Proposed improvement</th>
+<th>Gate before enabling</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Whisper model construction inside each transcription</td>
+<td>Reuse one worker-local model while warm; unload or switch device under memory pressure</td>
+<td>Same transcript/cut quality; measured cold/warm latency and peak VRAM</td>
+</tr>
+<tr>
+<td>Duplicate original bytes shared, but analysis is per asset</td>
+<td>Cache immutable analysis by content hash + configuration/model version, with per-asset reference manifests</td>
+<td>No cross-identity paths, stale versions or lost ownership; aliases preserve original references</td>
+</tr>
+<tr>
+<td>Visual frame extraction precedes the final 120-frame cap</td>
+<td>Select bounded timestamps before decode; batch extraction and reuse thumbnails</td>
+<td>Same or better query relevance and temporal coverage with fewer process starts</td>
+</tr>
+<tr>
+<td>Visual searches fetch all eligible embeddings and score in Python</td>
+<td>Cache normalized query embeddings; benchmark SQL/vector-index retrieval as the library grows</td>
+<td>Filter/permission correctness and search-recall comparison; no vector database migration just for a small library</td>
+</tr>
+<tr>
+<td>Separate CLIP and transcription processes share GPU</td>
+<td>One resource coordinator with memory reservations, priority lanes and bounded background batches</td>
+<td>No out-of-memory event or starvation in mixed import/search/render tests</td>
+</tr>
+<tr>
+<td>Worker drains ingest before edits</td>
+<td>Fair scheduling: finish required source analysis, then service interactive work between background tasks</td>
+<td>Existing ready-source previews start promptly during large imports; durable leases still recover</td>
+</tr>
+<tr>
+<td>Several FFmpeg passes over the same source</td>
+<td>Profile per-stage work; combine compatible measurements and cache stable results</td>
+<td>Equivalent measurements, correct HDR treatment and bounded memory</td>
+</tr>
+<tr>
+<td>Four/six-thumbnail sheets can obscure fine detail</td>
+<td>Fetch fewer, relevant, higher-value evidence crops when needed</td>
+<td>OCR/identity accuracy improves without indiscriminate extra images</td>
+</tr>
+</tbody>
+</table>
+<p>The CLIP service currently loads its model once and uses inference mode, which is good. It does not explicitly convert the model to half precision. Benchmark FP16 or a CPU/ONNX alternative on a holdout before changing it; lower memory alone is not proof of unchanged search quality. faster-whisper supports quantized inference and batching, but batch size, beam size and device choice must be measured against the actual source material. <a href="https://github.com/SYSTRAN/faster-whisper">faster-whisper project</a></p>
+<h3>A practical work policy</h3>
+<p>Use separate logical lanes for interactive preview/export, required ingest, background enrichment and maintenance. This does not require four GPU workers. On this machine, begin with one heavy CUDA inference task at a time, bounded decode/encode work and reserved headroom. Allow CPU metadata and lightweight I/O to proceed when safe. A running GPU operation may need to finish before yielding; do not promise instantaneous preemption.</p>
+<p>Record queue wait and execution separately. Display “Waiting for transcription” or “Indexing in background,” not an indefinite spinner. Pause optional indexing when an interactive render or essential analysis needs resources. Cache masks, keyframes, OCR and speech by version so future edits reuse them.</p>
+<h3>Hosted request policy</h3>
+<ul>
+<li>Preserve the current successful model and reasoning defaults until a representative comparison demonstrates equal or better edits.</li>
+<li>Measure instruction, transcript, metadata, picture, output and repair contributions separately. Characters alone are an imperfect token budget.</li>
+<li>Keep stable instructions and schemas stable; send variable job evidence after them where supported. OpenAI documents prefix-dependent caching and cautions that a shared prefix does not always produce cache reuse. Measure returned cached usage for the actual provider/model. Do not assume standard API cache pricing or flags apply to the connected ChatGPT-plan transport. <a href="https://developers.openai.com/api/docs/guides/prompt-caching">OpenAI prompt caching</a></li>
+<li>Rank and cap FX/music candidates before sending them. A selected track needs its creative data, not the whole music catalogue; rights enforcement remains local.</li>
+<li>Use exact local operations for known timing, gain, caption, crop and cue changes. Keep invalid-schema repair bounded and separately visible in usage.</li>
+<li>Optional AI critique should inspect a compact script and a few relevant moments only when justified. Do not repeatedly upload the whole rendered reel and regenerate it until an AI gives itself a high score.</li>
+</ul>
+<p>No hardware purchase or new cloud service is necessary to start these improvements. Consider a larger GPU only after stage timing and peak-memory evidence identify a remaining bottleneck that affects actual use.</p>
+<h2 id="section-7">7. Editing quality and tools</h2>
+<h3>Story and dialogue first</h3>
+<p>Make the planned story inspectable before rendering: hook, essential context, new information, proof/payoff and a clean ending, each linked to recorded words or pictures. Show why sources were excluded. A source-story checklist must remain visibly distinct from a judgement of the finished edit.</p>
+<p>Use word-level handles and complete-thought boundaries. Add a transcript editor where the user can select an actual pause, remove a restart, choose another take and listen to the join. Keep a brief reaction when it earns its place. An ad and a blooper reel need different take-selection and pause policies.</p>
+<p>Protect product attribution across related footage. “This cream” followed by a different product’s benefit is a semantic error even if every source range is valid. Store approved product aliases and source claims; preserve uncertainty when visual evidence cannot distinguish similar containers.</p>
+<p>Remove mechanical requirements for a transition or a fixed number of effects. High impact should offer opportunities around every 2–3 seconds, with intentional holds and complete dialogue taking precedence. A relevant B-roll reveal, framing change, caption emphasis or sound accent can satisfy that purpose; a dip to black is not always appropriate.</p>
+<h3>Tool backlog ordered by likely value</h3>
+<table>
+<thead>
+<tr>
+<th>Tool or capability</th>
+<th>User benefit</th>
+<th>Incremental compute</th>
+<th>Priority</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Word/pause selection, split/trim/reorder and before/after playback</td>
+<td>Precise fixes without asking the model repeatedly</td>
+<td>Local preview/render</td>
+<td>First</td>
+</tr>
+<tr>
+<td>Per-clip gain, music/voice/SFX audition and visible ducking</td>
+<td>Fix quiet words and inaudible or intrusive music</td>
+<td>Local audio measurement/mixing</td>
+<td>First</td>
+</tr>
+<tr>
+<td>Caption text/timing per cue, approved dictionary and per-range placement</td>
+<td>Correct names, preserve sync and avoid product/face/UI overlap</td>
+<td>Local text/layout/render</td>
+<td>First</td>
+</tr>
+<tr>
+<td>Evidence-backed product/review B-roll with crop/contain controls</td>
+<td>Better proof and fewer wrong cutaways</td>
+<td>Cached retrieval plus local composition</td>
+<td>First</td>
+</tr>
+<tr>
+<td>Version comparison and scoped revision with protected elements</td>
+<td>Preserve a great story while changing one fault</td>
+<td>Zero AI for precise operations; bounded AI for story changes</td>
+<td>First</td>
+</tr>
+<tr>
+<td>Focus-aware crop/zoom, anchor points and limited subject tracking</td>
+<td>Keep presenter, hands and product visible</td>
+<td>Tracking only selected ranges</td>
+<td>Next</td>
+</tr>
+<tr>
+<td>Better transitions, audio J/L cuts and short audio crossfades</td>
+<td>Smoother continuity without cut-off words or black dips</td>
+<td>Local render; requires timeline overlap rules</td>
+<td>Next</td>
+</tr>
+<tr>
+<td>SFX placement on a recorded reveal, keyword or reaction</td>
+<td>A ding, pop, boing or whoosh supports a real beat</td>
+<td>Local render; small planning descriptors</td>
+<td>Next</td>
+</tr>
+<tr>
+<td>Kinetic caption emphasis and product callouts</td>
+<td>Highlight a number, term or benefit without covering the subject</td>
+<td>Local typography and layout</td>
+<td>Next</td>
+</tr>
+<tr>
+<td>Beat-aware B-roll and selective speed changes</td>
+<td>More energy in demonstrations and montage</td>
+<td>Local render; preserve original speech speed by default</td>
+<td>Next</td>
+</tr>
+<tr>
+<td>Picture-in-picture, split screen and reusable review/product cards</td>
+<td>Explain, compare and show proof clearly</td>
+<td>Local compositor</td>
+<td>Next</td>
+</tr>
+<tr>
+<td>Green-screen key and selective background removal</td>
+<td>Presenter over a real supplied scene, demonstration or review</td>
+<td>Keying is lighter; AI masks need separate benchmark</td>
+<td>After compositor</td>
+</tr>
+<tr>
+<td>Stabilization, selective denoise and exposure matching</td>
+<td>Improve genuinely poor source shots</td>
+<td>Optional per-shot processing; can be expensive</td>
+<td>Later, measured</td>
+</tr>
+<tr>
+<td>Text behind subject, tracked masks and more elaborate motion graphics</td>
+<td>Distinctive finishing for selected moments</td>
+<td>More mask/tracking/render work</td>
+<td>Later</td>
+</tr>
+</tbody>
+</table>
+<p>These tools should produce structured, validated edits, not arbitrary model-written FFmpeg commands. Add schema versions, deterministic rendering, recorded provenance and a fallback for unsupported hardware. Keep the renderer modular so timing changes update subtitles, B-roll, effects, masks and audio together.</p>
+<p>Music and effect selection should be explainable and easy to audition. Keep the curated starter catalogue, rights records and attribution. Add semantic tags for mood, intensity and purpose, plus frequency/repetition limits. Meme-heavy enables stronger choices; it should not force a meme into an ordinary product explanation. Preview catalogue growth needs filters and candidate ranking rather than a larger prompt.</p>
+<h2 id="section-8">8. Green screen and a reusable compositor</h2>
+<p>There are two different features people call “green screen.” Both are possible, but their costs and failure modes differ.</p>
+<p><strong>A real green background:</strong> key a selected color, adjust similarity and edge softness, suppress green spill, then place the remaining subject over a supplied image/video. FFmpeg provides chromakey, despill and overlay filters. This is a sensible first experiment, with no hosted model call. Verify filters in the pinned worker build before promising availability. Green products, clothing, reflections and uneven lighting can be removed accidentally. <a href="https://ffmpeg.org/ffmpeg-filters.html#chromakey">FFmpeg filters</a></p>
+<p><strong>An ordinary room background:</strong> estimate a foreground mask using a segmentation or matting model, then composite it. MediaPipe provides person/background and other segmentation models for images and decoded video frames. It is a candidate for a local prototype, not a guarantee of clean hair, moving fingers or transparent product bottles. <a href="https://developers.google.com/edge/mediapipe/solutions/vision/image_segmenter">MediaPipe segmentation guide</a></p>
+<p>Benchmark a short set of selected shots at preview resolution, including curly hair, hands holding products, rapid movement and difficult backgrounds. Check temporal edge flicker and whether the product remains visible. Compare CPU and GPU options. Cache masks by source hash, source range, model/settings and resolution; lift quality for final export only after approval.</p>
+<p>Robust Video Matting is another technical reference, but its repository declares GPL-3.0. Review code and model-weight terms before choosing any implementation for distribution; do not casually bundle it into the current product. <a href="https://github.com/PeterL1n/RobustVideoMatting">Robust Video Matting repository</a></p>
+<!-- diagram: compositor -->
+<figure><svg viewBox="0 0 900 530" role="img" aria-label="Proposed composition: cached masks and supplied assets feed one compositor" xmlns="http://www.w3.org/2000/svg"><title>Proposed composition: cached masks and supplied assets feed one compositor</title><defs><marker id="tip530" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10" fill="#4e798b"/></marker></defs><path d="M450 74L450 107" fill="none" stroke="#4e798b" stroke-width="1.5" marker-end="url(#tip530)"/><path d="M150 74L317 249" fill="none" stroke="#4e798b" stroke-width="1.5" marker-end="url(#tip530)"/><path d="M750 74L583 249" fill="none" stroke="#4e798b" stroke-width="1.5" marker-end="url(#tip530)"/><path d="M450 174L450 217" fill="none" stroke="#4e798b" stroke-width="1.5" marker-end="url(#tip530)"/><path d="M450 284L450 327" fill="none" stroke="#4e798b" stroke-width="1.5" marker-end="url(#tip530)"/><path d="M450 394L450 437" fill="none" stroke="#4e798b" stroke-width="1.5" marker-end="url(#tip530)"/><rect x="20" y="10" width="260" height="64" rx="9" fill="#eef4f7" stroke="#b8cbd3"/><text x="150" y="37" text-anchor="middle" font-family="Arial,sans-serif" fill="#173f5f" font-size="15" font-weight="600"><tspan x="150" dy="0">Supplied background</tspan></text><rect x="320" y="10" width="260" height="64" rx="9" fill="#eef4f7" stroke="#b8cbd3"/><text x="450" y="37" text-anchor="middle" font-family="Arial,sans-serif" fill="#173f5f" font-size="15" font-weight="600"><tspan x="450" dy="0">Selected foreground</tspan></text><rect x="620" y="10" width="260" height="64" rx="9" fill="#eef4f7" stroke="#b8cbd3"/><text x="750" y="37" text-anchor="middle" font-family="Arial,sans-serif" fill="#173f5f" font-size="15" font-weight="600"><tspan x="750" dy="0">Product / review cards</tspan><tspan x="750" dy="21">and stickers</tspan></text><rect x="320" y="110" width="260" height="64" rx="9" fill="#eef4f7" stroke="#b8cbd3"/><text x="450" y="137" text-anchor="middle" font-family="Arial,sans-serif" fill="#173f5f" font-size="15" font-weight="600"><tspan x="450" dy="0">Color key or AI mask</tspan><tspan x="450" dy="21">Cached for reuse</tspan></text><rect x="320" y="220" width="260" height="64" rx="9" fill="#eef4f7" stroke="#b8cbd3"/><text x="450" y="247" text-anchor="middle" font-family="Arial,sans-serif" fill="#173f5f" font-size="15" font-weight="600"><tspan x="450" dy="0">Timeline compositor</tspan></text><rect x="320" y="330" width="260" height="64" rx="9" fill="#eef4f7" stroke="#b8cbd3"/><text x="450" y="357" text-anchor="middle" font-family="Arial,sans-serif" fill="#173f5f" font-size="15" font-weight="600"><tspan x="450" dy="0">Captions + original audio</tspan><tspan x="450" dy="21">Preserve synchronization</tspan></text><rect x="320" y="440" width="260" height="64" rx="9" fill="#eef4f7" stroke="#b8cbd3"/><text x="450" y="467" text-anchor="middle" font-family="Arial,sans-serif" fill="#173f5f" font-size="15" font-weight="600"><tspan x="450" dy="0">Preview + final export</tspan></text></svg><figcaption>Proposed composition: cached masks and supplied assets feed one compositor</figcaption></figure><h3>Compositor requirements</h3>
+<p>Use a common timeline of layers with source ranges, placement, scale, fit mode, opacity, masks and stacking order. Preserve real alpha channels. Keep source image backgrounds unless explicitly removed; a checkerboard baked into an image is still image content. Use one color-management contract for all layers, including HDR source conversion before SDR composition.</p>
+<p>Captions should normally sit above visual layers, with safe-area guides and optional per-range positions. New transitions require correct overlap accounting for picture, speech, captions and effects. Provide edge/mask preview, feather and spill controls, plus an instant original-picture fallback. Track background licensing and preserve audio synchronization. The first release can offer fixed masks/keying and simple placement; full multi-track desktop-editor complexity can wait.</p>
+<h2 id="section-9">9. A measurable improvement loop</h2>
+<p>The useful recursive loop is <strong>evidence → candidate change → evaluation → promotion → observation → rollback if needed</strong>. It must improve a measured editing policy or tool, rather than blindly trust another AI’s opinion.</p>
+<h3>Start with what feedback can teach</h3>
+<p>Keep ratings and tags, and add optional timestamped annotations such as “pause from here to here,” “wrong product picture,” “music disappears” or “this line is the payoff.” Link them to the exact EDL and renderer/prompt/evidence versions.</p>
+<p>Written notes should be reviewable proposed lessons. A scheduled or explicitly requested bounded analysis can group recurring notes into candidate rules once, instead of resending all notes on every edit. Show the supporting examples and let a rule be accepted, rejected or scoped. Do not silently turn one complaint into a global preference.</p>
+<p>Make preference strength explicit. For example, the current “Effects worked” tag maps to a directive to keep effects sparse and purposeful; it cannot express “I liked these effects and want more.” Separate successful timing from desired intensity instead of inferring both from one positive tag.</p>
+<p>Separate user/workspace, brand, recipe, reel type and style scopes. A preference for short pauses in ads must not remove the setup from bloopers. Current tag rules can remain the fallback while this evolves. No fine-tuning is required initially.</p>
+<h3>Evaluation set and promotion</h3>
+<p>Build a private, consented fixture set of roughly 20–30 representative tasks. Include one and many sources, related products, true B-roll, talking-only footage, reviews, HDR, poor speech, bloopers, ambiguous briefs and missing material. Include examples the user already considers excellent. Keep a held-out portion that is not used to write the candidate rules.</p>
+<p>Compare candidate and current behavior on the same sources, settings and brief. Blind human preference is the primary story-quality signal. Local checks cover technical integrity; optional model judging can help triage, but must not be the sole promotion authority. Track factual/product mismatches separately from subjective style preferences.</p>
+<p>Require no new critical technical/factual failures and no material decline in human story preference. Use paired results, show sample size and uncertainty, and avoid declaring statistical confidence from a handful of edits. Promote one versioned policy at a time, record why, and retain rollback. Start offline; any production experiment should be opt-in and small.</p>
+<h3>Quality checks worth extending</h3>
+<p>The current review inspects up to 61 seconds of rendered media with a bounded processing budget and preserves successful output if inspection is unavailable. Keep that behavior. Extend it with source-versus-output checks for audio balance, repeated phrases, selected picture identity, caption fit and known HDR fixtures. A tagged BT.709 output can still look wrong; a selected music track can still be inaudible.</p>
+<p>Automatic repairs should initially cover only objectively verified faults, such as an invalid cue range or a known layout overflow. A suspected long pause, noisy reaction or weak story should produce a suggestion with playback and an explicit local action. Preserve the original version and make retries idempotent. Bound repair attempts; never create an endless render/critique loop.</p>
+<h2 id="section-10">10. Proposed build phases</h2>
+<p>Existing Phase 17A is the report-only quality layer and Phase 18 is High impact finishing. The following proposed phases extend those capabilities. They do not mark older live acceptance gates complete. Phase 17’s remaining repair/evaluation ambitions are incorporated into Phase 24 below.</p>
+<table>
+<thead>
+<tr>
+<th>Phase</th>
+<th>Deliverable</th>
+<th>Complexity</th>
+<th>Dependencies</th>
+<th>Exit evidence</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>19 — Measurement and reliable work scheduling</strong></td>
+<td>Stage/cost telemetry, build ID, fair queues, bounded frame selection, safe analysis reuse and targeted accessibility fixes</td>
+<td>Medium</td>
+<td>Existing leases and immutable hashes</td>
+<td>Mixed import/search/render soak; bounded frame extraction; duplicate reuse; no new AI calls for cached/local work; accessibility regressions fixed</td>
+</tr>
+<tr>
+<td><strong>20 — Shared evidence and source understanding</strong></td>
+<td>Consistent metadata contract, product dictionary, OCR, complete-thought records, range roles, retrieval coverage</td>
+<td>Large</td>
+<td>19 instrumentation</td>
+<td>Same evidence reaches search/concepts/editor; review text and product fixtures pass; omissions visible; token/quality comparison</td>
+</tr>
+<tr>
+<td><strong>21 — One studio and precise editing</strong></td>
+<td>Consistent navigation, shared basket, progressive forms, player/inspector, word/pause/audio/caption controls, version compare</td>
+<td>Large</td>
+<td>20 evidence contract; can prototype shell alongside 19</td>
+<td>Desktop/phone task completion; precise changes preserve unrelated content; uploads and selections survive navigation</td>
+</tr>
+<tr>
+<td><strong>22 — Purposeful finishing</strong></td>
+<td>Evidence-based cadence, focus framing, better audio joins/transitions, cue-level captions/FX, visual audition</td>
+<td>Medium–large</td>
+<td>20 and 21</td>
+<td>No forced black dip; no extra default planner call; measured speech/music balance; timing remains aligned after trims</td>
+</tr>
+<tr>
+<td><strong>23 — Layered composition and background effects</strong></td>
+<td>Common compositor, PiP/split screen/review cards, real green-screen key; gated AI-mask prototype</td>
+<td>Large</td>
+<td>22 timeline semantics; 19 GPU scheduling</td>
+<td>Alpha/HDR/edge/motion fixtures; preview and final match; cached mask reuse; acceptable real-machine memory/latency</td>
+</tr>
+<tr>
+<td><strong>24 — Evaluated learning and bounded repairs</strong></td>
+<td>Timestamped feedback, scoped proposed rules, holdout tests, candidate promotion/rollback, optional focused critique</td>
+<td>Large</td>
+<td>19–22 versioned evidence and telemetry</td>
+<td>Candidate beats or matches baseline on quality with stated costs; no uncontrolled repair loops; written lessons auditable</td>
+</tr>
+<tr>
+<td><strong>25 — Pilot readiness</strong></td>
+<td>Real-user tasks, onboarding consolidation, permissions/isolation tests, recovery and support diagnostics</td>
+<td>Medium</td>
+<td>Core preceding gates; effects can remain optional</td>
+<td>Representative users complete import→idea→edit→revision→export without developer guidance; recovery and authorization tests pass</td>
+</tr>
+</tbody>
+</table>
+<h3>Recommended next sprint</h3>
+<p>Start Phase 19 and the contract work for Phase 20. Fix the labelled accessibility issues, expose the deployed build ID, capture timing/token baselines, bound frame selection before extraction, and schedule ready-source edits between background work. Carry category/tags/notes into a compact shared context contract. Prototype the unified shell and precise pause controls as the first Phase 21 slice.</p>
+<p>Do not change the default editor model, reanalyze the whole library, or enable automatic AI critique during that sprint. First prove that the existing excellent edits remain excellent. Then add OCR/product identity and targeted retrieval, followed by the more visual tools.</p>
+<p>These can be delivered in one sustained build effort with internal checkpoints. Avoid one unmeasured deployment that changes retrieval, model, timeline semantics, color pipeline and learning policy simultaneously; failures would be hard to attribute.</p>
+<h2 id="section-11">11. Acceptance and efficiency scorecard</h2>
+<p>Capture a baseline before choosing numeric improvement targets. Report median and slow-case results by task class and source duration; keep queue wait separate from processing.</p>
+<table>
+<thead>
+<tr>
+<th>Dimension</th>
+<th>Measure</th>
+<th>Acceptance direction</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Story</td>
+<td>Blind preference, complete-thought preservation, correct referents/payoff</td>
+<td>At least preserve the current strong baseline</td>
+</tr>
+<tr>
+<td>Source accuracy</td>
+<td>Invalid asset/range, wrong product/claim, false blooper</td>
+<td>Zero critical errors in the fixed regression set</td>
+</tr>
+<tr>
+<td>Experience</td>
+<td>Task completion, extra clicks, failed submissions, preserved drafts</td>
+<td>Fewer confused/repeated actions; no silent submission</td>
+</tr>
+<tr>
+<td>Context</td>
+<td>Pictured/omitted sources, retrieved passage recall, OCR confidence</td>
+<td>Useful evidence improves; omissions stay explicit</td>
+</tr>
+<tr>
+<td>Hosted usage</td>
+<td>Input/output/cached/reasoning tokens and call count per accepted reel</td>
+<td>Reduce waste without buying a quality regression</td>
+</tr>
+<tr>
+<td>Local compute</td>
+<td>Queue wait, stage seconds per source minute, peak VRAM/RAM, process starts</td>
+<td>Measure improvement in actual bottlenecks</td>
+</tr>
+<tr>
+<td>Reuse</td>
+<td>Hash/version cache hits for analysis, frames, OCR and masks</td>
+<td>Reusing unchanged content avoids repeating analysis</td>
+</tr>
+<tr>
+<td>Output</td>
+<td>Speech boundaries, caption fit/sync, music audibility, natural color</td>
+<td>Real playback fixtures pass, not only valid metadata</td>
+</tr>
+<tr>
+<td>Reliability</td>
+<td>Retries, lease recovery, duplicate submissions and restore evidence</td>
+<td>Bounded recoverable work and preserved originals</td>
+</tr>
+</tbody>
+</table>
+<h3>Testing layers</h3>
+<ol>
+<li>Fast unit tests for parsing, timing, policy and validation; real local render fixtures for picture/audio changes.</li>
+<li>Real PostgreSQL migration and query tests in CI. The recent JSONB music-query defect demonstrates why mocked database calls alone are insufficient.</li>
+<li>Browser tasks covering defaults, empty states, loading, partial analysis, stale suggestions, errors and recovery. Include keyboard/accessibility checks and phone-sized layouts.</li>
+<li>An isolated write-path acceptance environment: import mixed media, classify, discover concepts, make a preview, apply one precise revision, approve and download. Check role boundaries and idempotent retries.</li>
+<li>A separately authorized render/model lane for selected golden tasks with usage accounting. Avoid using routine production history as a dumping ground for verification jobs.</li>
+<li>Physical phone and real-user testing, followed by backup/restore and reboot drills when deployment changes justify them.</li>
+</ol>
+<p>Do not call the entire application verified because every route returns 200 or a unit suite passes. Each release needs both technical checks and representative playback review.</p>
+<h2 id="section-12">12. Consumer-product considerations</h2>
+<p>Keep the private appliance model while learning from pilot users. Before inviting unrelated customers, define workspace boundaries for originals, search vectors, metadata, concepts, feedback, derived files and backups. Access roles alone do not establish isolated tenants. Add permission tests at every retrieval and download boundary.</p>
+<p>Make processing/privacy choices understandable, define retention and recovery behavior, preserve music/effect licences and explain export compatibility. Add a small downloadable diagnostic bundle containing versions and sanitized timings, never credentials or private media by default. Support clear cancellation, job recovery and storage-pressure behavior.</p>
+<p>Social platform guides should be versioned visual aids with adjustable caption positions, not an eternal promise that a specific pixel region is safe in every app. Export remains a user-reviewed step. Any future publishing integration needs its own deliberate authentication and approval design.</p>
+<h2 id="section-13">13. Source evidence map</h2>
+<p>References identify the inspected implementation at <code>bf05b2a</code>; line numbers can move as the plan is built.</p>
+<table>
+<thead>
+<tr>
+<th>Finding</th>
+<th>Repository evidence</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Navigation and separate page shells</td>
+<td><code>apps/web/app/_components/studio-nav.tsx:4</code>, <code>apps/web/app/layout.tsx:35</code>, page components</td>
+</tr>
+<tr>
+<td>Library categories and reviewed proposals</td>
+<td><code>services/core/app/library_organization.py</code>, <code>apps/web/app/_components/library-auto-sort.tsx</code>, migration 028</td>
+</tr>
+<tr>
+<td>Normal editor metadata omission</td>
+<td><code>services/core/app/editor_context.py:60</code> and asset assembly near line 125</td>
+</tr>
+<tr>
+<td>Character compaction and image policy</td>
+<td><code>services/core/app/editor_provider.py:198</code>, <code>:358</code>, <code>:572</code>; <code>editor_visual_context.py:30</code></td>
+</tr>
+<tr>
+<td>Concept bounds and balanced selection</td>
+<td><code>services/core/app/concept_inventory.py:13</code>, <code>:39</code>, <code>:85</code></td>
+</tr>
+<tr>
+<td>Speech and repeated analysis</td>
+<td><code>services/core/app/media_analysis.py:597</code>, <code>:657</code>; <code>worker.py:255</code></td>
+</tr>
+<tr>
+<td>Frame extraction before cap</td>
+<td><code>services/core/app/visual_index.py:199</code></td>
+</tr>
+<tr>
+<td>Full embedding candidate scan and query embedding</td>
+<td><code>services/core/app/projects.py:499</code>, <code>:511</code>; <code>visual_service.py:43</code></td>
+</tr>
+<tr>
+<td>Generic scene/photo catalogue text</td>
+<td><code>services/core/app/content_catalog.py:27</code></td>
+</tr>
+<tr>
+<td>Heuristic story, take and blooper hints</td>
+<td><code>story_intelligence.py:68</code>, <code>:322</code>; <code>take_quality.py</code>; <code>blooper_detection.py</code></td>
+</tr>
+<tr>
+<td>Queue ordering</td>
+<td><code>services/core/app/worker.py</code>, <code>main</code> loop near file end</td>
+</tr>
+<tr>
+<td>Tag-only, recipe-wide learning</td>
+<td><code>services/core/app/learning.py:182</code></td>
+</tr>
+<tr>
+<td>Technical quality review limits</td>
+<td><code>services/core/app/quality_review.py:17</code>, <code>:65</code></td>
+</tr>
+<tr>
+<td>Required transition and default repair</td>
+<td><code>services/core/app/edit_plan.py:618</code>, <code>:911</code></td>
+</tr>
+<tr>
+<td>Chat tool parity gaps</td>
+<td><code>agent/tools/request_revision.ts:17</code>, <code>agent/tools/search_library.ts:12</code>, <code>agent/agent.ts</code></td>
+</tr>
+</tbody>
+</table>
+<p>Primary technical references were checked during the audit: <a href="https://ffmpeg.org/ffmpeg-filters.html">FFmpeg filters</a>, <a href="https://docs.nvidia.com/video-technologies/video-codec-sdk/13.0/nvenc-video-encoder-api-prog-guide/index.html">NVIDIA NVENC</a>, <a href="https://github.com/SYSTRAN/faster-whisper">faster-whisper</a>, <a href="https://developers.openai.com/api/docs/guides/prompt-caching">OpenAI prompt caching</a>, <a href="https://developers.google.com/edge/mediapipe/solutions/vision/image_segmenter">MediaPipe segmentation</a>, and <a href="https://github.com/PeterL1n/RobustVideoMatting">Robust Video Matting</a>. Product recommendations are engineering conclusions from these capabilities and the inspected application; vendor benchmarks are not measurements of this server.</p>
+</main></body></html>

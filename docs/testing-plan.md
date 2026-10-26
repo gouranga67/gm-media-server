@@ -1,8 +1,23 @@
 # GM Studio testing phase
 
-Updated: 2026-10-24 (Australia/Brisbane)
+Updated: 2026-10-26 (Australia/Brisbane)
 
 The testing phase is layered so a cheap failure is found before a GPU render or hosted editor request is started. A failed lane stops promotion, but the runner continues its remaining checks so one run produces a useful defect list.
+
+## System audit baseline and proposed regression coverage
+
+The [2026-10-26 system audit](system-audit-and-roadmap.md) inspected 18 page route files and navigated 17 live screens at desktop and phone widths (34 navigations). Each returned HTTP 200 without observed HTTP failures, uncaught page errors or root horizontal overflow. Photos and B-roll filters responded. All non-GET/HEAD requests were blocked; these results do not establish upload, render, save, role-change or recovery acceptance. No hosted model request was submitted. Automated accessibility checks flagged unnamed Creative buttons, unlabelled Brand selectors, Library row-name mismatches and contrast defects on four other screens.
+
+Before promoting proposed phases 19–25, add:
+
+- Browser tasks for shared selection, recoverable drafts, keyboard/focus behavior, partial analysis, stale proposals, scoped revisions and idempotent error recovery, plus physical-phone playback/upload checks.
+- Real PostgreSQL migration/query integration checks alongside mocks, including creative music compatibility and the shared metadata contract.
+- Mixed ingest/search/render scheduling tests, bounded frame extraction, versioned analysis reuse, measured stage latency and peak GPU memory on the 4 GB card.
+- A private representative story-quality set with paired human review; retain excellent existing edits as a baseline and keep a held-out portion.
+- Render fixtures for source attribution, word joins, caption fit/sync, audio balance, HDR/color, transitions and future alpha/mask composition.
+- Scoped learning-rule evaluation and rollback; optional AI critique must be budgeted and cannot be the sole promotion authority.
+
+These are planned checks. The read-only audit did not rerun mutating live verifiers or certify new output quality.
 
 ## Gate 1 — source and build
 

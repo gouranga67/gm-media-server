@@ -1,6 +1,6 @@
 # Reference server map
 
-This document explains the planned system in physical terms.
+This document explains the system in physical terms. The [26 October audit and roadmap](system-audit-and-roadmap.md) contains the current evidence flow, limitations and proposed next phases.
 
 ## Hardware layer
 
@@ -19,7 +19,7 @@ This document explains the planned system in physical terms.
 6. **tusd** accepts resumable phone uploads into controlled storage.
 7. **FastAPI** enforces job state, permissions, paths, and edit-plan validation.
 8. **Python worker + FFmpeg** inspect and render the actual media, using the GPU when appropriate.
-9. **Eve editor agent** interprets the brief and calls narrow API tools. It does not manipulate files directly.
+9. **Core editor planner** sends a bounded brief, source evidence and selected preview images through the connected model transport, then validates the returned edit decision list. The separate **Eve chat agent** offers narrow API tools as an optional conversational surface; it does not manipulate files directly.
 10. **Next.js PWA** is the phone interface for uploads, progress, review, and downloads.
 
 ## Where data travels

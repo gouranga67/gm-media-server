@@ -30,7 +30,23 @@ This is the working plan for turning the Lenovo into a private media-editing app
 | 17A | Local rendered-quality reports with zero hosted AI usage | Source complete; live acceptance pending |
 | 18 | Optional High impact style, rhythmic framing, and picture-only B-roll | Source complete; live acceptance pending |
 
-The current improvement-loop increment is Phase 17A: inspect the rendered file and retain a versioned report without changing the edit. Planned follow-ups are targeted, reversible repairs for verified faults; budgeted AI review of story and delivery; and evaluating candidate editing preferences against saved examples and human ratings before adopting them. These follow-ups are not implemented by the report-only increment.
+The 2026-10-26 [system audit and roadmap](system-audit-and-roadmap.md) reviews the live interface, source-context pipeline, compute use and next build phases. A [PDF edition](GM-Studio-System-Audit-and-Roadmap.pdf) is available for reading away from the server. The audit is planning work; proposed phases below are not implemented or accepted by this update.
+
+The current improvement-loop increment is Phase 17A: inspect the rendered file and retain a versioned report without changing the edit. Its remaining repair/evaluation ambitions are carried into proposed Phase 24. Preserve the current successful model and deterministic render path while measuring changes.
+
+## Proposed next build sequence
+
+| Phase | Outcome | Status |
+|---|---|---|
+| 19 | Stage/cost measurement, fair scheduling, bounded frame extraction, analysis reuse and accessibility fixes | Proposed |
+| 20 | Shared source evidence, product identity, OCR, complete thoughts and consistent retrieval | Proposed |
+| 21 | Unified studio navigation, shared media basket and precise transcript/audio/caption editing | Proposed |
+| 22 | Purposeful cadence, framing, audio joins, transitions and cue-level finishing | Proposed |
+| 23 | Layered compositor, picture-in-picture, green-screen keying and a gated segmentation prototype | Proposed |
+| 24 | Scoped feedback lessons, held-out evaluation, reversible promotion and bounded repair | Proposed |
+| 25 | Real-user pilot, workspace isolation, onboarding and recovery acceptance | Proposed |
+
+Start with Phase 19 and the shared metadata contract in Phase 20, then deliver precise pause controls and the consolidated shell as the first Phase 21 slice. The audit records dependencies, acceptance criteria, current limitations and deferred ideas. No default model migration, whole-library reanalysis or automatic critique loop is part of this planning update.
 
 ## Phase 0 — inventory and guardrails
 
