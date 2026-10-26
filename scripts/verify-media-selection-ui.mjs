@@ -55,6 +55,7 @@ for (const extension of [".ts", ".tsx"]) Module._extensions[extension] = (module
   module._compile(outputText, filename);
 };
 const { JobPreview } = require(path.join(repo, "apps/web/app/_components/job-preview.tsx"));
+const { EditProgress } = require(path.join(repo, "apps/web/app/_components/edit-progress.tsx"));
 const { AssemblyReadiness } = require(path.join(repo, "apps/web/app/_components/assembly-readiness.tsx"));
 const { NewJobForm } = require(path.join(repo, "apps/web/app/_components/new-job-form.tsx"));
 const { ConceptDesk } = require(path.join(repo, "apps/web/app/_components/concept-desk.tsx"));
@@ -695,7 +696,30 @@ test("reopening an unstarted draft shows its interpretation and requires an expl
   assert.equal(posts("/preview").length,0);
   assert.equal(posts("/jobs").length,0);
   await click(button("Start editing"));
-  await waitFor(() => document.body.textContent.includes("Planning your edit"));
+  await waitFor(() => document.body.textContent.includes("Your edit is queued"));
   assert.equal(posts("/preview").length,1);
   assert.equal(posts("/jobs").length,0);
+});
+
+test("progress distinguishes the queue from planning and rendering without estimating completion", async () => {
+  const timestamp = new Date(Date.now()-30_000).toISOString();
+  for (const [status,title,stage] of [["pending","Your edit is queued","Queued"],["planning","Planning your edit","Planning"],["rendering","Rendering your preview","Rendering"]]) {
+    await act(async () => root.render(React.createElement(EditProgress,{run:{status,updated_at:timestamp,started_at:timestamp},checkedAt:Date.now(),connectionError:false})));
+    assert.equal(document.querySelector("h1").textContent,title);
+    assert.equal(document.querySelector('[aria-current="step"]').textContent.includes(stage),true);
+    assert.equal(document.querySelectorAll('ol[aria-label="Edit progress"] li').length,4);
+    assert.equal(document.body.textContent.includes("Worker checked in"),status!=="pending");
+    assert.equal(document.querySelector('[role="progressbar"]'),null);
+  }
+  assert.equal(posts("/preview").length,0);
+});
+
+test("progress distinguishes a stale worker heartbeat from a lost status connection", async () => {
+  const run={status:"planning",started_at:new Date(Date.now()-300_000).toISOString(),updated_at:new Date(Date.now()-180_000).toISOString()};
+  await act(async () => root.render(React.createElement(EditProgress,{run,checkedAt:Date.now(),connectionError:false})));
+  assert.equal(document.body.textContent.includes("worker has not checked in"),true);
+  assert.equal(document.body.textContent.includes("does not confirm the edit has stopped"),true);
+  await act(async () => root.render(React.createElement(EditProgress,{run,checkedAt:Date.now()-40_000,connectionError:true})));
+  assert.equal(document.body.textContent.includes("Cannot refresh status"),true);
+  assert.equal(document.body.textContent.includes("worker has not checked in"),false);
 });

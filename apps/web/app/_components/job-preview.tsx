@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { AssemblyReadiness } from "./assembly-readiness";
+import { EditProgress } from "./edit-progress";
 import { StudioNav } from "./studio-nav";
 import { useEffect, useState } from "react";
 import { CheckIcon, DownloadIcon, LoaderCircleIcon, RefreshCwIcon } from "lucide-react";
@@ -34,6 +35,7 @@ function formatTokens(value: number) {
 export function JobPreview({ jobId }: { readonly jobId: string }) {
   const [assemblyReady, setAssemblyReady] = useState(false);
   const [review, setReview] = useState<JobReview>();
+  const [checkedAt, setCheckedAt] = useState<number | null>(null);
   const [error, setError] = useState<string>();
   const [retrying, setRetrying] = useState(false);
   const [rebuilding, setRebuilding] = useState(false);
@@ -49,6 +51,7 @@ export function JobPreview({ jobId }: { readonly jobId: string }) {
         const latest = await getJobReview(jobId);
         if (cancelled) return;
         setReview(latest);
+        setCheckedAt(Date.now());
         setError(undefined);
         const latestRun = latest.latest_run;
         const latestExport = latest.final_export;
@@ -285,16 +288,15 @@ export function JobPreview({ jobId }: { readonly jobId: string }) {
                 Try again
               </Button>
             </div>
+          ) : run ? (
+            <EditProgress run={run} checkedAt={checkedAt} connectionError={Boolean(error)} />
           ) : (
-            <div className="flex min-h-[60dvh] flex-col items-center justify-center text-center">
+            <div className="flex min-h-[45dvh] flex-col items-center justify-center text-center">
               <LoaderCircleIcon aria-hidden="true" className="size-9 animate-spin text-[#173F5F] motion-reduce:animate-none" />
-              <h1 className="mt-5 text-2xl font-bold tracking-tight text-[#173F5F]">
-                {status === "rendering" ? "Rendering your preview" : "Planning your edit"}
-              </h1>
+              <h1 className="mt-5 text-2xl font-bold tracking-tight text-[#173F5F]">Checking this job</h1>
               <p className="mt-3 max-w-sm text-sm leading-relaxed text-[#666862]">
-                You can leave this page. The server keeps working and this screen will update when you return.
+                Loading the latest saved status from the server.
               </p>
-              <p className="mt-4 font-mono text-[10px] text-[#666862] uppercase">{status}</p>
             </div>
           )}
           {status !== "ready" && prompts ? <div className="mt-5">{prompts}</div> : null}

@@ -167,3 +167,5 @@ Mark each test **Pass**, **Fail**, **Not tested** or **Not applicable**. For cre
 The automated commands and recovery lanes remain in the [technical testing plan](testing-plan.md).
 
 Resume check: leave a newly saved job before pressing Start editing, then reopen it from Jobs. It should say the edit has not started, show its readiness/interpretation, and start only when you press the button.
+
+Progress check: after pressing Start editing, the screen should show Queued, Planning, Rendering, then the ready preview. Queued may be brief, and an exact re-render can skip planning. Waiting/run elapsed time and worker check-ins should remain distinct. Disconnect the browser network briefly: it should report that status cannot refresh, preserve the last known stage, and resume updates when connected. A delayed worker check-in is an uncertainty notice, not a claim that the edit has failed. No percentage or completion time is promised.
