@@ -31,6 +31,8 @@ Start with the illustrated [system architecture guide](docs/system-architecture-
 
 The [26 October system audit and roadmap](docs/system-audit-and-roadmap.md) reviews all page routes, model evidence, compute efficiency, editing tools and proposed next phases. Read the [illustrated audit PDF](docs/GM-Studio-System-Audit-and-Roadmap.pdf) or its [browser edition](docs/system-audit-and-roadmap.html). Proposed features are clearly separated from inspected behavior.
 
+The companion [agent editing toolkit](docs/agent-editing-toolkit.md) ([PDF](docs/GM-Studio-Agent-Editing-Toolkit.pdf)) selects useful CapCut-style capabilities for our agent, with examples, compute tradeoffs and a focused build order.
+
 ## Requirements
 
 - Linux host with Docker Engine and Docker Compose v2

@@ -6,6 +6,8 @@
 
 This is a plan, not a claim that the proposed features are implemented. Source review used commit `bf05b2a`. Live inspection covered 17 screens at two viewport sizes. The deployed interface exposes the recent library organization controls; an exact deployed source commit was not independently established.
 
+The companion [agent editing toolkit](agent-editing-toolkit.md), also available as a [PDF](GM-Studio-Agent-Editing-Toolkit.pdf), compares useful CapCut capabilities with our current tools. It expands phases 21–23 with concrete uses, agent decision rules, shared technical foundations and acceptance criteria.
+
 ## 1. What the audit established
 
 The existing system already does the difficult part well: it turns real source speech and pictures into a versioned edit, renders locally, supports review and revision, and preserves the original material. Replacing this with a larger autonomous agent would risk the quality and token savings already achieved.

@@ -1,0 +1,192 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>GM Studio Agent Editing Toolkit</title><style>*{box-sizing:border-box}html{background:#e8ecee;color:#263843}body{font-family:Arial,Helvetica,sans-serif;font-size:10.3pt;line-height:1.53;margin:0}main{max-width:1030px;margin:30px auto;background:#fff;padding:55px 65px}a{color:#175c7a;text-decoration:none}h1,h2,h3{color:#173f5f;line-height:1.2}h2{font-size:23pt;letter-spacing:-.5px;margin:40px 0 18px}h3{font-size:14pt;margin:25px 0 10px}p{margin:0 0 12px}li{margin:5px 0}ul,ol{padding-left:22px}strong{color:#193f54}table{border-collapse:collapse;width:100%;font-size:8.7pt;line-height:1.38;margin:16px 0 22px;table-layout:auto}th{background:#173f5f;color:white;text-align:left;font-size:8.3pt}td,th{padding:9px 10px;vertical-align:top;border-bottom:1px solid #d5dfe3;overflow-wrap:anywhere}tr:nth-child(even) td{background:#f2f6f7}thead{display:table-header-group}tr{break-inside:avoid}code{font-family:Consolas,monospace;font-size:.87em;overflow-wrap:anywhere}pre{white-space:pre-wrap;background:#eff4f7;padding:14px}figure{margin:20px 0;break-inside:avoid}svg{display:block;width:100%;height:auto}figcaption{font-size:9pt;color:#526775;margin-top:6px}h2,h3{break-after:avoid}p,li{orphans:3;widows:3}.cover{min-height:850px;display:flex;flex-direction:column;justify-content:center;border-top:9px solid #173f5f;page-break-after:always}.brand{font-size:13pt;font-weight:bold;letter-spacing:1px;color:#173f5f}.eyebrow{margin-top:58px;font-size:10pt;letter-spacing:2px;color:#486d7c;text-transform:uppercase}.cover h1{font-size:48pt;letter-spacing:-2px;max-width:700px;margin:20px 0;line-height:1.04}.subtitle{font-size:18pt;color:#526b77;max-width:640px;margin:15px 0 35px}.note{padding:20px;background:#eef4f7;border-left:4px solid #327365;max-width:650px}.cover small{margin-top:45px;color:#647980}.contents{page-break-after:always}.contents h2{margin-top:10px}.contents li{padding:5px 0;border-bottom:1px solid #e4ebee;list-style:none}.contents ol{padding-left:0}.print-link{display:block;margin:10px 0 30px}@media print{@page{size:A4;margin:16mm 14mm 17mm}html{background:white}body{font-size:10pt}main{padding:0;margin:0;max-width:none}.cover{min-height:245mm}.cover h1{font-size:44pt}.cover .eyebrow{margin-top:25px}.print-link{display:none}h2{break-before:auto;margin-top:22pt;font-size:22pt}h2#section-1{break-before:auto}.contents h2{break-before:auto}a{color:#175c7a}table{font-size:8.3pt}td,th{padding:7px 8px}figure{margin:15px 0}}</style></head><body><main><section class="cover"><div class="brand">GM STUDIO</div><div class="eyebrow">Editing capabilities · planning companion</div><h1>Useful tools<br>for the agent.</h1><p class="subtitle">A focused CapCut comparison and build plan</p><div class="note"><strong>Give the editor better control.</strong><br>Precise speech edits, targeted movement, readable proof, continuous audio and purposeful finishing.</div><small>26 October 2026 · Australia/Brisbane<br>Proposed additions to phases 21–23</small></section><p>26 October 2026 · Planning companion to the system audit</p>
+<p><strong>Recommendation:</strong> borrow a small set of CapCut’s useful editing capabilities and make them precise, evidence-aware operations for our agent. The highest return comes from control over timing, framing, layers and audio. A large catalogue of effects is less useful if the agent cannot place, shape or revise them accurately.</p>
+<p>This comparison checks CapCut’s official documentation and GM Studio’s current source. It is not a hands-on certification of every CapCut platform, region or subscription tier. All additions below are proposals. Our existing punch-ins, slow camera moves, B-roll, captions, music ducking, effects and delivery variants remain the foundation.</p>
+<h2 id="toolkit-1">1. The most useful gap to close</h2>
+<p>Today the agent can often choose a good shot and story beat, but its execution vocabulary is narrow. The current edit schema offers center-fill crop, fixed motion presets, hard cuts/dips to black, timed effects with preset positions, and short picture-only B-roll. It does not expose general keyframes, independent picture/audio boundaries, arbitrary timed masks, variable speed or per-word animation.</p>
+<p>For example, “emphasize the jar as I lift it” should become a short focus move toward the actual jar, perhaps with a small label and quiet sound accent. A centered punch-in may emphasize the presenter instead. The missing ability is controlled placement and timing, not another decision-making model.</p>
+<p>Select a tool when it improves comprehension, continuity, proof, pacing or a genuine reaction. Preserve intentional holds. A change every 2–3 seconds is a style opportunity, not a command to interrupt every sentence.</p>
+<h2 id="toolkit-2">2. What to borrow and why</h2>
+<h3>A. Precise transcript edits and alternative takes — build first</h3>
+<p>CapCut documents editing video through its linked transcript, including removing unwanted fillers or gaps. <a href="https://www.capcut.com/tools/video-transcript-editing">CapCut transcript editing</a></p>
+<p><strong>Our useful version:</strong> select complete words or an exact pause, trim with small source handles, split a thought, swap an alternate take, or shorten a reaction to a specified length. Preview the join immediately. Extend local controls beyond the current remove/reorder/pause-threshold operations.</p>
+<p><strong>Example:</strong> keep the actual mistake and smile in a blooper, but make the waiting between them 0.6 seconds. The surrounding story, music and caption corrections remain unchanged.</p>
+<p><strong>Agent decision:</strong> compare source word boundaries and actual sound. Treat a transcript gap as a candidate, not proof of silence. Do not remove a word such as “like” merely because it appears on a filler list.</p>
+<p><strong>Compute:</strong> local timing and rendering. Reuse recognition. Higher-accuracy alignment should be optional for uncertain selected boundaries, not a second transcription of everything.</p>
+<h3>B. Keyframed focus moves with easing — build first</h3>
+<p>CapCut exposes timed changes to position, scale, rotation and opacity, with interpolation between keyframes. <a href="https://www.capcut.com/tools/keyframe-animation">CapCut keyframes</a></p>
+<p><strong>Our useful version:</strong> a small bounded motion engine with anchor points, start/end values and smooth acceleration. Offer named actions such as focus on product, reveal label, gentle return to wide, and slide a card into view. Keep generic keyframes underneath for reuse.</p>
+<p><strong>Example:</strong> at the words “a little goes a long way,” move toward the amount on the fingertip, hold briefly, then return before the next sentence. Do not zoom toward the middle of the frame by default.</p>
+<p><strong>Agent decision:</strong> require a verified or user-selected target, useful detail at the available resolution, and a meaningful moment. Avoid piling a zoom on top of a camera move that already emphasizes the same thing.</p>
+<p><strong>Compute:</strong> local interpolation and rendering. Cache target locations; tracking is only needed when the target moves.</p>
+<h3>C. Readable review and product cards — build first</h3>
+<p>CapCut’s masking controls expose shape, position, feathering and inversion for layered layouts. <a href="https://www.capcut.com/tools/mask-video-online">CapCut masking</a></p>
+<p><strong>Our useful version:</strong> contained review cards, deliberate entrances/exits, rounded panels, split screen, magnified excerpts and a highlight box over the exact sentence. These combine masks, keyframes and typography rather than requiring a distinct AI effect for each design.</p>
+<p><strong>Example:</strong> show the full review briefly, then enlarge its relevant line beside the presenter while that claim is spoken. Leave enough reading time and keep captions clear of the card.</p>
+<p><strong>Agent decision:</strong> use OCR and a matching product/review identity. Preserve qualifying text and the original evidence; enlarging a phrase must not turn a cautious review into a stronger endorsement. If there is not enough time, use a simpler card rather than unreadable animation.</p>
+<p><strong>Compute:</strong> local layout/rendering and cached OCR. The existing image-containment fix already solves the basic full-image framing problem; this adds expression and readability controls.</p>
+<h3>D. Independent picture/audio editing, including J/L cuts — build first</h3>
+<p>CapCut describes overlapping audio and picture boundaries for J-cuts and L-cuts. <a href="https://www.capcut.com/create/j-cuts-and-l-cuts-dialogue-edits">CapCut dialogue editing</a></p>
+<p><strong>Our useful version:</strong> let a sentence continue while the picture changes to its demonstration; introduce the next sentence just before its picture appears; add very short crossfades at real audio joins. Provide slip edits that replace the source range in a B-roll slot without moving its timeline position.</p>
+<p><strong>Example:</strong> keep the explanation playing while showing hands applying cream, then return to the presenter for the conclusion. Our B-roll already preserves main speech; the new ability is general control over the two timelines and their joins.</p>
+<p><strong>Agent decision:</strong> do not put a different visible speaking take over unrelated words. Crossfades need real audio handles and must not double words or invent a transition through unavailable sound.</p>
+<p><strong>Compute:</strong> local mixing and rendering. This requires precise time mapping across all layers, not more inference.</p>
+<h3>E. Phrase-level sound control and selective cleanup — build first</h3>
+<p>CapCut documents noise reduction, voice-focused enhancement and audio editing controls. <a href="https://www.capcut.com/tools/audio">CapCut audio tools</a>, <a href="https://www.capcut.com/features/is-there-an-app-that-removes-background-noise-from-audio">noise-reduction guidance</a></p>
+<p><strong>Our useful version:</strong> gain envelopes for a phrase, syllable-safe fades, optional EQ/compression, gentle noise reduction, clear music/SFX/voice solo buttons, and matched-volume before/after playback. Add controlled music dips and swells around a reveal or pause.</p>
+<p><strong>Example:</strong> make a quiet punchline audible without turning the entire clip up; duck music for a soft-spoken line, then bring it back during a product demonstration. Protect laughter and useful natural sounds.</p>
+<p><strong>Agent decision:</strong> diagnose the problem. Quiet speech, steady hiss, room echo and clipping need different treatment. Start with gain/EQ and targeted processing; voice isolation is a separately benchmarked option, not a default cleanup pass.</p>
+<p><strong>Compute:</strong> gain and ordinary mixing are relatively light. Denoising or source separation needs its own quality, latency and model-license checks. Never promise recovery of missing or badly clipped words.</p>
+<h3>F. Selective caption emphasis and stable per-range placement — build first</h3>
+<p>CapCut documents caption text, timing, appearance and animation controls. <a href="https://www.capcut.com/help/how-to-recognise-subtitles">CapCut caption controls</a></p>
+<p><strong>Our useful version:</strong> word-level color/weight emphasis, a short restrained entrance, a product name or number callout, and placement that changes at a shot boundary when necessary. Preserve the existing progressive captions and approved corrections.</p>
+<p><strong>Example:</strong> emphasize “100 ml” exactly when spoken, then move the next phrase upward because the hands demonstration occupies the lower part of the frame.</p>
+<p><strong>Agent decision:</strong> identify the useful word, not every word. Avoid continuous bouncing, position jitter, tiny text or covering the product. Spoken captions remain tied to recorded words; new headlines obey the project’s text policy.</p>
+<p><strong>Compute:</strong> local subtitle/layout rendering from stored word timing. Exact cue edits should not require rebuilding the story.</p>
+<h3>G. Object tracking and subject-aware reframing — build next</h3>
+<p>CapCut describes tracking a selected visual reference so a label or graphic follows it. <a href="https://www.capcut.com/create/motion-tracking-text-moving-objects-video">CapCut motion tracking</a></p>
+<p><strong>Our useful version:</strong> a product callout follows the jar, a crop keeps both hands and the product visible, or a privacy blur follows a selected label/face. Store a reusable track with confidence and an explicit fallback.</p>
+<p><strong>Example:</strong> a small “Rose quartz roller” label stays near the moving roller instead of floating at a fixed screen position. A vertical crop favors the product when it is the subject and the presenter when expression matters.</p>
+<p><strong>Agent decision:</strong> use tracking only when static placement fails. Tracking finds motion, not product identity. When a hand hides the object or confidence drops, hold/fade the label or return wide; do not chase a drifting track.</p>
+<p><strong>Compute:</strong> process only selected shots at an appropriate analysis resolution, cache trajectories, and interpolate during export. A point/box tracker comes before difficult planar or 3D tracking.</p>
+<h3>H. Speed changes, brief holds and freeze frames — build next</h3>
+<p>CapCut documents adjustable speed curves and explicit freeze-frame segments. <a href="https://www.capcut.com/resource/how-to-do-slow-motion-on-capcut">CapCut speed curves</a>, <a href="https://www.capcut.com/features/how-to-freeze-frame-a-video-capcut-workflow-comparison">freeze frames</a></p>
+<p><strong>Our useful version:</strong> shorten a repetitive product demonstration, slow a useful movement when source frame rate supports it, or freeze a good frame for an explanatory callout. Retiming must distinguish picture from speech.</p>
+<p><strong>Example:</strong> compress several seconds of opening packaging, return to normal speed for the reveal, and keep the recorded explanation at its natural pace. A blooper can use a brief reaction hold if the user wants that style.</p>
+<p><strong>Agent decision:</strong> do not speed through important instructions or slow ordinary speech for decoration. Freeze an actual source frame, not a newly generated image. Reversal is limited to clearly playful/non-instructional pictures; never suggest it represents a real process in chronological order.</p>
+<p><strong>Compute:</strong> ordinary retiming is local. Optical-flow interpolation is a later optional tool with a high risk of artifacts around hands, hair and liquid. Do not infer that higher export frame rate restores missing source detail.</p>
+<h3>I. Shot matching and restrained color correction — build alongside finishing</h3>
+<p>CapCut documents reference-based color matching and manual curves/HSL controls. <a href="https://www.capcut.com/tools/match-color-with-ai">CapCut color matching</a></p>
+<p><strong>Our useful version:</strong> normalize HDR/SDR correctly first, then apply bounded exposure, white-balance and contrast adjustments across related shots. Allow a user-approved reference frame and per-shot bypass.</p>
+<p><strong>Example:</strong> footage from the same room should not jump from warm and bright to cold and grey at a cut. Product colors and skin tones need consistency more than a dramatic preset.</p>
+<p><strong>Agent decision:</strong> distinguish an intentional lighting change from a camera mismatch. Match scenes selectively; do not force a dark evening shot to look like a bright studio or alter the apparent color of a product to sell it.</p>
+<p><strong>Compute:</strong> local statistics and color transforms. Perceptual comparison and real HDR fixtures are essential; valid output tags alone cannot prove good color. Imported LUTs need a known input color space.</p>
+<h3>J. Green screen, cutouts and layered layouts — after the compositor foundation</h3>
+<p>CapCut distinguishes chosen-color keying from automatic subject removal. <a href="https://www.capcut.com/tools/video-background-changer">CapCut background tools</a></p>
+<p><strong>Our useful version:</strong> presenter over a supplied demonstration or review, circular picture-in-picture, simple split screen, and a subject cutout for an occasional reveal. Start with inexpensive geometric masks and real green-screen keying; prototype person segmentation separately.</p>
+<p><strong>Example:</strong> keep the presenter small beside a readable review instead of covering the review with a full-screen talking head. Where a simple rectangular panel works, use it without spending compute to remove the entire background.</p>
+<p><strong>Agent decision:</strong> preserve hair, hands and held products. A segmentation model that removes a bottle is a failed tool result. Use a panel or the original picture if the mask is poor.</p>
+<p><strong>Compute:</strong> keying/layout is local rendering; inferred masks require cached selected-range analysis and the 4 GB GPU scheduling work from Phase 19. Do not run full-resolution segmentation on every upload.</p>
+<h2 id="toolkit-3">3. Useful techniques these tools unlock</h2>
+<p>These are proposed GM Studio editing recipes, not claims about separate CapCut buttons.</p>
+<table>
+<thead>
+<tr>
+<th>Technique</th>
+<th>What the agent would do</th>
+<th>When it earns its place</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Product reveal</td>
+<td>Move toward the actual product, add a brief quiet accent, return wide</td>
+<td>The product becomes visible or a real detail is demonstrated</td>
+</tr>
+<tr>
+<td>Review proof</td>
+<td>Match a recorded claim to its source review, animate a readable card, highlight its exact line</td>
+<td>The evidence genuinely supports that product and claim</td>
+</tr>
+<tr>
+<td>Demonstration sequence</td>
+<td>Keep the sentence continuous while cutting to matching hands/action footage</td>
+<td>Pictures explain the words better than another talking shot</td>
+</tr>
+<tr>
+<td>Before/after or comparison</td>
+<td>Align panels, labels and durations; retain original chronology and qualifications</td>
+<td>Both comparable states actually exist in supplied material</td>
+</tr>
+<tr>
+<td>Comedy beat</td>
+<td>Retain setup, shorten dead waiting, use a brief reaction hold or sparse accent</td>
+<td>A real mistake/reaction is the subject; never manufacture embarrassment</td>
+</tr>
+<tr>
+<td>Sound-led reveal</td>
+<td>Reduce the bed just before an important line, retain useful product sound, restore music after it</td>
+<td>It makes the moment clearer without overpowering speech</td>
+</tr>
+<tr>
+<td>Natural ending</td>
+<td>Finish the thought and resolve music cleanly</td>
+<td>The message is complete; no padding to hit a duration</td>
+</tr>
+<tr>
+<td>Loop-friendly ending</td>
+<td>Join compatible picture/audio boundaries without cutting meaning</td>
+<td>The footage supports a natural loop; never reorder a demonstration deceptively</td>
+</tr>
+<tr>
+<td>Hook audition</td>
+<td>Render two or three already-supported openings over the same locked body</td>
+<td>User wants to compare openings without destabilizing an excellent edit</td>
+</tr>
+</tbody>
+</table>
+<p>Music excerpt selection, seam-aware looping and phrase-aligned cue placement should extend the existing beat grid and ducking tools. A music loop should preserve musical phrases and fade cleanly; repeated SFX should have a deliberate repetition limit.</p>
+<p>Hook auditions are particularly useful: ask the initial plan for a small number of grounded alternatives when requested, keep the body fixed, and render only the short openings for comparison. Selecting from those stored alternatives can be local. Discovering new hooks or interpreting open-ended feedback can still consume model tokens.</p>
+<h2 id="toolkit-4">4. Build reusable foundations rather than isolated effects</h2>
+<p>Four foundations support most of the shortlist:</p>
+<ol>
+<li><strong>A time-mapping engine:</strong> source time to output time, ripple/slip edits, different picture/audio boundaries, speed changes and freeze holds. Captions, effects, masks and B-roll must follow every change consistently.</li>
+<li><strong>A transform and layer engine:</strong> normalized anchor points, bounded keyframes/easing, fit modes, opacity, masks and stacking order. This supports zooms, callouts, cards, split screen and green screen.</li>
+<li><strong>An audio mixer:</strong> independent voice/music/SFX lanes, gain envelopes, fades, selective processing and auditioning. Preserve source ownership and synchronization.</li>
+<li><strong>A word/cue layout engine:</strong> stable identifiers for words/captions, corrected display text, emphasis and placement intervals. Avoid repeatedly transcribing rendered output.</li>
+</ol>
+<p>An agent should choose a named intention and supporting evidence. A local compiler expands it into tested low-level operations. It should not write arbitrary FFmpeg programs or hundreds of per-frame coordinates.</p>
+<p>For example, the proposed operation “highlight the supporting review line during this claim” needs a verified review asset, matching text and reading duration. The compiler can calculate the card bounds, animation and caption avoidance. Those calculations do not need a separate language-model call.</p>
+<h3>A practical tool contract</h3>
+<p>Each new operation should declare its supported capability version, source/evidence IDs, source and output ranges, visual target or cue, bounded parameters, protected elements and estimated compute class. Validate before execution and return a previewable diff, changed duration, affected layers and any fallback.</p>
+<p>Examples of proposed operations are <code>trim_speech</code>, <code>replace_take</code>, <code>slip_broll</code>, <code>focus_move</code>, <code>animate_card</code>, <code>set_audio_envelope</code>, <code>style_caption_cue</code>, <code>retime_visual</code>, <code>track_callout</code>, <code>match_shot_color</code> and <code>composite_layers</code>. These are design names, not tools available today.</p>
+<p>Edits should be transactional and versioned: stable clip/cue IDs, idempotent operation IDs, dry-run validation, locks and one-step undo. The current index-based clip adjustments need migration care as clips split and move. Expose the same operation through UI and agent tools so chat does not fall behind the editing screen.</p>
+<h3>How the agent chooses</h3>
+<p>Evaluate each candidate with five questions: what does it clarify, which evidence supports it, is the target visible, what simpler option works, and what does it cost? Keep an inspectable list of planned beats and their reasons. A product detail or pause can be more engaging than an extra animation.</p>
+<p>The initial editor request can select supported operations. Local finishing performs the work. Additional model requests are reserved for missing semantic evidence or a genuinely new direction; automatic animations and precise UI changes do not inherently need them. Local processing still costs time, memory and electricity.</p>
+<h2 id="toolkit-5">5. Build order and acceptance</h2>
+<table>
+<thead>
+<tr>
+<th>Delivery slice</th>
+<th>Include</th>
+<th>Gate</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>21A — Precise changes</strong></td>
+<td>Word/pause/take edits, stable IDs, slip/ripple timing and scoped undo</td>
+<td>Exact requested change; unrelated story/music/corrections preserved</td>
+</tr>
+<tr>
+<td><strong>22A — Expressive finishing</strong></td>
+<td>Anchor keyframes, animated proof cards, cue captions and phrase-level mix</td>
+<td>Clear target, readable text, audible speech, no new default planner call</td>
+</tr>
+<tr>
+<td><strong>22B — Continuity and rhythm</strong></td>
+<td>J/L cuts, real overlap transitions, music excerpt/loop selection, controlled visual retiming and holds</td>
+<td>No duplicate/missing words; consistent timing of every lane; safe source handles</td>
+</tr>
+<tr>
+<td><strong>22C — Targeted quality</strong></td>
+<td>Selected-shot tracking/crop, color matching, optional audio cleanup, small hook auditions</td>
+<td>Measured source fidelity and human preference; cached analysis reuse</td>
+</tr>
+<tr>
+<td><strong>23 — Composition</strong></td>
+<td>Geometric masks/PiP, green-screen keying, then optional subject masks</td>
+<td>Hair/hand/product and HDR/alpha fixtures; graceful fallback; measured memory</td>
+</tr>
+</tbody>
+</table>
+<p>The existing Phase 19 compute/measurement and Phase 20 evidence work remain prerequisites for dependable automatic choices. Phase 21/22 interface work can expose useful manual controls earlier while evidence extraction matures. These slices refine the existing roadmap rather than start a competing build sequence.</p>
+<p>Test short isolated render fixtures first: product moving off center, a long review, quiet speech under music, a word next to a cut, a clip with useful laughter, an interrupted track, HDR mixed with SDR, and hands holding a translucent bottle. Then compare full reels against the current successful baseline. Measure visual readability and meaning as well as valid media output.</p>
+<h2 id="toolkit-6">6. What to defer</h2>
+<p>Defer giant transition packs, constant shake/glitch effects, generic beauty/face changes, full-video optical flow, automatic relighting, music/voice generation and elaborate 3D camera moves. They add complexity before resolving the more valuable control gaps. Preserve the existing supplied-media and approved-assets policy.</p>
+<p>Do not treat CapCut’s media catalogue as material we can automatically redistribute or import. This comparison borrows capability ideas; GM Studio continues to use its own supplied and rights-approved sources.</p>
+<p>The first build should let the agent do a handful of specific things exceptionally well: <strong>cut the exact pause, focus on the actual product, show readable proof, keep audio continuous, emphasize the right words and finish cleanly.</strong> Those abilities support many styles without changing the successful story planner.</p>
+<h2 id="toolkit-7">7. Verification references</h2>
+<p>Application evidence: <code>services/core/app/edit_plan.py</code> schema 1.4, <code>schemas.py</code> clip/caption revision contracts, <code>edit_renderer.py</code> centered zoom and fade chains, <code>finishing_renderer.py</code> contained-image/video B-roll, and <code>effect_renderer.py</code> fixed-position visual/SFX cues. Application baseline: <code>bf05b2a</code>; preceding planning report: <code>a237248</code>.</p>
+<p>CapCut primary references are linked beside each compared capability. Availability and UI placement can vary. The proposed engineering designs, compute classifications and build priorities are conclusions for this application; they are not vendor performance measurements or promised speedups.</p>
+</main></body></html>

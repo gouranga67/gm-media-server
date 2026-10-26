@@ -48,6 +48,8 @@ The current improvement-loop increment is Phase 17A: inspect the rendered file a
 
 Start with Phase 19 and the shared metadata contract in Phase 20, then deliver precise pause controls and the consolidated shell as the first Phase 21 slice. The audit records dependencies, acceptance criteria, current limitations and deferred ideas. No default model migration, whole-library reanalysis or automatic critique loop is part of this planning update.
 
+The [agent editing toolkit](agent-editing-toolkit.md) adds a CapCut capability comparison and concrete slices: 21A precise word/pause/take changes; 22A anchor animation, readable proof cards, cue captions and phrase audio; 22B independent audio/picture joins and controlled retiming; 22C selected-shot tracking, color/audio quality and hook auditions; then Phase 23 layered composition. These remain proposed work, with local processing and evidence reuse preferred over additional default model calls. Read the [toolkit PDF](GM-Studio-Agent-Editing-Toolkit.pdf) for the full shortlist.
+
 ## Phase 0 — inventory and guardrails
 
 **Purpose:** establish what this machine can safely do and define the rule that agents edit supplied media rather than generate new media.
