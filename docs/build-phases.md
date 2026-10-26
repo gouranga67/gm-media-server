@@ -36,6 +36,8 @@ The current improvement-loop increment is Phase 17A: inspect the rendered file a
 
 ## Continuous sprint status
 
+The next proposed increment is [brief-first editing and recipe simplification](brief-led-editing-plan.md): make technical assembly automatic, retain a visible Advanced override, and preserve the working engines before a separate shared-plan refactor. The [hands-on acceptance checklist](user-acceptance-checklist.md) covers the currently deployed tools. Application recipe behaviour has not been changed by this planning update.
+
 | Phase | Outcome | Status |
 |---|---|---|
 | 19 | Stage/cost measurement, fair scheduling, bounded frame extraction, analysis reuse and accessibility fixes | Source checkpoint implemented; live measurement pending |

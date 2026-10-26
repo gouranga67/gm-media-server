@@ -1,0 +1,154 @@
+# GM Studio hands on test checklist
+
+Updated: 2026-10-26 (Australia/Brisbane).
+
+Use this checklist to judge whether the deployed tools make useful reels. A successful render alone is not a pass: listen, watch and compare against the raw footage. The brief-first form described in the [next-build plan](brief-led-editing-plan.md) is proposed, not yet implemented.
+
+## Start with these eight checks
+
+1. Make a normal product reel from familiar footage. Check story, complete words, colour, captions, music and the ending.
+2. Combine server talking footage with new B-roll and a review image from your computer. Check that all selections survive and the correct pictures support the speech.
+3. Ask for one coherent story across several related recordings. Check that it uses useful contributions from more than one file without mixing product claims.
+4. Make a slow, warm edit. Check that it does not inherit fast cuts or forced comic effects.
+5. Generate fresh blooper ideas from known outtakes. Inspect the cited raw passages before selecting a concept. Check that the actual mistake and reaction make sense together.
+6. Shorten a pause, correct a caption and boost one quiet phrase with the explicit local controls. Confirm the changes happen only where requested.
+7. Add a readable review-card picture layer and move captions out of its way for that interval. Check the downloaded file too.
+8. Approve/export one good edit and download it on your phone. Check the beginning, middle and end, then reopen it from Jobs.
+
+## Prepare a small reusable test set
+
+Keep one excellent existing edit as the baseline. Use fresh test jobs for changes so the baseline stays available. Gather a few talking clips, related alternate takes, genuine outtakes, silent product B-roll, a readable review image, one genuine transparent PNG, one HDR phone clip and a quiet/noisy speech clip. Green-screen tests need footage actually filmed against a green or blue background.
+
+Work through one render at a time. Reuse the same small set rather than repeatedly uploading your whole library. Natural-language planning/revisions, concept generation, auto-sort and lesson trials use model requests. Explicit local finishing, precise edits, exact re-renders and delivery variants use local processing without another editor-model request. They still consume CPU/GPU time.
+
+For every problem, record the job link, preview version, exact reel timestamp, brief, expected result and actual result. Identify whether you watched the web preview or a downloaded export. A useful report is: “Version 3, 0:08–0:10: I asked to boost this phrase, but its volume did not change.”
+
+## Story and source selection
+
+| ID | Test | Pass when |
+| --- | --- | --- |
+| S1 | Familiar product explanation with a short brief | The actual product is introduced, supported information stays connected, and the ending makes sense. |
+| S2 | Good footage with little direction | The editor finds a coherent supported story without inventing claims or narration. |
+| S3 | Several related recordings | Complementary recordings contribute where useful; alternate takes are compared rather than all repeated. |
+| S4 | Several unrelated recordings | It avoids misleading connections and explains a narrower choice instead of forcing every file into one story. |
+| S5 | Normal footage containing false starts and bloopers | The ordinary edit favours usable takes and avoids readiness chatter and long empty waits. |
+| S6 | Slow, warm brief with restrained effects | Pacing and sound support the requested feeling; it is not padded to reach the target duration. |
+| S7 | High-impact edit with effects enabled | Picture/sound changes support real beats, dialogue remains intelligible, and no speaking take becomes mismatched silent B-roll. |
+| S8 | Two products with different claims | Names, demonstrations, reviews and benefits stay attached to their actual product. |
+
+## Bloopers and concepts
+
+| ID | Test | Pass when |
+| --- | --- | --- |
+| B1 | Generate fresh ideas from known recorded stumbles | Each offered gag has an intelligible setup, an actual incident clue and a real reaction/recovery where present. Review the linked raw ranges. |
+| B2 | Material containing only repeated clean takes | It declines automatic blooper generation rather than treating repetition alone as a joke. Purely visual comedy still needs manual review. |
+| B3 | Short complete gag | It stays short instead of adding explanation, silence or unrelated reactions to reach five seconds or the target length. |
+| B4 | ASR text split across a sentence | The edit does not start on a disconnected continuation or end on an accidental fragment after the comic beat. |
+| B5 | Select and render a concept | The preview follows the selected recorded story; it does not substitute a conventional ad or manufacture laughter. |
+| B6 | Reopen saved ideas | Reopening does not generate another request. Previously created jobs remain accessible. An older weak idea may be refused for a new job. |
+| B7 | Review a blooper job | The screen identifies bloopers and gives outtake guidance, without sales-payoff checkboxes or a required call to action. |
+
+## Library and uploads
+
+| ID | Test | Pass when |
+| --- | --- | --- |
+| L1 | Upload a mixed batch directly to Library | Files become available without creating editing jobs. Processing and failures are visible. |
+| L2 | Use server footage plus device uploads in one job | Selections persist across source switches and each original is attached once. |
+| L3 | Pause/resume an upload or briefly interrupt the connection | The existing transfer resumes; it does not register another original or job. Keep the original file available until Ready. |
+| L4 | Filter talking footage, B-roll, photos, audio and collections | Each view shows the expected sources; a photo category is distinct from a video footage role. |
+| L5 | Rename, tag, favourite and categorise a source | Details persist and appear when choosing media for a new job. The original recording remains unchanged. |
+| L6 | Auto-sort a small mixed batch | Suggestions describe the actual content, preserve manual work and apply only after explicit review/submission. |
+| L7 | Speech search, scene search and recognised review text | Results point to relevant sources/ranges. Check the raw media; similarity or OCR alone is not proof. |
+| L8 | Add a product name and aliases in Studio knowledge | Its real mentions are consistently identified without transferring unrelated claims to it. |
+| L9 | Mark a source range Avoid | Fresh concepts/plans avoid that range. An older frozen edit remains available. |
+| L10 | Move one disposable test source to Trash, then restore it | It disappears from new-job selection, restores correctly and does not break an existing edit. Trash does not reclaim its file storage. |
+| L11 | Review exact duplicates | The chosen canonical record persists. If testing storage cleanup, use only an intentionally duplicated test file and confirm referenced edits still play. |
+
+## Revisions and precise editing
+
+Use one good test reel for this group. Precise controls refer to source time; finishing windows refer to reel time. Review each resulting version rather than stacking many uninspected changes.
+
+| ID | Test | Pass when |
+| --- | --- | --- |
+| E1 | Type revision feedback without submitting | Nothing starts automatically; text remains available. |
+| E2 | Submit one clear natural-language change | The requested content or structure actually changes, with unrelated strengths preserved where possible. A rewritten summary alone is not enough. |
+| E3 | Use the story-rebuild revision option | It can replace/reorder unlocked material rather than mechanically repeating the rejected draft. |
+| E4 | Trim at word boundaries | Complete words remain audible and synchronized; source seconds are not confused with reel seconds. |
+| E5 | Split, move or remove a clip | The intended passage changes, remaining audio is continuous and retained overlays follow the content. |
+| E6 | Tighten one long pause | Waiting shrinks without clipping words or removing the intended reaction. |
+| E7 | Correct caption wording | Matching on-screen text changes; the recorded speech and unrelated captions remain intact. |
+| E8 | Try a cut, dip and picture dissolve | The chosen picture transition is visible without shortening dialogue or producing black flashes. |
+| E9 | Restore a previous ready version | A new preview reproduces that version; previous versions and approved deliveries remain accessible. |
+| E10 | Submit from an old browser tab after making a newer version | Stale edits are refused with a refresh instruction rather than silently applied to the wrong cut. |
+| E11 | Try a local hook audition on an ordinary story | It changes the opening using actual recorded speech and preserves intelligibility. This control is intentionally absent for bloopers. |
+
+Replacement-take selection is currently exposed through the typed agent/API tool rather than a dedicated form picker. Test it when using that tool: choose another attached take and verify its source identity, dialogue, duration and captions. A missing visible replacement picker is not evidence that the underlying tool failed.
+
+## Finishing tools
+
+Open **Finishing tools · local preview** on a ready job. These tools require explicit submission; having them available does not mean the initial planner automatically uses all of them.
+
+| ID | Test | Pass when |
+| --- | --- | --- |
+| F1 | Targeted camera move on one clip | The move occurs at the chosen time and keeps the intended face/product visible without unwanted jumps. |
+| F2 | Phrase audio level over a short reel interval | The phrase is audibly louder/quieter, neighbouring speech stays stable and loud changes do not clip. |
+| F3 | Gentle voice denoising | Background noise improves without making the voice metallic or swallowing words. |
+| F4 | Timed captions: lower, middle, upper, then hidden | Placement changes only during the specified windows; words stay synchronized. Compare with actual social-app controls on a phone. |
+| F5 | Selected-clip colour adjustment on normal and HDR footage | The selected shot changes as requested, skin/highlights look plausible and no new washed-out or clipped appearance appears. |
+| F6 | Review image as a contained picture layer | The whole intended card remains readable, with no accidental fill-crop or caption collision. |
+| F7 | Picture-in-picture, circle crop, opacity and entrance animation | Size/position/timing match the settings. A circle intentionally crops; a rectangle contains the image. |
+| F8 | Genuine transparent PNG | Actual transparency reveals the underlying video. A checkerboard baked into the image is not transparency. |
+| F9 | Green/blue-screen keying | The chosen screen colour disappears with acceptable edges. It does not promise automatic person/background cutout on ordinary footage. |
+| F10 | Retime or freeze a silent picture layer | Its visual timing changes without speeding, slowing or desynchronizing the main speech. |
+| F11 | Selected music and excerpt start | The chosen track is audible from the requested part, speech remains clear and the ending fades appropriately. |
+| F12 | Independent audio/picture join at a quiet boundary | One clip's recorded audio can lead or trail its picture without cutting a word, overlapping unrelated speech or moving captions to the wrong audio. |
+| F13 | One-pass local pause repair | It creates one new preview with no model request and no repeated background repair cycle. Compare the comic timing before/after. |
+| F14 | Clear local finishing or restore a saved version | The test changes can be reversed and the prior useful edit remains accessible. |
+
+Automatic subject tracking, learned background removal, optical-flow slow motion and automatic shot matching are not shipped. Their absence is not a failed test of the current tools.
+
+## Delivery and phone use
+
+| ID | Test | Pass when |
+| --- | --- | --- |
+| D1 | Download the preview and approve/export one good version | Both files play; the final uses the approved cut and correct shape, captions, colours, music and effects. |
+| D2 | Inspect the final package | Expected media, caption/credit/provenance files are present; source and licence information refer to the actual selected material. |
+| D3 | Make a shorter or differently shaped delivery variant | The variant retains complete usable content; cropping and captions suit its shape and the original delivery stays available. No additional editor-model tokens are used. |
+| D4 | Re-render exact edit | The cut stays the same while current local processing is used; no fresh editorial/model request occurs. |
+| D5 | Open, play, scrub and download on a physical phone | Portrait/landscape layout works, buttons are reachable, playback is in sync and the downloaded file plays outside the browser. |
+| D6 | Reopen Jobs, original prompt and revision history | The original brief and version history remain visible; preview-ready and final-delivered states are distinguishable. |
+
+## Feedback and learning
+
+| ID | Test | Pass when |
+| --- | --- | --- |
+| R1 | Save a rating, tags, topic and timestamped note | Values persist against the correct job/version; entering feedback does not start a render. |
+| R2 | Propose lessons after repeated feedback on different ordinary jobs | Proposals are visible and remain inactive until evaluated/promoted. Revisions of one job do not count as independent training examples. |
+| R3 | Try a lesson on genuinely fresh footage | It creates an explicit normal editor revision, preserves baseline and candidate, and records its model usage. Training footage cannot serve as hold-out footage. |
+| R4 | Rate three distinct held-out comparisons | Promotion requires no lower candidate ratings and at least one improvement. A technical success alone cannot promote a lesson. |
+| R5 | Promote, then roll back an evaluated lesson | Future applicable jobs receive/remove the guidance; prior edits remain unchanged. |
+| R6 | Make bloopers after ordinary clean-take feedback | Clean-take lessons do not override the outtake purpose. Blooper feedback is retained, but dedicated blooper learning is future work. |
+
+Do the lesson trials last: they need additional model requests and genuinely fresh footage. Ten comments alone do not establish that a proposed rule improved output.
+
+## System and shared studio checks
+
+| ID | Test | Pass when |
+| --- | --- | --- |
+| O1 | Open System and Studio during normal work | Deployed build, job state, stage timings and queues are understandable. An older failed job warning is distinguishable from a current deployment failure. |
+| O2 | Upload a small clip while another job renders | The interface/search stay usable and analysis/render work progresses without missing or duplicated jobs. |
+| O3 | Check local/off-site backup status | Recent successful results are visible. Use the existing isolated restore verifier for recovery acceptance; do not overwrite the live library. |
+| O4 | Test intended editor/viewer access with another user | Permitted actions work and disallowed actions are refused. The current product is one shared private studio, not isolated customer workspaces. |
+| O5 | Test a failure/retry when it actually occurs | The reason is visible and retry acts on the intended job/version. A provider overload must not silently trigger repeated paid requests. |
+
+Reboot-during-render recovery is a separate maintenance test using the existing drill. Schedule it when no valuable work is running; an ordinary user test session does not require another reboot.
+
+## Record the results
+
+Mark each test **Pass**, **Fail**, **Not tested** or **Not applicable**. For creative tests, record both technical success and whether you would publish the result. Fix story, word cuts, caption readability, colour and voice/music balance before judging whether more decorative effects would help.
+
+| Test ID | Job and version | Timestamp | Expected versus actual | Result |
+| --- | --- | --- | --- | --- |
+| | | | | |
+
+The automated commands and recovery lanes remain in the [technical testing plan](testing-plan.md).

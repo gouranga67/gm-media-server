@@ -4,6 +4,8 @@ Updated: 2026-10-26 (Australia/Brisbane)
 
 The testing phase is layered so a cheap failure is found before a GPU render or hosted editor request is started. A failed lane stops promotion, but the runner continues its remaining checks so one run produces a useful defect list.
 
+For real-footage testing of the deployed features, use the [hands-on user checklist](user-acceptance-checklist.md). It starts with eight priority checks, then covers source selection, bloopers, library management, precise edits, finishing, phone delivery, learning and appliance behaviour. The [brief-first editing proposal](brief-led-editing-plan.md) describes the next recipe/form change; it is not yet implemented.
+
 ## System audit baseline and proposed regression coverage
 
 The [2026-10-26 system audit](system-audit-and-roadmap.md) inspected 18 page route files and navigated 17 live screens at desktop and phone widths (34 navigations). Each returned HTTP 200 without observed HTTP failures, uncaught page errors or root horizontal overflow. Photos and B-roll filters responded. All non-GET/HEAD requests were blocked; these results do not establish upload, render, save, role-change or recovery acceptance. No hosted model request was submitted. Automated accessibility checks flagged unnamed Creative buttons, unlabelled Brand selectors, Library row-name mismatches and contrast defects on four other screens.
