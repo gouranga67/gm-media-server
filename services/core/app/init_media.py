@@ -22,6 +22,10 @@ def main() -> None:
     media_root = settings.media_root
     media_root.mkdir(parents=True, exist_ok=True)
     os.chown(media_root, MEDIA_UID, MEDIA_GID)
+    lock_path = media_root / "inference.lock"
+    lock_path.touch(exist_ok=True)
+    os.chown(lock_path, MEDIA_UID, MEDIA_GID)
+    lock_path.chmod(0o440)
     for directory_name in MEDIA_DIRECTORIES:
         directory = media_root / directory_name
         directory.mkdir(parents=True, exist_ok=True)

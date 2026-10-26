@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { PreciseClipEditor } from "./precise-clip-editor";
 import { EditFeedbackCard } from "@/app/_components/edit-feedback-card";
 import { RenderQualityCard } from "@/app/_components/render-quality-card";
 import { Input } from "@/components/ui/input";
@@ -201,7 +202,8 @@ export function JobReviewControls({
       await requestRevision(jobId, {
         note: "",
         captionCorrections: [],
-        clipAdjustments: [{ clip_index: clip.clip_index, ...change }],
+        baseVersion: run.version,
+        clipAdjustments: [{ clip_index: clip.clip_index, clip_id: clip.clip_id || undefined, ...change }],
         lockedElements,
       });
       setPendingClipChange(undefined);
@@ -514,6 +516,7 @@ export function JobReviewControls({
                     </select>
                   </label>
                 ) : null}
+              <PreciseClipEditor key={`${run.version}-${clip.clip_id}`} jobId={jobId} version={run.version} clip={clip} onUpdated={onUpdated} />
               </article>
             ))}
           </div>

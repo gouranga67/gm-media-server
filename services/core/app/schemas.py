@@ -650,12 +650,17 @@ class ClipAdjustment(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     clip_index: int = Field(ge=0, le=47)
+    clip_id: str | None = Field(default=None, min_length=16, max_length=16)
     action: Literal["keep", "remove", "move_up", "move_down"] = "keep"
     visual_preset: Literal[
         "standard", "punch_in", "strong_punch_in", "slow_push_in", "slow_pull_out", "rhythmic_punch"
     ] | None = None
     source_audio_gain_db: float | None = Field(default=None, ge=-12.0, le=12.0)
     max_pause_seconds: float | None = Field(default=None, ge=0.3, le=2.0)
+    source_in: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    source_out: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    split_at: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    replacement_asset_id: UUID | None = None
 
 
 class CaptionSettings(BaseModel):
@@ -670,6 +675,8 @@ class RevisionCreate(BaseModel):
 
     note: str = Field(default="", max_length=1200)
     revision_mode: Literal["targeted", "rebuild_story"] = "targeted"
+    base_version: int | None = Field(default=None, gt=0)
+    restore_version: int | None = Field(default=None, gt=0)
     caption_corrections: list[CaptionCorrection] = Field(default_factory=list, max_length=50)
     clip_adjustments: list[ClipAdjustment] = Field(default_factory=list, max_length=48)
     caption_settings: CaptionSettings | None = None
@@ -697,6 +704,7 @@ class RevisionCreate(BaseModel):
             and self.caption_settings is None
             and self.effects_enabled is None
             and self.broll_enabled is None
+            and self.restore_version is None
         ):
             raise ValueError(
                 "provide a revision note, caption correction, timeline adjustment, or caption layout"
@@ -994,6 +1002,8 @@ class JobUsageSummary(BaseModel):
 
 class EditorialClipResponse(BaseModel):
     clip_index: int
+    clip_id: str = ""
+    words: list[dict[str, Any]] = Field(default_factory=list)
     asset_id: UUID
     source_name: str
     media_kind: Literal["video", "image"]

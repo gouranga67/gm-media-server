@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from functools import lru_cache
 from pathlib import Path
 from threading import Lock
 from typing import Any
@@ -15,6 +16,7 @@ from transformers import CLIPModel, CLIPProcessor
 
 from app.config import get_settings
 from app.media_analysis import resolve_source
+from app.resource_guard import inference_slot
 from app.visual_index import (
     VISUAL_MODEL_ID,
     VISUAL_MODEL_REVISION,
@@ -49,6 +51,7 @@ class Encoder:
         self.model = CLIPModel.from_pretrained(model_path, local_files_only=True)
         self.model.eval().to(self.device)
         self.lock = Lock()
+        self.media_root = settings.media_root
 
     @staticmethod
     def _values(tensor: torch.Tensor) -> list[list[float]]:
@@ -56,12 +59,16 @@ class Encoder:
         return normalized.detach().cpu().tolist()
 
     def text(self, value: str) -> list[float]:
-        with self.lock:
+        return list(self._text(value))
+
+    @lru_cache(maxsize=256)
+    def _text(self, value: str) -> tuple[float, ...]:
+        with self.lock, inference_slot(self.media_root):
             inputs = self.processor(text=[value], return_tensors="pt", padding=True)
             inputs = {key: item.to(self.device) for key, item in inputs.items()}
             with torch.inference_mode():
                 features = self.model.get_text_features(**inputs)
-        return self._values(features)[0]
+        return tuple(self._values(features)[0])
 
     def images(self, paths: list[Path]) -> list[list[float]]:
         opened: list[Image.Image] = []
@@ -70,7 +77,7 @@ class Encoder:
                 with Image.open(path) as image:
                     image.load()
                     opened.append(image.convert("RGB"))
-            with self.lock:
+            with self.lock, inference_slot(self.media_root):
                 inputs = self.processor(images=opened, return_tensors="pt")
                 inputs = {key: item.to(self.device) for key, item in inputs.items()}
                 with torch.inference_mode():

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { StudioNav } from "./studio-nav";
 import { CopyIcon, LoaderCircleIcon, PencilIcon, PlusIcon, Trash2Icon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -52,7 +53,7 @@ export function BrandProfileManager() {
     <main className="min-h-dvh bg-[#F7F7F5] px-4 py-8 text-[#20211F]">
       <div className="mx-auto max-w-4xl">
         <header className="flex items-start justify-between gap-4 border-b border-[#D7D9D3] pb-5">
-          <div><p className="text-sm font-bold text-[#173F5F]">GM Studio</p><h1 className="mt-3 text-3xl font-bold text-[#173F5F]">Brand &amp; presets</h1><p className="mt-2 text-sm text-[#666862]">Reusable visual identity and editing recipes for every channel.</p></div>
+          <div><StudioNav current="/settings" /><h1 className="mt-3 text-3xl font-bold text-[#173F5F]">Brand &amp; presets</h1><p className="mt-2 text-sm text-[#666862]">Reusable visual identity and editing recipes for every channel.</p></div>
           <Button asChild><Link href="/jobs/new">New edit</Link></Button>
         </header>
         <div className="mt-8 grid gap-6 lg:grid-cols-2">
@@ -60,18 +61,18 @@ export function BrandProfileManager() {
             <p className="font-mono text-xs font-bold text-[#173F5F] uppercase">Brand kit</p>
             <h2 className="mt-2 text-xl font-bold text-[#173F5F]">Caption identity</h2>
             <div className="mt-5 space-y-3">
-              <Input maxLength={80} onChange={(event) => setName(event.target.value)} placeholder="Brand kit name" value={name} />
+              <Input aria-label="Brand kit name" maxLength={80} onChange={(event) => setName(event.target.value)} placeholder="Brand kit name" value={name} />
               <div className="grid grid-cols-2 gap-3">
                 <label className="text-xs font-bold text-[#666862]">Primary <input className="mt-2 h-11 w-full" onChange={(event) => setPrimaryColor(event.target.value)} type="color" value={primaryColor} /></label>
                 <label className="text-xs font-bold text-[#666862]">Caption accent <input className="mt-2 h-11 w-full" onChange={(event) => setAccentColor(event.target.value)} type="color" value={accentColor} /></label>
-                <select className="h-11 rounded-md border px-3 text-sm" onChange={(event) => setCaptionStyle(event.target.value as BrandKit["caption_style"])} value={captionStyle}><option value="bold">Bold captions</option><option value="clean">Clean captions</option><option value="minimal">Minimal captions</option></select>
-                <select className="h-11 rounded-md border px-3 text-sm" onChange={(event) => setFontFamily(event.target.value as BrandKit["font_family"])} value={fontFamily}><option value="sans">Sans</option><option value="serif">Serif</option><option value="mono">Mono</option></select>
+                <select aria-label="Caption style" className="h-11 rounded-md border px-3 text-sm" onChange={(event) => setCaptionStyle(event.target.value as BrandKit["caption_style"])} value={captionStyle}><option value="bold">Bold captions</option><option value="clean">Clean captions</option><option value="minimal">Minimal captions</option></select>
+                <select aria-label="Caption font family" className="h-11 rounded-md border px-3 text-sm" onChange={(event) => setFontFamily(event.target.value as BrandKit["font_family"])} value={fontFamily}><option value="sans">Sans</option><option value="serif">Serif</option><option value="mono">Mono</option></select>
               </div>
               <div className="rounded-md px-4 py-5 text-center text-xl" style={{ backgroundColor: primaryColor, color: "white", fontFamily: fontFamily === "mono" ? "monospace" : fontFamily === "serif" ? "serif" : "sans-serif", fontWeight: captionStyle === "minimal" ? 400 : 800, WebkitTextStroke: `1px ${accentColor}` }}>Your captions look like this</div>
               <Button className="w-full" disabled={busy} onClick={() => void submit()}>{busy ? <LoaderCircleIcon className="animate-spin" /> : editingId ? <PencilIcon /> : <PlusIcon />}{editingId ? "Update brand kit" : "Save brand kit"}</Button>
             </div>
             <div className="mt-5 space-y-2 border-t pt-4">
-              {kits.map((kit) => <div className="flex items-center justify-between rounded-md border p-3" key={kit.id}><div><p className="text-sm font-bold">{kit.name}</p><p className="mt-1 text-xs text-[#666862]">{kit.caption_style} · {kit.font_family}</p></div><div className="flex gap-1"><Button onClick={() => { setEditingId(kit.id); setName(kit.name); setPrimaryColor(kit.primary_color); setAccentColor(kit.accent_color); setCaptionStyle(kit.caption_style); setFontFamily(kit.font_family); }} size="icon" variant="outline"><PencilIcon /></Button><Button onClick={() => void deleteBrandKit(kit.id).then(refresh)} size="icon" variant="outline"><Trash2Icon /></Button></div></div>)}
+              {kits.map((kit) => <div className="flex items-center justify-between rounded-md border p-3" key={kit.id}><div><p className="text-sm font-bold">{kit.name}</p><p className="mt-1 text-xs text-[#666862]">{kit.caption_style} · {kit.font_family}</p></div><div className="flex gap-1"><Button aria-label={`Edit ${kit.name}`} onClick={() => { setEditingId(kit.id); setName(kit.name); setPrimaryColor(kit.primary_color); setAccentColor(kit.accent_color); setCaptionStyle(kit.caption_style); setFontFamily(kit.font_family); }} size="icon" variant="outline"><PencilIcon /></Button><Button aria-label={`Delete ${kit.name}`} onClick={() => void deleteBrandKit(kit.id).then(refresh)} size="icon" variant="outline"><Trash2Icon /></Button></div></div>)}
             </div>
           </section>
           <section className="rounded-md border border-[#D7D9D3] bg-white p-5">

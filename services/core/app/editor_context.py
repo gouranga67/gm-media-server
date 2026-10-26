@@ -16,6 +16,7 @@ from app.story_intelligence import (
     build_story_assessment,
     select_story_moments,
 )
+from app.source_evidence import shared_evidence
 
 
 def _stream_types(manifest: dict[str, Any]) -> set[str]:
@@ -61,6 +62,7 @@ def build_editor_context(
             SELECT assets.id, assets.source_name, assets.mime_type, assets.byte_size,
                    assets.sha256, assets.storage_key, assets.status AS asset_status,
                    asset_library_metadata.display_name, asset_library_metadata.media_role,
+                   asset_library_metadata.media_category, asset_library_metadata.tags, asset_library_metadata.notes,
                    asset_ingests.status AS analysis_status, asset_ingests.manifest,
                    asset_story_indexes.status AS story_status,
                    asset_story_indexes.story_version,
@@ -98,6 +100,10 @@ def build_editor_context(
                 "SELECT * FROM brand_kits WHERE id = %s", (job["brand_kit_id"],)
             ).fetchone()
         learning_preferences = learning_context_for_job(database, job)
+        products = list(database.execute("SELECT id,name,aliases FROM source_products ORDER BY name LIMIT 100").fetchall())
+        annotations = list(database.execute(
+            "SELECT id,asset_id,start_seconds,end_seconds,role,note FROM asset_range_annotations "
+            "WHERE asset_id=ANY(%s) ORDER BY start_seconds LIMIT 500", ([row["id"] for row in rows],)).fetchall())
 
     story_query = " ".join(
         str(value or "")
@@ -150,6 +156,8 @@ def build_editor_context(
             asset["library_name"] = row["display_name"]
         if row.get("media_role") in ("talking", "broll"):
             asset["library_role"] = row["media_role"]
+        asset["source_evidence"] = shared_evidence(asset, row, manifest, transcript, products,
+            [annotation for annotation in annotations if str(annotation["asset_id"]) == str(row["id"])])
         gaps = source_word_gaps(asset, 0, float(asset.get("duration_seconds") or 0))
         longest = sorted((gap for gap in gaps if gap[2] >= 0.65),
                          key=lambda gap: gap[2], reverse=True)[:24]

@@ -5,7 +5,7 @@ from app.config import Settings, get_settings
 from app.media_analysis import resolve_source
 
 
-CATALOG_VERSION = "1.2"
+CATALOG_VERSION = "1.3"
 
 
 def _number(value: Any, default: float = 0.0) -> float:
@@ -118,4 +118,9 @@ def build_catalog_segments(
                 "source_model": "ffprobe",
             }
         )
+        ocr = manifest.get("derived", {}).get("ocr") or {}
+        if ocr.get("lines"):
+            image_segment = segments[-1]
+            image_segment["text"] += " · " + " ".join(line["text"] for line in ocr["lines"])[:3500]
+            image_segment["facts"]["ocr"] = ocr
     return segments

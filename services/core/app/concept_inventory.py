@@ -69,7 +69,9 @@ def public_inventory(inventory: dict) -> dict:
         assets.append({"asset_id": source["asset_id"], "name": source["library_name"][:96],
                        "project": source["project_name"][:48], "mime_type": source["mime_type"],
                        "role": source["library_role"], "notes": source["notes"][:64],
-                       "tags": [tag[:32] for tag in source["tags"][:2]], "used_in_jobs": source["job_uses"]})
+                       "tags": [tag[:32] for tag in source["tags"][:5]], "used_in_jobs": source["job_uses"],
+                       "category": source.get("library_category", "auto"),
+                       "recognized_text": source.get("recognized_text", [])})
     return {"focus": inventory.get("focus", ""), "audience": inventory.get("audience", ""), "reel_kind": inventory.get("reel_kind", "story"),
             "assets": assets, "evidence": inventory["evidence"], "recent_concepts": inventory.get("recent_concepts", [])}
 
@@ -99,6 +101,8 @@ def compact_inventory(rows: list[dict], segments: list[dict], payload: ConceptRe
                         "source_name": row["source_name"], "library_name": row["display_name"],
                         "project_name": row["project_name"], "mime_type": row["mime_type"],
                         "library_role": row["media_role"], "notes": str(row.get("notes") or "")[:400],
+                        "library_category": row.get("media_category") or "auto",
+                        "recognized_text": [line["text"] for line in (derived.get("ocr") or {}).get("lines", [])[:12]],
                         "tags": row.get("tags") or [], "job_uses": int(row.get("job_uses") or 0),
                         "_preview_key": derived.get("preview") or derived.get("thumbnail"),
                         "_contact_sheet_key": derived.get("contact_sheet"),
@@ -139,6 +143,7 @@ def load_inventory(database: Any, payload: ConceptRequestCreate) -> tuple[dict, 
                p.name AS project_name, i.manifest,
                COALESCE(m.display_name,a.source_name) AS display_name,
                COALESCE(m.media_role,'auto') AS media_role, COALESCE(m.notes,'') AS notes,
+               COALESCE(m.media_category,'auto') AS media_category,
                COALESCE(m.tags,ARRAY[]::text[]) AS tags, COALESCE(m.favorite,false) AS favorite,
                (SELECT count(*) FROM job_assets ja WHERE ja.asset_id=a.id) AS job_uses
         FROM assets a JOIN projects p ON p.id=a.project_id

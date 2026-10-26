@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 import json
+import os
 from typing import Any
 
 import psycopg
@@ -18,6 +19,8 @@ from app.learning import router as learning_router
 from app.projects import router as projects_router
 from app.productization import router as productization_router
 from app.upload_hooks import router as upload_hooks_router
+from app.runtime_metrics import performance_snapshot
+from app.knowledge import router as knowledge_router
 
 
 @asynccontextmanager
@@ -40,6 +43,7 @@ app.include_router(projects_router)
 app.include_router(editing_router)
 app.include_router(library_router)
 app.include_router(library_organization_router)
+app.include_router(knowledge_router)
 app.include_router(concepts_router)
 app.include_router(learning_router)
 app.include_router(upload_hooks_router)
@@ -82,6 +86,7 @@ def system_information() -> dict[str, Any]:
     return {
         "service": "gm-media-api",
         "version": app.version,
+        "build_id": deployed_build_id(settings),
         "environment": settings.app_env,
         "content_policy": {
             "synthetic_image": False,
@@ -90,6 +95,24 @@ def system_information() -> dict[str, Any]:
             "synthetic_music": False,
         },
     }
+
+
+def deployed_build_id(settings: Any) -> str:
+    try:
+        path = settings.appliance_status_path.parent / "build.json"
+        if path.stat().st_size < 4096:
+            return str(json.loads(path.read_text()).get("commit") or "unknown")[:64]
+    except (OSError, ValueError):
+        pass
+    return os.environ.get("GM_BUILD_ID", "development")
+
+
+@app.get("/api/v1/system/performance")
+def system_performance() -> dict[str, Any]:
+    try:
+        return performance_snapshot(get_settings().media_root)
+    except (OSError, ValueError) as error:
+        raise HTTPException(status_code=503, detail="runtime measurements are unavailable") from error
 
 
 @app.get("/api/v1/system/health")

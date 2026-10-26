@@ -337,6 +337,8 @@ export type BrandKit = {
 };
 
 export type EditorialClip = {
+  readonly clip_id: string;
+  readonly words: readonly { readonly text: string; readonly start: number; readonly end: number }[];
   readonly clip_index: number;
   readonly asset_id: string;
   readonly source_name: string;
@@ -1133,8 +1135,15 @@ export function requestRevision(
     readonly note: string;
     readonly captionCorrections: readonly CaptionCorrection[];
     readonly revisionMode?: "targeted" | "rebuild_story";
+    readonly baseVersion?: number;
+    readonly restoreVersion?: number;
     readonly clipAdjustments?: readonly {
       readonly clip_index: number;
+      readonly clip_id?: string;
+      readonly source_in?: number;
+      readonly source_out?: number;
+      readonly split_at?: number;
+      readonly replacement_asset_id?: string;
       readonly action: "keep" | "remove" | "move_up" | "move_down";
       readonly visual_preset?: EditorialClip["visual_preset"];
       readonly source_audio_gain_db?: number;
@@ -1153,6 +1162,8 @@ export function requestRevision(
     method: "POST",
     body: JSON.stringify({
       note: input.note,
+      base_version: input.baseVersion,
+      restore_version: input.restoreVersion,
       revision_mode: input.revisionMode ?? "targeted",
       caption_corrections: input.captionCorrections,
       clip_adjustments: input.clipAdjustments ?? [],
@@ -1323,3 +1334,15 @@ export function applyLibraryOrganization(id: string, suggestions: readonly Organ
     method: "POST", body: JSON.stringify({ suggestions: suggestions.map(({ asset_id, display_name, media_role, media_category, tags, confidence, reason }) => ({ asset_id, display_name, media_role, media_category, tags, confidence, reason })) }),
   });
 }
+
+export type SourceProduct = { readonly id: string; readonly name: string; readonly aliases: readonly string[]; readonly notes: string };
+export type SourceRange = { readonly id: string; readonly start_seconds: number; readonly end_seconds: number; readonly role: "talking" | "broll" | "product" | "reaction" | "avoid"; readonly note: string };
+export type SourceKnowledge = { readonly products: readonly SourceProduct[]; readonly evidence_version: string };
+export type RuntimePerformanceReport = { readonly stages: Readonly<Record<string, { readonly samples: number; readonly median_seconds: number; readonly p95_seconds: number }>> };
+export const getRuntimePerformance = () => apiRequest<RuntimePerformanceReport>("system/performance");
+export const getSourceKnowledge = () => apiRequest<SourceKnowledge>("library/knowledge");
+export const saveSourceProduct = (product: SourceProduct) => apiRequest<SourceProduct>(`library/products/${product.id}`, { method: "PUT", body: JSON.stringify({ name: product.name, aliases: product.aliases, notes: product.notes }) });
+export const removeSourceProduct = (id: string) => apiRequest(`library/products/${id}`, { method: "DELETE" });
+export const getSourceRanges = (id: string) => apiRequest<readonly SourceRange[]>(`library/assets/${id}/ranges`);
+export const saveSourceRange = (id: string, range: SourceRange) => apiRequest<SourceRange>(`library/assets/${id}/ranges/${range.id}`, { method: "PUT", body: JSON.stringify(range) });
+export const removeSourceRange = (assetId: string, id: string) => apiRequest(`library/assets/${assetId}/ranges/${id}`, { method: "DELETE" });

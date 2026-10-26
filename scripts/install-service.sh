@@ -32,3 +32,7 @@ systemctl daemon-reload
 systemctl enable gm-media-server.service
 systemctl restart gm-media-server.service
 systemctl --no-pager --full status gm-media-server.service
+deployed_commit=$(git -C "$project_root" rev-parse HEAD 2>/dev/null || printf unknown)
+printf '{"commit":"%s"}\n' "$deployed_commit" > /var/lib/gm-media-server/build.json.tmp
+chmod 0644 /var/lib/gm-media-server/build.json.tmp
+mv /var/lib/gm-media-server/build.json.tmp /var/lib/gm-media-server/build.json

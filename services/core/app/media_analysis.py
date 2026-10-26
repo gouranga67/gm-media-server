@@ -6,6 +6,7 @@ import shutil
 import subprocess
 from collections.abc import Sequence
 from fractions import Fraction
+from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -17,6 +18,12 @@ READ_ONLY_MODE = 0o440
 SCENE_TIMESTAMP_PATTERN = re.compile(r"pts_time:([0-9]+(?:\.[0-9]+)?)")
 LOUDNESS_JSON_PATTERN = re.compile(r"\{\s*\"input_i\".*?\}", re.DOTALL)
 EDGE_ENERGY_PATTERN = re.compile(r"lavfi\.signalstats\.YAVG=([0-9]+(?:\.[0-9]+)?)")
+ANALYSIS_VERSION = "1.2"
+
+
+def analysis_profile(settings: "Settings") -> str:
+    """Cache identity excludes device: CPU fallback uses the same recognition model."""
+    return f"{ANALYSIS_VERSION}:{settings.transcription_model_path.name}:beam5:vad:words"
 
 
 def resolve_source(media_root: Path, storage_key: str) -> Path:
@@ -594,8 +601,19 @@ def atomic_write(path: Path, content: str) -> None:
         raise
 
 
-def transcribe(source: Path, settings: "Settings") -> tuple[dict[str, Any], str]:
+@lru_cache(maxsize=1)
+def _whisper_model(model_path: str, device: str, compute_type: str) -> Any:
     from faster_whisper import WhisperModel
+    return WhisperModel(model_path, device=device, compute_type=compute_type, local_files_only=True)
+
+
+def transcribe(source: Path, settings: "Settings") -> tuple[dict[str, Any], str]:
+    from app.resource_guard import inference_slot
+    with inference_slot(settings.media_root):
+        return _transcribe_locked(source, settings)
+
+
+def _transcribe_locked(source: Path, settings: "Settings") -> tuple[dict[str, Any], str]:
 
     model_path = str(settings.transcription_model_path)
     attempts = (
@@ -606,7 +624,7 @@ def transcribe(source: Path, settings: "Settings") -> tuple[dict[str, Any], str]
     last_error: Exception | None = None
     for device, compute_type in attempts:
         try:
-            model = WhisperModel(model_path, device=device, compute_type=compute_type, local_files_only=True)
+            model = _whisper_model(model_path, device, compute_type)
             raw_segments, info = model.transcribe(
                 str(source),
                 beam_size=5,
@@ -644,6 +662,7 @@ def transcribe(source: Path, settings: "Settings") -> tuple[dict[str, Any], str]
             return transcript, render_webvtt(segments)
         except Exception as error:
             last_error = error
+            _whisper_model.cache_clear()
             if device != "cuda" or len(attempts) == 1:
                 raise
             print(f"CUDA transcription unavailable; using CPU fallback: {error}", flush=True)
@@ -726,8 +745,14 @@ def analyze_asset(
         derived["transcript"] = _relative(settings.media_root, transcript_path)
         derived["captions"] = _relative(settings.media_root, captions_path)
 
+    if is_image and derived.get("preview"):
+        from app.source_evidence import image_ocr
+        derived["ocr"] = image_ocr(settings.media_root / derived["preview"])
+
     manifest = {
         "schema_version": "1.0",
+        "analysis_version": ANALYSIS_VERSION,
+        "analysis_profile": analysis_profile(settings),
         "asset_id": asset_id,
         "project_id": project_id,
         "source": {

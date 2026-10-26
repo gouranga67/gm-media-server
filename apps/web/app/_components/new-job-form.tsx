@@ -4,6 +4,8 @@ import { libraryRoleLabel } from "@/lib/library-organization";
 import { Component, type DragEvent, type ErrorInfo, type FormEvent, type ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { StudioNav } from "./studio-nav";
+import { readMediaBasket, writeMediaBasket } from "@/lib/media-basket";
 import { useRouter } from "next/navigation";
 import type { Upload } from "tus-js-client";
 import {
@@ -262,7 +264,7 @@ class NewJobErrorBoundary extends Component<
     return (
       <main className="flex min-h-screen items-center justify-center bg-[#F7F7F5] p-6 text-[#20211F] [color-scheme:light]">
         <div className="w-full max-w-md rounded-md border border-[#D7D9D3] bg-white p-5">
-          <p className="font-mono text-xs font-bold tracking-wide text-[#C54B35] uppercase">Phone display error</p>
+          <p className="font-mono text-xs font-bold tracking-wide text-[#A23B2A] uppercase">Phone display error</p>
           <h1 className="mt-2 text-xl font-bold text-[#173F5F]">GM Studio could not draw this screen</h1>
           <p className="mt-3 text-sm leading-relaxed text-[#666862]">{this.state.error}</p>
           <Button className="mt-5 h-11 w-full bg-[#173F5F] text-white hover:bg-[#12344F]" onClick={() => window.location.reload()} type="button">
@@ -733,6 +735,9 @@ function NewJobFormContent() {
   const [libraryPurpose, setLibraryPurpose] = useState("all");
   const [libraryAssets, setLibraryAssets] = useState<readonly LibraryAsset[]>([]);
   const [selectedLibraryAssetIds, setSelectedLibraryAssetIds] = useState<ReadonlySet<string>>(new Set());
+  const [basketLoaded, setBasketLoaded] = useState(false);
+  useEffect(() => { setSelectedLibraryAssetIds(new Set(readMediaBasket())); setBasketLoaded(true); }, []);
+  useEffect(() => { if (basketLoaded) writeMediaBasket(Array.from(selectedLibraryAssetIds)); }, [basketLoaded, selectedLibraryAssetIds]);
   const [libraryQuery, setLibraryQuery] = useState("");
   const [libraryKind, setLibraryKind] = useState<LibraryKind>("all");
   const [libraryProjectId, setLibraryProjectId] = useState("all");
@@ -1275,6 +1280,7 @@ function NewJobFormContent() {
     setFormError(undefined);
     try {
       await requestPreview(jobId);
+      writeMediaBasket([]);
       router.push(`/jobs/${jobId}`);
     } catch (error) {
       setFormError(toErrorMessage(error));
@@ -1298,30 +1304,7 @@ function NewJobFormContent() {
     >
       <header className="z-40 shrink-0 border-b border-[#D7D9D3] bg-[#F7F7F5] px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-3">
         <div className="mb-1 flex items-center justify-between gap-3">
-          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-            <Link className="text-sm font-bold tracking-tight text-[#173F5F]" href="/">GM Studio</Link>
-            <Link className="font-mono text-[10px] font-bold text-[#173F5F] underline underline-offset-4" href="/jobs">
-              Jobs
-            </Link>
-            <Link className="font-mono text-[10px] font-bold text-[#173F5F] underline underline-offset-4" href="/prompts">
-              Prompts
-            </Link>
-            <Link className="font-mono text-[10px] font-bold text-[#173F5F] underline underline-offset-4" href="/usage">
-              AI usage
-            </Link>
-            <Link className="font-mono text-[10px] font-bold text-[#173F5F] underline underline-offset-4" href="/library">
-              Library
-            </Link>
-            <Link className="hidden font-mono text-[10px] font-bold text-[#173F5F] underline underline-offset-4 sm:inline" href="/settings">
-              Brand &amp; presets
-            </Link>
-            <Link className="hidden font-mono text-[10px] font-bold text-[#173F5F] underline underline-offset-4 md:inline" href="/system">
-              System
-            </Link>
-            <Link className="hidden font-mono text-[10px] font-bold text-[#173F5F] underline underline-offset-4 sm:inline" href="/library/duplicates">
-              Duplicate audit
-            </Link>
-          </div>
+          <StudioNav current="/jobs/new" />
           <Badge className="rounded-sm border-[#D7D9D3] bg-white px-2 py-1 font-mono text-[10px] font-bold text-[#173F5F] uppercase dark:bg-white" variant="outline">
             <span
               aria-hidden="true"
@@ -1457,7 +1440,7 @@ function NewJobFormContent() {
             <div className="space-y-2">
               <label className="flex justify-between text-xs font-bold text-[#173F5F]" htmlFor="project-name">
                 <span>PROJECT NAME</span>
-                <span className="text-[10px] text-[#C54B35]">REQUIRED</span>
+                <span className="text-[10px] text-[#A23B2A]">REQUIRED</span>
               </label>
               <Input
                 aria-invalid={formError === "Enter a project name."}

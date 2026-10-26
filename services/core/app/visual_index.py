@@ -214,13 +214,6 @@ def build_visual_frames(
         for frame_index, frame_seconds in enumerate(times):
             name = f"{kind}-{int(segment['segment_index']):04d}-{frame_index:02d}.jpg"
             destination = directory / name
-            extract_visual_frame(
-                source,
-                destination,
-                frame_seconds=frame_seconds,
-                is_image=is_image,
-                timeout=settings.analysis_command_timeout_seconds,
-            )
             frames.append(
                 {
                     "segment_kind": kind,
@@ -232,4 +225,10 @@ def build_visual_frames(
                     "frame_path": destination.relative_to(settings.media_root).as_posix(),
                 }
             )
-    return evenly_limit(frames, VISUAL_MAX_FRAMES_PER_ASSET)
+    selected = evenly_limit(frames, VISUAL_MAX_FRAMES_PER_ASSET)
+    # Bound decode and disk work, not just the number of vectors retained.
+    for frame in selected:
+        extract_visual_frame(source, settings.media_root / frame["frame_path"],
+                            frame_seconds=frame["frame_seconds"], is_image=is_image,
+                            timeout=settings.analysis_command_timeout_seconds)
+    return selected

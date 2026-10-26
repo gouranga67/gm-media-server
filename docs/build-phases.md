@@ -30,7 +30,7 @@ This is the working plan for turning the Lenovo into a private media-editing app
 | 17A | Local rendered-quality reports with zero hosted AI usage | Source complete; live acceptance pending |
 | 18 | Optional High impact style, rhythmic framing, and picture-only B-roll | Source complete; live acceptance pending |
 
-The 2026-10-26 [system audit and roadmap](system-audit-and-roadmap.md) reviews the live interface, source-context pipeline, compute use and next build phases. A [PDF edition](GM-Studio-System-Audit-and-Roadmap.pdf) is available for reading away from the server. The audit is planning work; proposed phases below are not implemented or accepted by this update.
+The 2026-10-26 [system audit and roadmap](system-audit-and-roadmap.md) reviews the live interface, source-context pipeline, compute use and next build phases. A [PDF edition](GM-Studio-System-Audit-and-Roadmap.pdf) is available for reading away from the server. The audit is planning work. Implementation of phases 19–25 has started; see the [continuous sprint report](phase-reports/phase-19-25-sprint.md) for tested checkpoints and remaining acceptance.
 
 The current improvement-loop increment is Phase 17A: inspect the rendered file and retain a versioned report without changing the edit. Its remaining repair/evaluation ambitions are carried into proposed Phase 24. Preserve the current successful model and deterministic render path while measuring changes.
 
@@ -38,9 +38,9 @@ The current improvement-loop increment is Phase 17A: inspect the rendered file a
 
 | Phase | Outcome | Status |
 |---|---|---|
-| 19 | Stage/cost measurement, fair scheduling, bounded frame extraction, analysis reuse and accessibility fixes | Proposed |
-| 20 | Shared source evidence, product identity, OCR, complete thoughts and consistent retrieval | Proposed |
-| 21 | Unified studio navigation, shared media basket and precise transcript/audio/caption editing | Proposed |
+| 19 | Stage/cost measurement, fair scheduling, bounded frame extraction, analysis reuse and accessibility fixes | Source checkpoint implemented; live measurement pending |
+| 20 | Shared source evidence, product identity, OCR, complete thoughts and consistent retrieval | Source checkpoint implemented; live acceptance pending |
+| 21 | Unified studio navigation, shared media basket and precise transcript/audio/caption editing | In progress; navigation and precise trim/split checkpoint |
 | 22 | Purposeful cadence, framing, audio joins, transitions and cue-level finishing | Proposed |
 | 23 | Layered compositor, picture-in-picture, green-screen keying and a gated segmentation prototype | Proposed |
 | 24 | Scoped feedback lessons, held-out evaluation, reversible promotion and bounded repair | Proposed |

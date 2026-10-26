@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { StudioNav } from "./studio-nav";
 import { useEffect, useState } from "react";
 import { CheckIcon, DownloadIcon, LoaderCircleIcon, RefreshCwIcon } from "lucide-react";
 
@@ -157,7 +158,7 @@ export function JobPreview({ jobId }: { readonly jobId: string }) {
     <main className="min-h-dvh bg-[#F7F7F5] px-4 pt-[max(1.25rem,env(safe-area-inset-top))] pb-[max(2rem,env(safe-area-inset-bottom))] text-[#20211F] [color-scheme:light]">
       <div className="mx-auto w-full max-w-lg">
         <header className="border-b border-[#D7D9D3] pb-4">
-          <p className="text-sm font-bold tracking-tight text-[#173F5F]">GM Studio</p>
+          <StudioNav current="/jobs/detail" />
           <p className="mt-1 font-mono text-[10px] text-[#666862]">Job {jobId.slice(0, 8)} · source-led edit</p>
         </header>
 

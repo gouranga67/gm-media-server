@@ -1,4 +1,5 @@
 import json
+from copy import deepcopy
 import signal
 import threading
 import time
@@ -28,7 +29,8 @@ from app.edit_renderer import render_edit_preview, render_final_delivery
 from app.editor_context import build_editor_context
 from app.editor_provider import create_edit_plan, list_chatgpt_models
 from app.finalize_upload import finalize_original, upload_source_path
-from app.media_analysis import analyze_asset, resolve_source
+from app.media_analysis import ANALYSIS_VERSION, analysis_profile, analyze_asset, atomic_write, resolve_source
+from app.runtime_metrics import measure_task
 from app.productization import assert_ai_budget
 from app.story_intelligence import STORY_INTELLIGENCE_VERSION, build_story_moments
 from app.take_quality import editing_policy
@@ -216,7 +218,8 @@ def claim_pending_ingest() -> dict[str, Any] | None:
     with connection() as database:
         row = database.execute(
             """
-            SELECT a.id, a.project_id, a.storage_key, a.mime_type, a.byte_size, a.sha256
+            SELECT a.id, a.project_id, a.storage_key, a.mime_type, a.byte_size, a.sha256,
+                   ingest.manifest AS previous_manifest
             FROM asset_ingests AS ingest
             JOIN assets AS a ON a.id = ingest.asset_id
             WHERE a.status = 'ready'
@@ -253,7 +256,7 @@ def analyze_one_asset(state: WorkerState) -> bool:
     asset_id = str(asset["id"])
     state.active_ingest_id = asset_id
     try:
-        manifest = analyze_asset(asset)
+        manifest = reuse_exact_analysis(asset) or analyze_asset(asset)
         with connection() as database:
             database.execute(
                 """
@@ -289,6 +292,38 @@ def analyze_one_asset(state: WorkerState) -> bool:
     finally:
         state.active_ingest_id = None
     return True
+
+
+def reuse_exact_analysis(asset: dict[str, Any]) -> dict[str, Any] | None:
+    """Reuse verified immutable derivatives, retaining this asset's identity."""
+    settings = get_settings()
+    if (asset.get("previous_manifest") or {}).get("force_reanalysis"):
+        return None
+    with connection() as database:
+        row = database.execute(
+            """SELECT a.id, i.manifest FROM assets a JOIN asset_ingests i ON i.asset_id=a.id
+               WHERE a.id<>%s AND a.sha256=%s AND a.byte_size=%s AND a.status='ready'
+                 AND i.status='ready' AND i.manifest->>'analysis_version'=%s
+                 AND i.manifest->>'analysis_profile'=%s
+               ORDER BY i.completed_at DESC LIMIT 1""",
+            (asset["id"], asset["sha256"], asset["byte_size"], ANALYSIS_VERSION, analysis_profile(settings)),
+        ).fetchone()
+    if not row:
+        return None
+    manifest = deepcopy(row["manifest"])
+    try:
+        for key in ("proxy", "thumbnail", "preview", "transcript", "captions", "waveform"):
+            if manifest.get("derived", {}).get(key):
+                resolve_source(settings.media_root, manifest["derived"][key])
+    except (OSError, ValueError):
+        return None
+    manifest.update(asset_id=str(asset["id"]), project_id=str(asset["project_id"]),
+                    reused_from_asset_id=str(row["id"]),
+                    source={key: asset.get(key) for key in ("storage_key", "mime_type", "byte_size", "sha256")})
+    path = settings.media_root / "analysis" / str(asset["project_id"]) / str(asset["id"]) / "manifest.json"
+    manifest["manifest_path"] = path.relative_to(settings.media_root).as_posix()
+    atomic_write(path, json.dumps(manifest, ensure_ascii=False) + "\n")
+    return manifest
 
 
 def seed_pending_catalogs() -> int:
@@ -380,6 +415,18 @@ def catalog_one_asset(state: WorkerState) -> bool:
     state.active_catalog_id = asset_id
     try:
         manifest = asset.get("manifest") if isinstance(asset.get("manifest"), dict) else {}
+        if asset.get("mime_type", "").startswith("image/") and not manifest.get("derived", {}).get("ocr"):
+            # Backfill image text only; retain expensive recognition and immutable originals.
+            from app.source_evidence import image_ocr
+            settings = get_settings()
+            image_key = manifest.get("derived", {}).get("preview")
+            if image_key:
+                manifest.setdefault("derived", {})["ocr"] = image_ocr(resolve_source(settings.media_root, image_key))
+                with connection() as database:
+                    database.execute("UPDATE asset_ingests SET manifest=%s WHERE asset_id=%s", (Jsonb(manifest), asset["id"]))
+                manifest_key = manifest.get("manifest_path")
+                if manifest_key:
+                    atomic_write(resolve_source(settings.media_root, manifest_key), json.dumps(manifest, ensure_ascii=False) + "\n")
         segments = build_catalog_segments(asset, manifest)
         story_moments = build_story_moments(asset, manifest)
         transcript_count = sum(segment["segment_kind"] == "transcript" for segment in segments)
@@ -1754,6 +1801,39 @@ def heartbeat_loop(state: WorkerState, stop_event: threading.Event) -> None:
         client.close()
 
 
+def run_work_cycle(state: WorkerState) -> bool:
+    """One bounded turn per work class, with interactive work ahead of backfill."""
+    root = get_settings().media_root
+    worked = False
+    for _ in range(4):
+        if state.stopping or not finalize_one_upload():
+            break
+        worked = True
+    seed_pending_ingests()
+    seed_pending_catalogs()
+    recover_interrupted_concepts()
+    recover_interrupted_organization()
+    for name, task in (
+        ("catalog", catalog_one_asset), ("preview", process_one_edit),
+        ("export", process_one_final_export), ("variant", process_one_delivery_variant),
+        ("concept", process_one_concept), ("organization", process_one_organization),
+        ("ingest", analyze_one_asset),
+    ):
+        if state.stopping:
+            break
+        with measure_task(name, root) as event:
+            event["did_work"] = bool(task(state))
+            worked = event["did_work"] or worked
+    # Index only after an otherwise idle turn. Required ingest gets a turn
+    # even when previews are queued; background work cannot drain ahead of it.
+    if not worked and not state.stopping:
+        seed_pending_visual_indexes()
+        with measure_task("visual_index", root) as event:
+            event["did_work"] = bool(index_one_asset_visually(state))
+            worked = event["did_work"]
+    return worked
+
+
 def main() -> None:
     settings = get_settings()
     client = Redis.from_url(settings.redis_url, decode_responses=True)
@@ -1810,32 +1890,8 @@ def main() -> None:
             except Exception as error:
                 print(f"ChatGPT model catalogue refresh deferred: {error}", flush=True)
             next_model_refresh = time.monotonic() + settings.editor_model_refresh_seconds
-        while finalize_one_upload():
-            if state.stopping:
-                break
-        seed_pending_ingests()
-        while not state.stopping and analyze_one_asset(state):
-            seed_pending_ingests()
-        seed_pending_catalogs()
-        while not state.stopping and catalog_one_asset(state):
-            seed_pending_catalogs()
-        while not state.stopping and process_one_edit(state):
-            pass
-        while not state.stopping and process_one_final_export(state):
-            pass
-        while not state.stopping and process_one_delivery_variant(state):
-            pass
-        recover_interrupted_concepts()
-        if not state.stopping:
-            process_one_concept(state)
-        recover_interrupted_organization()
-        if not state.stopping:
-            process_one_organization(state)
-        # Visual backfill is deliberately one asset per loop so an existing
-        # library cannot starve user-requested previews or final exports.
-        seed_pending_visual_indexes()
-        if not state.stopping:
-            index_one_asset_visually(state)
+        if run_work_cycle(state):
+            continue
         # Redis is a wake-up channel. PostgreSQL remains the durable source of
         # truth, so a lost queue notification cannot strand an uploaded asset.
         item = client.blpop(settings.worker_queue, timeout=5)

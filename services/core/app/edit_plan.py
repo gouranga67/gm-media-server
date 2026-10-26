@@ -305,6 +305,7 @@ def apply_timeline_adjustments(
     """Apply review-screen changes to a persisted plan without a model call."""
 
     clips = [clip.model_copy(deep=True) for clip in plan.clips]
+    handles = [clip_handle(index, clip.model_dump(mode="json")) for index, clip in enumerate(plan.clips)]
     # Keep each retained piece tied to its original timeline occurrence. Asset
     # IDs alone cannot distinguish two uses of the same source in one edit.
     origins: list[tuple[float, Any]] = []
@@ -316,21 +317,56 @@ def apply_timeline_adjustments(
     inventory = {str(asset["asset_id"]): asset for asset in assets or []}
     for adjustment in adjustments:
         index = int(adjustment["clip_index"])
-        if index >= len(clips):
+        handle = adjustment.get("clip_id")
+        if handle:
+            if handle not in handles:
+                raise ValueError("the selected clip changed; refresh the review before editing")
+            index = handles.index(handle)
+        if index < 0 or index >= len(clips):
             raise ValueError(f"clip {index + 1} is no longer present in this edit")
         action = str(adjustment.get("action") or "keep")
         if action == "remove":
             clips.pop(index)
             origins.pop(index)
+            handles.pop(index)
             continue
         if action == "move_up" and index > 0:
             clips[index - 1], clips[index] = clips[index], clips[index - 1]
             origins[index - 1], origins[index] = origins[index], origins[index - 1]
+            handles[index - 1], handles[index] = handles[index], handles[index - 1]
             index -= 1
         elif action == "move_down" and index < len(clips) - 1:
             clips[index + 1], clips[index] = clips[index], clips[index + 1]
             origins[index + 1], origins[index] = origins[index], origins[index + 1]
+            handles[index + 1], handles[index] = handles[index], handles[index + 1]
             index += 1
+        if adjustment.get("replacement_asset_id"):
+            replacement_id = str(adjustment["replacement_asset_id"])
+            if replacement_id not in inventory:
+                raise ValueError("replacement take must belong to this job")
+            clips[index].asset_id = UUID(replacement_id)
+        if adjustment.get("source_in") is not None:
+            clips[index].source_in = float(adjustment["source_in"])
+        if adjustment.get("source_out") is not None:
+            clips[index].source_out = float(adjustment["source_out"])
+        if adjustment.get("source_in") is not None or adjustment.get("source_out") is not None:
+            if isinstance(plan, MontageEditPlan):
+                clips[index].duration = round(clips[index].source_out - clips[index].source_in, 3)
+        if adjustment.get("replacement_asset_id"):
+            origins[index] = (origins[index][0], clips[index].model_copy(deep=True))
+        if adjustment.get("split_at") is not None:
+            split = float(adjustment["split_at"])
+            clip = clips[index]
+            minimum = .5 if isinstance(plan, MontageEditPlan) else .25
+            if not clip.source_in + minimum <= split <= clip.source_out - minimum:
+                raise ValueError("split must leave a valid source range on both sides")
+            left, right = clip.model_copy(deep=True), clip.model_copy(deep=True)
+            left.source_out, right.source_in, right.transition = split, split, "cut"
+            if isinstance(plan, MontageEditPlan):
+                left.duration, right.duration = split-left.source_in, right.source_out-split
+            clips[index:index+1] = [left, right]
+            origins[index:index+1] = [origins[index], origins[index]]
+            handles[index:index+1] = [handles[index], handles[index] + ":split"]
         visual_preset = adjustment.get("visual_preset")
         if visual_preset is not None:
             clips[index].visual_preset = visual_preset
@@ -351,6 +387,7 @@ def apply_timeline_adjustments(
                 raise ValueError("tightening pauses would create too many timeline clips")
             clips[index:index + 1] = tightened
             origins[index:index + 1] = [origins[index]] * len(tightened)
+            handles[index:index + 1] = [handles[index] + f":{n}" for n in range(len(tightened))]
     minimum = 2 if isinstance(plan, MontageEditPlan) else 1
     if len(clips) < minimum:
         raise ValueError(f"this edit must keep at least {minimum} clip{'s' if minimum > 1 else ''}")
@@ -395,9 +432,14 @@ def apply_timeline_adjustments(
                 break
     return plan.model_copy(
         update={"clips": clips, "effects": effects, "broll": broll,
-                "editorial_summary": f"{plan.editorial_summary} Adjusted in the local editorial workspace."},
+                "editorial_summary": (plan.editorial_summary[:540] + " Adjusted in the local editorial workspace.")},
         deep=True,
     )
+
+
+def clip_handle(index: int, clip: dict[str, Any]) -> str:
+    identity = [index, str(clip.get("asset_id")), float(clip.get("source_in", 0)), float(clip.get("source_out", 0))]
+    return hashlib.sha256(json.dumps(identity).encode()).hexdigest()[:16]
 
 
 # This schema is intentionally small and contains only Structured Outputs

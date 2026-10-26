@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { StudioNav } from "./studio-nav";
 import { useEffect, useRef, useState } from "react";
 import { ArrowRightIcon, CheckIcon, LoaderCircleIcon, PlusIcon, SparklesIcon } from "lucide-react";
 import { LibraryUpload } from "@/app/_components/library-upload";
@@ -135,7 +136,7 @@ export function ConceptDesk() {
 
   return <main className="min-h-dvh bg-[#F7F7F5] px-4 py-6 text-[#20211F] [color-scheme:light] sm:px-6">
     <div className="mx-auto max-w-[1320px]">
-      <header className="border-b border-[#D7D9D3] pb-5"><nav aria-label="Studio" className="flex flex-wrap items-center gap-5 text-sm font-bold text-[#173F5F]"><Link href="/jobs/new">GM Studio</Link><Link href="/library">Library</Link><Link href="/jobs">Jobs</Link><Link href="/usage">AI usage</Link></nav><div className="mt-7 flex flex-wrap items-end justify-between gap-4"><div><p className="font-mono text-[10px] font-bold tracking-widest text-[#666862] uppercase">Create from your library</p><h1 className="mt-2 text-3xl font-bold text-[#173F5F]">Find your next reel</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-[#666862]">Your recorded words, a fresh story. Explore up to three concepts, choose one or two, and let the editor make the previews.</p></div><button aria-controls="concept-import" aria-expanded={uploadOpen} className="inline-flex min-h-11 items-center gap-2 rounded-md border border-[#D7D9D3] bg-white px-4 text-sm font-bold text-[#173F5F]" onClick={() => setUploadOpen((current) => !current)} type="button"><PlusIcon aria-hidden="true" className="size-4" />Add more footage</button></div></header>
+      <header className="border-b border-[#D7D9D3] pb-5"><StudioNav current="/concepts" /><div className="mt-7 flex flex-wrap items-end justify-between gap-4"><div><p className="font-mono text-[10px] font-bold tracking-widest text-[#666862] uppercase">Create from your library</p><h1 className="mt-2 text-3xl font-bold text-[#173F5F]">Find your next reel</h1><p className="mt-2 max-w-2xl text-sm leading-6 text-[#666862]">Your recorded words, a fresh story. Explore up to three concepts, choose one or two, and let the editor make the previews.</p></div><button aria-controls="concept-import" aria-expanded={uploadOpen} className="inline-flex min-h-11 items-center gap-2 rounded-md border border-[#D7D9D3] bg-white px-4 text-sm font-bold text-[#173F5F]" onClick={() => setUploadOpen((current) => !current)} type="button"><PlusIcon aria-hidden="true" className="size-4" />Add more footage</button></div></header>
       <div hidden={!uploadOpen} id="concept-import"><LibraryUpload onReady={refreshLibrary} /></div>
       <p aria-live="polite" className="my-4 text-xs leading-6 text-[#666862]">{coverage ? `${coverage.catalogued_sources} unique sources catalogued · ${coverage.spoken_sources} with recorded speech · ${coverage.visually_indexed_sources} visually indexed${coverage.still_processing ? ` · ${coverage.still_processing} files still processing` : ""}${coverage.analysis_failed ? ` · ${coverage.analysis_failed} files need attention` : ""}` : "Checking library analysis…"}</p>
       <form aria-label="Find reel concepts" className="grid gap-4 rounded-md border border-[#D7D9D3] bg-white p-4 lg:grid-cols-[1.5fr_1fr]" onSubmit={(event) => { event.preventDefault(); void generate(); }}>

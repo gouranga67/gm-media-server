@@ -14,6 +14,7 @@ from app.edit_plan import (
     MontageEditPlan,
     TalkingHeadEditPlan,
     document_sha256,
+    clip_handle,
     source_word_gaps,
     validate_edit_plan,
 )
@@ -267,6 +268,10 @@ def _editorial_timeline(document: dict[str, Any] | None, context: dict[str, Any]
         result.append(
             {
                 "clip_index": index,
+                "clip_id": clip_handle(index, clip),
+                "words": [{"text": str(word.get("text", "")), "start": float(word["start"]), "end": float(word["end"])}
+                          for segment in asset.get("transcript_segments", []) for word in segment.get("words", [])
+                          if float(word.get("end", 0)) > source_in and float(word.get("start", 0)) < source_out][:160],
                 "asset_id": asset_id,
                 "source_name": asset["source_name"],
                 "media_kind": media_kind,
@@ -635,7 +640,7 @@ def request_revision(job_id: UUID, payload: RevisionCreate) -> dict[str, Any]:
     if not context["ready_for_editing"]:
         raise HTTPException(status_code=409, detail="source analysis is not ready")
     corrections = [item.model_dump() for item in payload.caption_corrections]
-    adjustments = [item.model_dump(exclude_none=True) for item in payload.clip_adjustments]
+    adjustments = [item.model_dump(mode="json", exclude_none=True) for item in payload.clip_adjustments]
     _validate_caption_corrections(context, corrections)
     if context["project"]["privacy_mode"] == "local_only" and payload.note:
         raise HTTPException(
@@ -670,6 +675,15 @@ def request_revision(job_id: UUID, payload: RevisionCreate) -> dict[str, Any]:
         ).fetchone()
         if based_on is None:
             raise HTTPException(status_code=409, detail="a ready preview is required before revision")
+        if payload.base_version is not None and payload.base_version != based_on["version"]:
+            raise HTTPException(status_code=409, detail="this preview changed; refresh before submitting edits")
+        if payload.restore_version is not None:
+            if payload.note or adjustments or payload.caption_corrections:
+                raise HTTPException(status_code=422, detail="restore a version separately from other edit changes")
+            based_on = database.execute("SELECT * FROM edit_runs WHERE job_id=%s AND version=%s AND status='ready' AND edit_plan_id IS NOT NULL",
+                (job_id, payload.restore_version)).fetchone()
+            if not based_on:
+                raise HTTPException(status_code=404, detail="a ready version with that number was not found")
         inherited_corrections = list(based_on.get("caption_corrections") or [])
         replacement_targets = {
             str(item.get("original_text") or "").casefold() for item in corrections

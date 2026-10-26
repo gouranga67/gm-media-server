@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { StudioNav } from "./studio-nav";
 import { useEffect, useState, type ReactNode } from "react";
 import { LoaderCircleIcon } from "lucide-react";
 
@@ -100,7 +101,7 @@ export function UsageDashboard() {
     <main className="min-h-dvh bg-[#F7F7F5] px-4 pt-[max(1.25rem,env(safe-area-inset-top))] pb-[max(2rem,env(safe-area-inset-bottom))] text-[#20211F] [color-scheme:light]">
       <div className="mx-auto w-full max-w-5xl">
         <header className="border-b border-[#D7D9D3] pb-4">
-          <div className="flex flex-wrap items-center gap-4"><Link className="text-sm font-bold tracking-tight text-[#173F5F]" href="/jobs/new">GM Studio</Link><Link className="font-mono text-[10px] font-bold text-[#173F5F] underline underline-offset-4" href="/library">Media library</Link><Link className="font-mono text-[10px] font-bold text-[#173F5F] underline underline-offset-4" href="/library/duplicates">Duplicate audit</Link><Link className="font-mono text-[10px] font-bold text-[#173F5F] underline underline-offset-4" href="/system">System</Link></div>
+          <StudioNav current="/usage" />
           <div className="mt-3 flex flex-wrap items-end justify-between gap-4">
             <div><h1 className="text-2xl font-bold tracking-tight text-[#173F5F]">AI usage &amp; jobs</h1><p className="mt-2 text-sm leading-relaxed text-[#666862]">Local editing history and measured model usage.</p></div>
             <div aria-label="Usage period" className="flex rounded-md border border-[#D7D9D3] bg-white p-1" role="group">
