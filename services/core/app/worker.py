@@ -33,6 +33,7 @@ from app.take_quality import editing_policy
 from app.montage_renderer import render_montage_delivery, render_montage_preview
 from app.music_analysis import analyze_music_beats
 from app.revision_report import compare_revision
+from app.broll_evidence import guard_broll
 from app.visual_index import (
     VISUAL_INDEX_VERSION,
     VISUAL_MODEL_ID,
@@ -824,6 +825,13 @@ def _persist_generated_plan(
     return str(plan_row["id"])
 
 
+def _guard_generated_broll(context: dict[str, Any], plan: EditPlan) -> EditPlan:
+    guarded, removed = guard_broll(plan, context["assets"])
+    if removed:
+        context.setdefault("broll_selection_review", []).extend(removed)
+    return guarded
+
+
 def _record_plan_usage(
     run: dict[str, Any], provenance: dict[str, Any], request_kind: str
 ) -> None:
@@ -998,6 +1006,7 @@ def process_one_edit(state: WorkerState) -> bool:
             else:
                 assert_ai_budget()
                 proposed, provenance = create_edit_plan(context)
+                proposed = _guard_generated_broll(context, proposed)
             request_kind = "revision" if run.get("based_on_run_id") else "initial_plan"
             _record_plan_usage(run, provenance, request_kind)
             if run.get("broll_enabled") is False:
@@ -1063,6 +1072,7 @@ def process_one_edit(state: WorkerState) -> bool:
                     }
                     assert_ai_budget()
                     proposed, provenance = create_edit_plan(context)
+                    proposed = _guard_generated_broll(context, proposed)
                     _record_plan_usage(run, provenance, "repair")
                     final_document, final_repairs = repair_predictable_plan_defaults(
                         proposed.model_dump(mode="json"),

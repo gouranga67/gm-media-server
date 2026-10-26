@@ -5,6 +5,7 @@ from typing import Any
 from uuid import UUID
 
 from app.config import Settings, get_settings
+from app.broll_evidence import broll_guidance
 from app.database import connection
 from app.edit_plan import source_word_gaps
 from app.media_analysis import probe_media, resolve_source, video_probe_is_hdr
@@ -149,6 +150,8 @@ def build_editor_context(
         asset["speech_gap_note"] = (
             "Word-timing gaps, not verified silence; may contain laughter, actions, or reactions."
         )
+        if job.get("edit_style") == "high_impact":
+            asset["broll_guidance"] = broll_guidance(asset)
         if include_internal_paths:
             asset["_storage_key"] = row["storage_key"]
             proxy = manifest.get("derived", {}).get("proxy")

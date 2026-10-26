@@ -514,6 +514,13 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
         "Use broll for 0.5–4s picture-only cutaways to relevant uploaded video or image assets. Main speech continues "
         "unchanged under broll; never replace dialogue clips just to show a product close-up. Give each overlay a "
         "source-backed editorial_intent. Do not infer an object from a generic visual_window or invent relevant footage. "
+        "Prefer the supplied product close-ups, hands, demonstrations, scene details, and relevant still images. "
+        "Never use a different speaking take as a muted cutaway: visible mouth movements would disagree with "
+        "the continuing voice. Choose video ranges inside broll_guidance.speech_free_windows and inspect the "
+        "pictured source for relevance and visible speaking. These windows are transcript gaps, not proof of "
+        "a silent scene or an absent face. A presenter holding a product while saying a different line is "
+        "not suitable picture-only B-roll. If suitable supporting pictures are unavailable, leave the "
+        "presenter in sync and use framing changes instead. Do not guess text in unreadable review screenshots. "
         "Overlays must not overlap, must stay inside the final edit, and may cover at most 60% of it. "
         "Image overlays use zero source timecodes; video duration must equal source_out-source_in. Return [] if no "
         "appropriate B-roll is supplied.\n\n"
@@ -540,6 +547,11 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
     ]
     if context.get("project", {}).get("privacy_mode") != "hybrid":
         return content
+
+    if public.get("job", {}).get("edit_style") == "high_impact":
+        from app.editor_visual_context import high_impact_visuals
+
+        return content + high_impact_visuals(context, settings.media_root, 12 if recipe == "montage" else 4)
 
     image_limit = 12 if recipe == "montage" else 4
     for asset in context.get("assets", [])[:image_limit]:

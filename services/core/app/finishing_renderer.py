@@ -94,4 +94,5 @@ def finishing_manifest(context: dict[str, Any], plan: EditPlan) -> dict[str, Any
     return {"mode": context["job"].get("edit_style"), "target_visual_beat_seconds": 2.5,
             "rhythmic_punch_beats": beats, "broll_count": len(plan.broll),
             "creative_effect_count": len(plan.effects), "dialogue_timeline_preserved": True,
+            "broll_selection_review": context.get("broll_selection_review", []),
             "additional_model_calls": 0}

@@ -196,6 +196,29 @@ class HighImpactTests(unittest.TestCase):
         self.assertEqual(rendered.clips, plan.clips)
         self.assertEqual(len(plan.broll), 1)
 
+    def test_new_planning_removes_unsynchronised_speaking_cover_with_one_model_call(self):
+        from unittest.mock import MagicMock, Mock, patch
+        from app import worker
+
+        self.assets[1]["transcript_segments"] = [{"start": 1, "end": 3, "text": "A different spoken take."}]
+        proposed = TalkingHeadEditPlan.model_validate(self.doc)
+        context = {"ready_for_editing": True, "job": {"edit_style": "high_impact"},
+            "project": {"privacy_mode": "hybrid", "name": "Product ad", "brief": "Keep this story", "ai_copy_allowed": False},
+            "assets": self.assets, "music_library": [], "creative_effect_library": []}
+        run = {"id": str(uuid4()), "job_id": str(uuid4()), "version": 1, "edit_plan_id": None, "based_on_run_id": None}
+        planner = Mock(return_value=(proposed, {"provider": "chatgpt_plan", "model": "test"}))
+        renderer = Mock(return_value={"outputs": {"preview": "preview.mp4"}, "manifest_path": "manifest.json"})
+        with patch.multiple(worker, claim_pending_edit=Mock(return_value=run), build_editor_context=Mock(return_value=context),
+            create_edit_plan=planner, connection=MagicMock(), assert_ai_budget=Mock(), _record_plan_usage=Mock(),
+            _persist_generated_plan=Mock(), render_edit_preview=renderer):
+            self.assertTrue(worker.process_one_edit(worker.WorkerState()))
+        planner.assert_called_once()
+        rendered_context, rendered_plan = renderer.call_args.args[:2]
+        self.assertEqual(rendered_plan.clips, proposed.clips)
+        self.assertEqual(rendered_plan.broll, [])
+        self.assertEqual(len(proposed.broll), 1)
+        self.assertEqual(rendered_context["broll_selection_review"][0]["asset_id"], self.cover)
+
     def test_overlay_filter_keeps_audio_and_places_captions_after_picture(self):
         plan = self.validate()
         graph = append_broll_filters("[base]subtitles=filename='captions.ass'[vout];[voice]anull[aout]",
