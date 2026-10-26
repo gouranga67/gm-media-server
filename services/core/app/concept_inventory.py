@@ -10,6 +10,7 @@ from uuid import UUID, uuid5
 from app.concept_schemas import ConceptProposals, ConceptRequestCreate
 from app.blooper_detection import find_blooper_evidence, has_specific_blooper_clue, transcript_continuations
 from app.take_quality import production_chatter_reason
+from app.blooper_focus import attach_word_times, focus_blooper_passages
 
 MAX_SOURCES = 60
 MAX_INVENTORY_CHARACTERS = 36_000
@@ -89,20 +90,22 @@ def compact_inventory(rows: list[dict], segments: list[dict], payload: ConceptRe
     bloopers = payload.reel_kind == "bloopers"
     clues = find_blooper_evidence(segments) if bloopers else {}
     continuations = transcript_continuations(segments) if bloopers else {}
+    focused = focus_blooper_passages(segments, clues) if bloopers else {}
     for segment in segments:
         text = " ".join(str(segment.get("text") or "").split())
         start, end = float(segment["start_seconds"]), float(segment["end_seconds"])
         if not math.isfinite(start + end) or start < 0 or len(text) > 900 or end - start <= 0 or end - start > 25:
             continue
-        if bloopers and int(segment["id"]) not in clues:
+        if bloopers and int(segment["id"]) not in focused:
             continue
         if not bloopers and (len(text) < 12 or end - start < 0.5 or production_chatter_reason(text)):
             continue
         evidence = {
             "evidence_id": int(segment["id"]), "asset_id": str(segment["asset_id"]),
             "start": start, "end": end, "text": text, **clues.get(int(segment["id"]), {}),
+            **focused.get(int(segment["id"]), {}),
         }
-        if bloopers and int(segment["id"]) in continuations:
+        if bloopers and "catalog_range" not in focused.get(int(segment["id"]), {}) and int(segment["id"]) in continuations:
             evidence["possible_sentence_continuation"] = continuations[int(segment["id"])]
         by_asset[str(segment["asset_id"])].append(evidence)
     for row in rows:
@@ -186,6 +189,8 @@ def load_inventory(database: Any, payload: ConceptRequestCreate) -> tuple[dict, 
     recent = [{"title": option["title"][:100], "speech_evidence_ids": [beat["evidence_id"] for beat in option["script"][:10]]}
               for row in prior for option in row["concepts"]][:6]
     products = list(database.execute("SELECT id,name,aliases FROM source_products ORDER BY name LIMIT 100").fetchall())
+    if payload.reel_kind == "bloopers":
+        segments = attach_word_times(chosen, list(segments))
     inventory = compact_inventory(chosen, list(segments), payload, recent=recent, products=products)
     coverage = {"unique_sources_available": len({row["sha256"] for row in rows}),
                 "sources_considered": len(chosen), "speech_passages": len(inventory["evidence"]),

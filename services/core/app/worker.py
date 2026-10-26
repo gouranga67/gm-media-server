@@ -930,6 +930,11 @@ def process_one_edit(state: WorkerState) -> bool:
             with connection() as database:
                 persist_assembly(database, context)
             context = build_editor_context(run["job_id"], include_internal_paths=True)
+        if not run.get("edit_plan_id") and not run.get("based_on_run_id"):
+            from app.blooper_focus import selected_blooper_scope
+            scope = selected_blooper_scope(context)
+            if scope:
+                context["job"]["selected_blooper_scope"] = scope
         if run.get("broll_enabled") is False:
             context["job"]["broll_enabled"] = False
         if not context["ready_for_editing"]:

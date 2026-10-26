@@ -22,7 +22,9 @@ def generate_concepts(inventory: dict, privacy_mode: str, settings: Settings) ->
         "blooper reel is actually supported, even when weak clues are present. "
         "ASR passage boundaries are not sentence boundaries. Read possible_sentence_continuation before/after hints "
         "when present: do not open on a disconnected continuation or promise an ending that cuts off the question. "
+        "Passages with blooper_scope_version=1 are focused word-timed windows, not entire takes. "
         "Prefer the shortest intelligible setup and a complete recorded comic beat; omit redundant explanation. "
+        "A successful pronunciation can be a short recovery; never append the rest of a product list or sales pitch. "
         if inventory.get("reel_kind") == "bloopers" else
         "Suggest up to three distinct, compelling short reels we can genuinely make from this library. "
         "Build hook, explanation and a supported ending with clear referents. Do not mix claims between products, "

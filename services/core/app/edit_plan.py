@@ -1024,6 +1024,8 @@ def validate_edit_plan(
             raise ValueError("the edit plan did not use the specifically selected music track")
 
     _validate_effect_cues(plan, total_duration, direction, creative_effects or [])
+    from app.blooper_focus import validate_blooper_scope
+    validate_blooper_scope(plan, direction)
     _validate_broll(plan, assets, total_duration, direction)
     validate_finishing(plan, assets, music_tracks)
 
@@ -1159,6 +1161,8 @@ def validate_montage_plan(
         if selected_track_id and track_id != str(selected_track_id):
             raise ValueError("the montage did not use the specifically selected music track")
     _validate_effect_cues(plan, total_duration, direction, creative_effects or [])
+    from app.blooper_focus import validate_blooper_scope
+    validate_blooper_scope(plan, direction)
     _validate_broll(plan, assets, total_duration, direction)
     validate_finishing(plan, assets, music_tracks)
     return plan

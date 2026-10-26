@@ -22,7 +22,7 @@ const ts = require("typescript");
 const Module = require("node:module");
 const originalLoad = Module._load;
 let lessonProposed = false;
-let assemblySettings, assemblyError, assemblyLocked, profiles;
+let assemblySettings, assemblyError, assemblyLocked, profiles, previewFixture;
 function assemblyPreview() { return {ready: !assemblyError, locked: assemblyLocked, error:assemblyError, settings:assemblySettings, decision:assemblyError ? null : {recipe:assemblySettings.assembly_mode === "auto" ? "talking_head" : assemblySettings.assembly_mode,edit_style:assemblySettings.edit_style,purpose:assemblySettings.reel_intent === "auto" ? "story" : assemblySettings.reel_intent,label:"Speech with supporting pictures",reason:"Keep recorded speech continuous.",hosted_model_calls:0}}; }
 let calls = [], transfers = [], navigation = [], readyEvents = 0, analysisStatus = "ready", root, managedAssets = [], batchFailure = false, conceptHistory = [], renderConceptFailure = false, conceptCounter = 0, organizationHistory = [], organizationFailure = false;
 const serverId = "11111111-1111-4111-8111-111111111111";
@@ -54,6 +54,7 @@ for (const extension of [".ts", ".tsx"]) Module._extensions[extension] = (module
   assert.equal(errors.length, 0, errors.map((diagnostic) => ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n")).join("\n"));
   module._compile(outputText, filename);
 };
+const { JobPreview } = require(path.join(repo, "apps/web/app/_components/job-preview.tsx"));
 const { AssemblyReadiness } = require(path.join(repo, "apps/web/app/_components/assembly-readiness.tsx"));
 const { NewJobForm } = require(path.join(repo, "apps/web/app/_components/new-job-form.tsx"));
 const { ConceptDesk } = require(path.join(repo, "apps/web/app/_components/concept-desk.tsx"));
@@ -76,6 +77,7 @@ globalThis.fetch = async (url, options = {}) => {
   else if (/^library\/products\//.test(route)) payload = { ...body, id: route.split("/").at(-1) };
   else if (route.endsWith("/ranges") && route.startsWith("library/assets/")) payload = [];
   else if (route.includes("/ranges/") && route.startsWith("library/assets/")) payload = body;
+  else if (route === `jobs/${jobId}/review`) payload=previewFixture;
   else if (route === `jobs/${jobId}/revisions`) payload = { id: "revision", version: 3, status: "pending" };
   else if (route === `jobs/${jobId}/finishing-tools`) payload = { version: 2, settings: { motions:[],colours:[],audio_regions:[],caption_regions:[],layers:[],music_start_seconds:0,voice_denoise:false,audio_joins:[] }, sources:[{ asset_id:serverId,name:"Review image",media_kind:"image",duration_seconds:0 }] };
   else if (route === "concepts/library-status") payload = { unique_sources: 3, catalogued_sources: 3, spoken_sources: 2, visually_indexed_sources: 3, still_processing: 0 };
@@ -146,7 +148,7 @@ globalThis.fetch = async (url, options = {}) => {
   else if (/^assets\/[^/?]+$/.test(route)) payload = { id: route.split("/")[1], status: "ready" };
   else if (route.startsWith("assets/library")) payload = [serverAsset];
   else if (route === `jobs/${jobId}/assets`) payload = { job_id: jobId, attached_count: body.asset_ids.length };
-  else if (route === `jobs/${jobId}/preview`) payload = { id: "preview", status: "queued" };
+  else if (route === `jobs/${jobId}/preview`) { payload = { id: "preview", status: "pending" }; if (previewFixture) previewFixture.latest_run=payload; }
   else if (route === "catalog/visual/status") payload = { assets_pending: 0, assets_failed: 0, assets_ready: 1, frames_total: 1 };
   else if (["system", "client-diagnostics"].includes(route)) payload = {};
   else if (["music-tracks", "creative-assets?active=true", "editor/models", "creative-profiles", "brand-kits"].includes(route)) payload = [];
@@ -164,7 +166,7 @@ beforeEach(() => {
     { ...serverAsset, id: "unsorted", source_name: "VID_0003.mp4", display_name: "VID_0003.mp4", media_role: "auto", job_references: 0 },
   ].map((item) => ({ notes: "", tags: [], favorite: false, library_status: "active", collection_count: 0, visual_status: "ready", updated_at: item.created_at, ...item }));
   lessonProposed=false;
-  assemblySettings={assembly_mode:"auto",pacing_mode:"auto",edit_style:"energetic",reel_intent:"auto"}; assemblyError=null; assemblyLocked=false; profiles=[];
+  assemblySettings={assembly_mode:"auto",pacing_mode:"auto",edit_style:"energetic",reel_intent:"auto"}; assemblyError=null; assemblyLocked=false; profiles=[]; previewFixture=null;
   window.sessionStorage.clear();
   document.body.innerHTML = '<div id="root"></div>';
   root = createRoot(document.getElementById("root"));
@@ -680,5 +682,20 @@ test("stale advanced overrides report a freeze without starting a duplicate prev
   await waitFor(() => document.body.textContent.includes("frozen after planning"));
   assert.equal(ready,false);
   assert.equal(posts("/preview").length,0);
+  assert.equal(posts("/jobs").length,0);
+});
+
+
+test("reopening an unstarted draft shows its interpretation and requires an explicit start", async () => {
+  previewFixture={job:{id:jobId,recipe:"talking_head",status:"queued",output_aspect:"vertical"},latest_run:null,final_export:null,delivery_variants:[],versions:[],original_prompt:"A synthetic draft.",events:[]};
+  await act(async () => root.render(React.createElement(JobPreview,{jobId})));
+  await waitFor(() => document.body.textContent.includes("This edit has not started yet"));
+  await waitFor(() => button("Start editing") && !button("Start editing").disabled);
+  assert.equal(document.body.textContent.includes("Planning your edit"),false);
+  assert.equal(posts("/preview").length,0);
+  assert.equal(posts("/jobs").length,0);
+  await click(button("Start editing"));
+  await waitFor(() => document.body.textContent.includes("Planning your edit"));
+  assert.equal(posts("/preview").length,1);
   assert.equal(posts("/jobs").length,0);
 });

@@ -53,7 +53,7 @@ For every problem, record the job link, preview version, exact reel timestamp, b
 
 | ID | Test | Pass when |
 | --- | --- | --- |
-| B1 | Generate fresh ideas from known recorded stumbles | Each offered gag has an intelligible setup, an actual incident clue and a real reaction/recovery where present. Review the linked raw ranges. |
+| B1 | Generate fresh ideas from known recorded stumbles | Each offered gag has an intelligible setup, an actual incident clue and a real reaction/recovery where present. Review the linked raw ranges: a short stumble should not require watching a whole pitch or full product list. Generate fresh ideas after the incident-focus update; saved ideas retain their old passages. |
 | B2 | Material containing only repeated clean takes | It declines automatic blooper generation rather than treating repetition alone as a joke. Purely visual comedy still needs manual review. |
 | B3 | Short complete gag | It stays short instead of adding explanation, silence or unrelated reactions to reach five seconds or the target length. |
 | B4 | ASR text split across a sentence | The edit does not start on a disconnected continuation or end on an accidental fragment after the comic beat. |
@@ -165,3 +165,5 @@ Mark each test **Pass**, **Fail**, **Not tested** or **Not applicable**. For cre
 | | | | | |
 
 The automated commands and recovery lanes remain in the [technical testing plan](testing-plan.md).
+
+Resume check: leave a newly saved job before pressing Start editing, then reopen it from Jobs. It should say the edit has not started, show its readiness/interpretation, and start only when you press the button.

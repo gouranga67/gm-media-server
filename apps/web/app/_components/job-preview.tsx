@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { AssemblyReadiness } from "./assembly-readiness";
 import { StudioNav } from "./studio-nav";
 import { useEffect, useState } from "react";
 import { CheckIcon, DownloadIcon, LoaderCircleIcon, RefreshCwIcon } from "lucide-react";
@@ -31,6 +32,7 @@ function formatTokens(value: number) {
 }
 
 export function JobPreview({ jobId }: { readonly jobId: string }) {
+  const [assemblyReady, setAssemblyReady] = useState(false);
   const [review, setReview] = useState<JobReview>();
   const [error, setError] = useState<string>();
   const [retrying, setRetrying] = useState(false);
@@ -163,7 +165,14 @@ export function JobPreview({ jobId }: { readonly jobId: string }) {
         </header>
 
         <section aria-live="polite" className="py-8">
-          {status === "ready" ? (
+          {review && !run ? (
+            <div className="space-y-5">
+              <h1 className="text-2xl font-bold text-[#173F5F]">This edit has not started yet</h1>
+              <p className="text-sm text-[#666862]">The job is saved. Check the source readiness and direction below, then start editing when you are ready.</p>
+              <AssemblyReadiness jobId={jobId} onReady={setAssemblyReady} />
+              <Button className="min-h-12 w-full bg-[#173F5F] text-white" disabled={!assemblyReady || retrying} type="button" onClick={() => void retry()}>{retrying ? "Starting…" : "Start editing"}</Button>
+            </div>
+          ) : status === "ready" ? (
             <div className="space-y-5">
               <div>
                 <p className="flex items-center gap-2 font-mono text-xs font-bold tracking-wide text-[#215B43] uppercase">

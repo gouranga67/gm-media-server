@@ -90,7 +90,7 @@ def request_concepts(payload: ConceptRequestCreate) -> dict:
         require_concept_budget(database)
         inventory, coverage = load_inventory(database, payload)
         if payload.reel_kind == "bloopers" and not any(has_specific_blooper_clue(item) for item in inventory["evidence"]):
-            raise HTTPException(status_code=409, detail="No possible bloopers with a specific recorded incident clue were found. Repeated takes or retake directions alone are not enough. No model request was queued. Try another collection or review the raw footage manually; purely visual bloopers need manual review.")
+            raise HTTPException(status_code=409, detail="No possible bloopers with a specific recorded incident clue were found. Repeated takes or retake directions alone are not enough. Long passages without usable word timings need manual review. No model request was queued. Try another collection or review the raw footage manually; purely visual bloopers need manual review.")
         if payload.reel_kind == "story" and len(inventory["evidence"]) < 2:
             raise HTTPException(status_code=409, detail="not enough indexed spoken video is ready in this scope; wait for analysis, choose a broader collection, or add talking footage")
         row = database.execute("""
