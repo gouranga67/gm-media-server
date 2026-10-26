@@ -40,7 +40,7 @@ class MemoryLibrary:
             for id in parameters[1]:
                 self.rows[id]["library_status"] = parameters[0]
         elif "INSERT INTO asset_library_metadata" in sql:
-            key = "display_name" if "display_name" in sql else "media_role"
+            key = "display_name" if "display_name" in sql else "media_category" if "media_category" in sql else "media_role"
             self.rows[parameters[0]][key] = parameters[1]
         else:
             raise AssertionError(f"Unexpected statement: {sql}")
@@ -100,8 +100,16 @@ class LibraryManagementTests(unittest.TestCase):
             update_library_batch(LibraryBatchUpdate(asset_ids=[A, B], action="role", media_role="broll"))
         self.assertEqual(self.database.rows[A]["media_role"], "auto")
 
+    def test_photo_categories_work_without_video_role_labels_or_other_metadata_changes(self):
+        self.database.rows[B]["mime_type"] = "image/png"
+        update_library_batch(LibraryBatchUpdate(asset_ids=[B], action="category", media_category="review"))
+        self.assertEqual(self.database.rows[B]["media_category"], "review")
+        self.assertEqual(self.database.rows[B]["media_role"], "auto")
+        self.assertEqual(self.database.rows[B]["notes"], "B")
+        self.assertEqual(self.database.rows[B]["display_name"], "Other file")
+
     def test_mutation_requires_a_nonempty_name_or_explicit_role(self):
-        for values in (dict(action="rename"), dict(action="role"), dict(action="rename", name_prefix="x" * 252)):
+        for values in (dict(action="rename"), dict(action="role"), dict(action="category"), dict(action="rename", name_prefix="x" * 252)):
             with self.assertRaises(HTTPException):
                 update_library_batch(LibraryBatchUpdate(asset_ids=[A, B], **values))
         self.assertFalse(self.database.statements)

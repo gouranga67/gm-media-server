@@ -158,6 +158,11 @@ class SelectionDatabase:
             self.result = [dict(concept_id=id, job_id=job) for id,job in self.jobs.items()]
         elif sql.startswith("SELECT a.id,a.sha256"):
             self.result = [dict(id=UUID(a["asset_id"]), sha256=a["sha256"]) for a in self.session["inventory"]["assets"] if a["asset_id"] not in self.missing]
+        elif sql.startswith("SELECT 1 FROM music_tracks"):
+            # allowed_platforms is JSONB, not a PostgreSQL ARRAY (migration 007).
+            if "ANY(allowed_platforms)" in sql:
+                raise AssertionError("JSONB platform lists cannot use ANY")
+            self.result = {"compatible": True}
         elif sql.startswith("INSERT"):
             self.writes.append((sql, parameters))
             if "INSERT INTO reel_concept_jobs" in sql: self.jobs[parameters[1]] = parameters[2]
@@ -195,6 +200,16 @@ class ConceptSelectionTests(unittest.TestCase):
             render_selected_concepts(self.session["id"], self.selection, "editor@example.invalid")
         self.assertEqual(error.exception.status_code, 409)
         self.assertFalse(self.db.writes)
+
+    def test_selected_concept_with_music_creates_a_preview_and_retry_reuses_it(self):
+        selection = ConceptSelection(concept_ids=self.selection.concept_ids[:1], music_mode="subtle", effect_level="meme_heavy")
+        first = render_selected_concepts(self.session["id"], selection, "editor@example.invalid")
+        writes = len(self.db.writes)
+        self.assertEqual(first, render_selected_concepts(self.session["id"], selection, "editor@example.invalid"))
+        self.assertEqual(len(self.db.writes), writes)
+        self.assertEqual(len(first["jobs"]), 1)
+        job = next(args for sql,args in self.db.writes if "INSERT INTO jobs" in sql)
+        self.assertEqual(job[3:6], ("subtle", "meme_heavy", "all_social"))
 
     def test_capacity_failure_during_second_job_rolls_back_both(self):
         with patch("app.concepts.assert_job_capacity", side_effect=[None, HTTPException(status_code=429,detail="wait")]):

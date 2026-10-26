@@ -13,6 +13,7 @@ from app.creative_assets import router as creative_assets_router
 from app.brand_kits import router as brand_kits_router
 from app.editing import router as editing_router
 from app.library import router as library_router
+from app.library_organization import router as library_organization_router
 from app.learning import router as learning_router
 from app.projects import router as projects_router
 from app.productization import router as productization_router
@@ -38,6 +39,7 @@ app.include_router(productization_router)
 app.include_router(projects_router)
 app.include_router(editing_router)
 app.include_router(library_router)
+app.include_router(library_organization_router)
 app.include_router(concepts_router)
 app.include_router(learning_router)
 app.include_router(upload_hooks_router)

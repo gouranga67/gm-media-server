@@ -130,6 +130,8 @@ def usage_dashboard(days: int = Query(default=0, ge=0, le=3650)) -> dict[str, An
             SELECT count(*) AS requests, count(DISTINCT job_id) AS jobs,
                    count(*) FILTER (WHERE request_kind='concepts') AS concept_requests,
                    COALESCE(sum(total_tokens) FILTER (WHERE request_kind='concepts'),0) AS concept_tokens,
+                   count(*) FILTER (WHERE request_kind='organization') AS organization_requests,
+                   COALESCE(sum(total_tokens) FILTER (WHERE request_kind='organization'),0) AS organization_tokens,
                    COALESCE(sum(input_tokens), 0) AS input_tokens,
                    COALESCE(sum(cached_input_tokens), 0) AS cached_input_tokens,
                    COALESCE(sum(output_tokens), 0) AS output_tokens,

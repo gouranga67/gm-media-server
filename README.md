@@ -97,6 +97,12 @@ Use the pencil beside a file for a readable display name, or select several and 
 
 **Move to Trash** hides selected originals from the library and future jobs after confirmation. Restore them from the Trash view. This keeps originals on disk and preserves existing jobs; it is not permanent deletion or disk reclamation. Reviewed exact duplicates are grouped by default, with **Show repeated uploads** available when managing copies. Use **Duplicate audit** for the separate verified storage-sharing workflow.
 
+**Categories** work for photos, videos and audio: Reviews, Products, Scenes, Documents, Other, or Uncategorized. Select files and use **Categorize files as…**, or choose Category in a file's details. Use the category filter alongside Photos/B-roll/Talking footage. Talking/B-roll footage labels remain video-specific.
+
+**Auto-sort** proposes descriptive names, categories and video roles using stored transcripts and small preview sheets, for example “Talking about soap”, “Cream B-roll”, or “Image of customer review”. Select up to 24 files and choose **Auto-sort selected**, or use Auto-sort above the library to prepare the next batch from the current view. Press **Suggest names & categories** to make one bounded AI request. Review the names, edit them if needed, select the suggestions you want, then **Apply selected suggestions**. Originals and existing jobs are not renamed on disk or changed. Custom names and manual labels are kept by default; an explicit checkbox allows replacing existing names. Notes/favorites survive and suggested tags are merged without displacing existing tags. Uncertain proposals are unchecked. Text-only mode shares no frames and may not identify anonymous pictures.
+
+Auto-sort sessions are saved separately from editing jobs, can be reopened without another AI call, and count toward the usage dashboard and studio budgets. Files must finish catalogue analysis first. Stale metadata or trashed sources prevent application rather than silently overwriting later edits. No automatic paid retry or automatic metadata application runs. Deploy migration 028 and run `python3 scripts/verify-library-organization.py` for read-only live readiness checks.
+
 After deploying migration 025, `python3 scripts/verify-phase8.py` checks names, roles, collection filtering, atomic batch failures, Trash/restore, provenance, and preview download. It restores the original metadata afterward and makes no AI calls.
 
 ## Find reel ideas from existing footage

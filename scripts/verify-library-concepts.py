@@ -11,6 +11,9 @@ def main():
     helper = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(helper)
     coverage = helper.request("concepts/library-status")
+    render_readiness = helper.request("concepts/render-readiness")
+    if render_readiness.get("status") != "ready" or not isinstance(render_readiness.get("all_social_music_available"), bool):
+        raise RuntimeError("concept music compatibility lookup failed")
     for key in ("unique_sources", "catalogued_sources", "spoken_sources", "visually_indexed_sources", "still_processing"):
         if not isinstance(coverage.get(key), int) or coverage[key] < 0:
             raise RuntimeError(f"invalid library coverage: {key}")

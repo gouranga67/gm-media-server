@@ -15,6 +15,25 @@ from app.productization import actor_login, assert_ai_budget, assert_job_capacit
 router = APIRouter(prefix="/api/v1/concepts", tags=["concepts"])
 
 
+def compatible_concept_music(database: Any, platform: str) -> bool:
+    return database.execute("""SELECT 1 FROM music_tracks WHERE active=true AND commercial_use=true AND synthetic_media=false
+        AND (allowed_platforms ? 'all_social' OR allowed_platforms ? %s) LIMIT 1""", (platform,)).fetchone() is not None
+
+
+def require_concept_budget(database: Any) -> None:
+    try:
+        assert_ai_budget(database)
+    except RuntimeError as error:
+        raise HTTPException(status_code=429, detail=str(error)) from error
+
+
+@router.get("/render-readiness")
+def concept_render_readiness() -> dict:
+    with connection() as database:
+        music = compatible_concept_music(database, "all_social")
+    return {"status": "ready", "all_social_music_available": music}
+
+
 def _public(row: dict, jobs: list[dict] | None = None) -> dict:
     return {key: value for key, value in {**row, "jobs": jobs or []}.items() if key != "inventory"}
 
@@ -67,7 +86,7 @@ def request_concepts(payload: ConceptRequestCreate) -> dict:
         pending = database.execute("SELECT count(*) AS count FROM reel_concept_requests WHERE status IN ('pending','generating')").fetchone()
         if int(pending["count"]) >= 2:
             raise HTTPException(status_code=429, detail="two concept requests are already queued; wait for them to finish")
-        assert_ai_budget(database)
+        require_concept_budget(database)
         inventory, coverage = load_inventory(database, payload)
         if payload.reel_kind == "bloopers" and not any(item.get("blooper_candidate") for item in inventory["evidence"]):
             raise HTTPException(status_code=409, detail="No possible bloopers were found in the scanned transcripts. No model request was queued. Try another collection or add footage with recorded mistakes, retakes or laughter; purely visual bloopers need manual review.")
@@ -148,7 +167,7 @@ def render_selected_concepts(request_id: UUID, payload: ConceptSelection, x_gm_u
         jobs = {str(item["concept_id"]): item["job_id"] for item in existing}
         wanted = [options[str(id)] for id in payload.concept_ids if str(id) not in jobs]
         if wanted:
-            assert_ai_budget(database)
+            require_concept_budget(database)
             asset_ids = list(dict.fromkeys(id for concept in wanted for id in concept["asset_ids"]))
             available = database.execute("""SELECT a.id,a.sha256 FROM assets a JOIN asset_ingests i ON i.asset_id=a.id
                 WHERE a.id=ANY(%s) AND a.status='ready' AND a.library_status='active' AND i.status='ready'
@@ -158,9 +177,7 @@ def render_selected_concepts(request_id: UUID, payload: ConceptSelection, x_gm_u
             if any(id not in hashes or hashes[id] != inventory[id]["sha256"] for id in asset_ids):
                 raise HTTPException(status_code=409, detail="some concept footage is no longer active; restore it from Trash or generate fresh ideas")
             if payload.music_mode.value != "none":
-                compatible = database.execute("""SELECT 1 FROM music_tracks WHERE active=true AND commercial_use=true AND synthetic_media=false
-                    AND ('all_social'=ANY(allowed_platforms) OR %s=ANY(allowed_platforms)) LIMIT 1""", (payload.target_platform.value,)).fetchone()
-                if compatible is None:
+                if not compatible_concept_music(database, payload.target_platform.value):
                     raise HTTPException(status_code=422, detail="no approved music is available for this platform; choose no music")
         for concept in wanted:
             project_id, job_id = uuid4(), uuid4()

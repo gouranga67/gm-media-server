@@ -31,6 +31,7 @@ MANAGED_ASSET_SELECT = """
            COALESCE(asset_library_metadata.display_name, assets.source_name) AS display_name,
            COALESCE(asset_library_metadata.notes, '') AS notes,
            COALESCE(asset_library_metadata.media_role, 'auto') AS media_role,
+           COALESCE(asset_library_metadata.media_category, 'auto') AS media_category,
            COALESCE(asset_library_metadata.favorite, false) AS favorite,
            COALESCE(asset_library_metadata.tags, ARRAY[]::text[]) AS tags,
            assets.library_status, assets.mime_type, assets.byte_size,
@@ -140,6 +141,8 @@ def update_library_batch(payload: LibraryBatchUpdate) -> dict[str, Any]:
         raise HTTPException(status_code=422, detail="batch names must be 251 characters or fewer to leave room for numbering")
     if payload.action == "role" and payload.media_role is None:
         raise HTTPException(status_code=422, detail="choose a footage label")
+    if payload.action == "category" and payload.media_category is None:
+        raise HTTPException(status_code=422, detail="choose a media category")
     with connection() as database:
         # Stable locking order avoids deadlocks between overlapping selections.
         rows = database.execute(
@@ -167,11 +170,17 @@ def update_library_batch(payload: LibraryBatchUpdate) -> dict[str, Any]:
                         "ON CONFLICT (asset_id) DO UPDATE SET display_name = EXCLUDED.display_name, updated_at = now()",
                         (asset_id, name),
                     )
-                else:
+                elif payload.action == "role":
                     database.execute(
                         "INSERT INTO asset_library_metadata (asset_id, media_role) VALUES (%s, %s) "
                         "ON CONFLICT (asset_id) DO UPDATE SET media_role = EXCLUDED.media_role, updated_at = now()",
                         (asset_id, payload.media_role),
+                    )
+                else:
+                    database.execute(
+                        "INSERT INTO asset_library_metadata (asset_id, media_category) VALUES (%s, %s) "
+                        "ON CONFLICT (asset_id) DO UPDATE SET media_category = EXCLUDED.media_category, updated_at = now()",
+                        (asset_id, payload.media_category),
                     )
     return {"updated": len(payload.asset_ids), "action": payload.action}
 
@@ -239,14 +248,15 @@ def update_library_asset(asset_id: UUID, payload: LibraryAssetUpdate) -> dict[st
         database.execute(
             """
             INSERT INTO asset_library_metadata (
-                asset_id, display_name, notes, favorite, tags, media_role
-            ) VALUES (%s, %s, %s, %s, %s, COALESCE(%s, 'auto'))
+                asset_id, display_name, notes, favorite, tags, media_role, media_category
+            ) VALUES (%s, %s, %s, %s, %s, COALESCE(%s, 'auto'), COALESCE(%s, 'auto'))
             ON CONFLICT (asset_id) DO UPDATE SET
                 display_name = EXCLUDED.display_name,
                 notes = EXCLUDED.notes,
                 favorite = EXCLUDED.favorite,
                 tags = EXCLUDED.tags,
                 media_role = COALESCE(%s, asset_library_metadata.media_role),
+                media_category = COALESCE(%s, asset_library_metadata.media_category),
                 updated_at = now()
             """,
             (
@@ -256,7 +266,9 @@ def update_library_asset(asset_id: UUID, payload: LibraryAssetUpdate) -> dict[st
                 payload.favorite,
                 payload.tags,
                 payload.media_role,
+                payload.media_category,
                 payload.media_role,
+                payload.media_category,
             ),
         )
         row = _managed_asset(database, asset_id)

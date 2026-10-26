@@ -21,7 +21,7 @@ const { createRoot } = require("react-dom/client");
 const ts = require("typescript");
 const Module = require("node:module");
 const originalLoad = Module._load;
-let calls = [], transfers = [], navigation = [], readyEvents = 0, analysisStatus = "ready", root, managedAssets = [], batchFailure = false, conceptHistory = [], renderConceptFailure = false, conceptCounter = 0;
+let calls = [], transfers = [], navigation = [], readyEvents = 0, analysisStatus = "ready", root, managedAssets = [], batchFailure = false, conceptHistory = [], renderConceptFailure = false, conceptCounter = 0, organizationHistory = [], organizationFailure = false;
 const serverId = "11111111-1111-4111-8111-111111111111";
 const jobId = "22222222-2222-4222-8222-222222222222";
 const serverAsset = {
@@ -76,6 +76,25 @@ globalThis.fetch = async (url, options = {}) => {
     payload = { jobs: session.jobs.filter((job) => body.concept_ids.includes(job.concept_id)) };
   }
   else if (/^concepts\/[^/?]+$/.test(route)) payload = conceptHistory.find((item) => item.id === route.split("/")[1]);
+  else if (route === "library/organization" && (options.method ?? "GET") === "GET") payload = organizationHistory;
+  else if (route === "library/organization") {
+    const session = { id: body.id,asset_ids:body.asset_ids,status:"ready",total_tokens:500,error:null,applied_asset_ids:[],created_at:"2026-01-01T00:00:00Z",
+      suggestions:body.asset_ids.map((id) => { const item = managedAssets.find((asset) => asset.id === id); return {
+        asset_id:id,previous_name:item.display_name,display_name:item.mime_type.startsWith("image/") ? "Image of customer review" : "Talking about soap",
+        mime_type:item.mime_type,media_role:item.mime_type.startsWith("image/") ? "auto" : "talking",media_category:"review",tags:["review"],confidence:"supported",reason:"Supported by the supplied preview or recorded words.",
+      }; }) };
+    organizationHistory.unshift(session); payload={ ...session,status:"pending" };
+  }
+  else if (/^library\/organization\/[^/]+\/apply$/.test(route)) {
+    if (organizationFailure) return { ok:false,status:409,json:async () => ({ detail:"Library details changed; no files were changed" }) };
+    const session=organizationHistory.find((item) => item.id === route.split("/")[2]);
+    for (const suggestion of body.suggestions) {
+      Object.assign(managedAssets.find((item) => item.id === suggestion.asset_id),suggestion);
+      session.applied_asset_ids.push(suggestion.asset_id);
+    }
+    payload={updated:body.suggestions.length,applied_asset_ids:session.applied_asset_ids};
+  }
+  else if (/^library\/organization\/[^/?]+$/.test(route)) payload=organizationHistory.find((item) => item.id === route.split("/")[2]);
   else if (route.startsWith("library/assets?")) {
     const params = new URLSearchParams(route.split("?")[1]);
     payload = params.get("offset") === "0" ? managedAssets : [];
@@ -89,6 +108,7 @@ globalThis.fetch = async (url, options = {}) => {
       if (!asset) continue;
       if (body.action === "rename") asset.display_name = body.asset_ids.length === 1 ? body.name_prefix : `${body.name_prefix} ${String(index + 1).padStart(3, "0")}`;
       if (body.action === "role") asset.media_role = body.media_role;
+      if (body.action === "category") asset.media_category = body.media_category;
       if (body.action === "trash" || body.action === "restore") asset.library_status = body.action === "trash" ? "archived" : "active";
     }
     payload = { updated: body.asset_ids.length, action: body.action };
@@ -112,6 +132,7 @@ globalThis.fetch = async (url, options = {}) => {
 beforeEach(() => {
   window.history.replaceState(null, "", "/jobs/new");
   calls = []; transfers = []; navigation = []; readyEvents = 0; analysisStatus = "ready"; batchFailure = false; conceptHistory = []; renderConceptFailure = false; conceptCounter = 0;
+  organizationHistory = []; organizationFailure = false;
   managedAssets = [
     { ...serverAsset, id: "talk", source_name: "VID_0001.mp4", display_name: "Product introduction", media_role: "talking", job_references: 2 },
     { ...serverAsset, id: "broll", source_name: "VID_0002.mp4", display_name: "Cream close-up", media_role: "broll", job_references: 0 },
@@ -426,4 +447,62 @@ test("a saved blooper session can honestly decline weak evidence without creatin
   assert.equal(posts("concepts").length, 0);
   assert.equal(button("Create selected previews").disabled, true);
   assert.equal(calls.some((call) => call.route.endsWith('/render')), false);
+});
+
+test("photos can be categorized and filtered without assigning a video footage role", async () => {
+  managedAssets.push({ ...managedAssets[0],id:"review-photo",mime_type:"image/png",display_name:"r3.png",source_name:"r3.png",media_role:"auto" });
+  await act(async () => root.render(React.createElement(MediaLibrary)));
+  await waitFor(() => document.querySelector('input[aria-label="Select r3.png"]'));
+  await click(button("Photos"));
+  await click(document.querySelector('input[aria-label="Select r3.png"]'));
+  assert.equal(document.querySelector('select[aria-label="Label selected videos"]').disabled,true);
+  await chooseOption('select[aria-label="Categorize selected files"]',"review");
+  await waitFor(() => managedAssets.find((item) => item.id === "review-photo").media_category === "review");
+  await chooseOption('select[aria-label="Filter media category"]',"product");
+  assert.equal(document.querySelector('input[aria-label="Select r3.png"]'),null);
+  await chooseOption('select[aria-label="Filter media category"]',"review");
+  assert.ok(document.querySelector('input[aria-label="Select r3.png"]'));
+});
+
+test("auto-sort suggestions require explicit application and can be edited before saving", async () => {
+  managedAssets.push({ ...managedAssets[0],id:"review-photo",mime_type:"image/png",display_name:"r3.png",source_name:"r3.png",media_role:"auto" });
+  await act(async () => root.render(React.createElement(MediaLibrary)));
+  await waitFor(() => document.querySelector('input[aria-label="Select r3.png"]'));
+  await click(document.querySelector('input[aria-label="Select r3.png"]'));
+  await click(button("Auto-sort selected"));
+  await waitFor(() => document.querySelector('section[aria-label="Auto-sort library"]'));
+  assert.equal(posts("library/organization").length,0);
+  await click(button("Suggest names & categories"));
+  await waitFor(() => document.querySelector('input[aria-label="Suggested name for r3.png"]'));
+  assert.equal(managedAssets.find((item) => item.id === "review-photo").display_name,"r3.png");
+  await type('input[aria-label="Suggested name for r3.png"]',"Customer review of cream");
+  await click(button("Apply 1 selected suggestions"));
+  await waitFor(() => document.querySelector('input[aria-label="Select Customer review of cream"]'));
+  const photo=managedAssets.find((item) => item.id === "review-photo");
+  assert.equal(photo.source_name,"r3.png");
+  assert.equal(photo.media_category,"review");
+  assert.equal(posts("library/organization").length,1);
+  assert.equal(calls.some((call) => call.route === "projects"),false);
+  await click(document.querySelector('button[aria-label="Close auto-sort"]'));
+  await click(button("Auto-sort"));
+  await waitFor(() => document.querySelector('select[aria-label="Saved auto-sort session"]'));
+  await chooseOption('select[aria-label="Saved auto-sort session"]',organizationHistory[0].id);
+  await waitFor(() => document.querySelector('input[aria-label="Apply suggestion for r3.png"]'));
+  assert.equal(document.querySelector('input[aria-label="Apply suggestion for r3.png"]').disabled,true);
+  assert.equal(posts("library/organization").length,1);
+});
+
+test("failed auto-sort application preserves the review and original names", async () => {
+  await act(async () => root.render(React.createElement(MediaLibrary)));
+  await waitFor(() => document.querySelector('input[aria-label="Select VID_0003.mp4"]'));
+  await click(document.querySelector('input[aria-label="Select VID_0003.mp4"]'));
+  await click(button("Auto-sort selected"));
+  await click(button("Suggest names & categories"));
+  await waitFor(() => document.querySelector('input[aria-label="Apply suggestion for VID_0003.mp4"]'));
+  organizationFailure=true;
+  await click(button("Apply 1 selected suggestions"));
+  await waitFor(() => document.body.textContent.includes("Library details changed"));
+  assert.equal(document.querySelector('input[aria-label="Apply suggestion for VID_0003.mp4"]').checked,true);
+  assert.equal(managedAssets.find((item) => item.id === "unsorted").display_name,"VID_0003.mp4");
+  assert.equal(posts("library/organization").length,1);
 });

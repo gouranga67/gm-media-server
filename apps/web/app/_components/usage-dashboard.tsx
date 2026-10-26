@@ -118,6 +118,7 @@ export function UsageDashboard() {
             </section>
 
             {usage.concept_requests ? <p className="text-xs leading-6 text-[#666862]">Totals include {usage.concept_requests} library concept requests ({tokens(usage.concept_tokens ?? 0)} tokens). Ideas stay in <Link className="font-bold text-[#173F5F] underline" href="/concepts">Find reel ideas</Link>; only selected concepts become editing jobs.</p> : null}
+            {usage.organization_requests ? <p className="text-xs leading-6 text-[#666862]">Totals also include {usage.organization_requests} library auto-sort requests ({tokens(usage.organization_tokens ?? 0)} tokens). These create naming suggestions, not editing jobs.</p> : null}
 
             <section className="rounded-md border border-[#D7D9D3] bg-white p-5">
               <h2 className="font-mono text-xs font-bold tracking-wide text-[#173F5F] uppercase">By model</h2>

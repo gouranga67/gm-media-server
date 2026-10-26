@@ -27,7 +27,7 @@ def _candidate_order(assets: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return ordered + spoken[1:]
 
 
-def high_impact_visuals(context: dict[str, Any], media_root: Path, image_limit: int = 4) -> list[dict[str, Any]]:
+def high_impact_visuals(context: dict[str, Any], media_root: Path, image_limit: int = 4, *, pictured_asset_ids: set[str] | None = None) -> list[dict[str, Any]]:
     """Pack up to six sources per image, without increasing the image count.
 
     Worker Pillow is already pinned. Derivatives only; originals are not read or
@@ -61,6 +61,8 @@ def high_impact_visuals(context: dict[str, Any], media_root: Path, image_limit: 
     per_sheet = min(6, (len(pictures) + image_limit - 1) // image_limit)
     content: list[dict[str, Any]] = []
     shown = {str(asset["asset_id"]) for asset, _ in pictures}
+    if pictured_asset_ids is not None:
+        pictured_asset_ids.update(shown)
     total_visual = sum(bool(asset.get("has_video")) or str(asset.get("mime_type") or "").startswith("image/")
                        for asset in context.get("assets", []))
     content.append({"type": "input_text", "text": (

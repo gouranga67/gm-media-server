@@ -75,13 +75,14 @@ check_migration_runner() {
 }
 
 run_check "Service and container health" timeout --foreground --kill-after=10s 120s ./scripts/verify-phase2.sh
-run_check "Database migrations 010-027" check_migration_runner
+run_check "Database migrations 010-028" check_migration_runner
 run_check "Backend unit and local render tests" timeout --foreground --kill-after=10s 300s docker compose run --rm --no-deps \
   -v "$project_root/services/core/tests:/app/tests:ro" \
   worker python -m unittest discover -s /app/tests -p 'test_*.py' -v
 run_check "Existing media analysis" timeout --foreground --kill-after=10s 300s python3 scripts/verify-phase4.py
 run_check "Reusable server-library references" timeout --foreground --kill-after=10s 300s python3 scripts/verify-phase6c.py
 run_check "Library concept discovery readiness" timeout --foreground --kill-after=10s 120s python3 scripts/verify-library-concepts.py
+run_check "Photo categories and auto-sort readiness" timeout --foreground --kill-after=10s 120s python3 scripts/verify-library-organization.py
 run_check "Non-destructive exact-duplicate audit" timeout --foreground --kill-after=10s 300s python3 scripts/verify-phase6c2.py
 run_check "Source-evidence catalogue and search" timeout --foreground --kill-after=10s 300s python3 scripts/verify-phase6d.py
 run_check "Local semantic visual index and search" timeout --foreground --kill-after=10s 300s python3 scripts/verify-phase6e.py

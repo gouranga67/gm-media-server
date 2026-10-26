@@ -62,6 +62,7 @@ export type Asset = {
 };
 
 export type MediaRole = "auto" | "talking" | "broll";
+export type MediaCategory = "auto" | "review" | "product" | "scene" | "document" | "other";
 
 export type LibraryAsset = {
   readonly id: string;
@@ -163,6 +164,7 @@ export type VisualIndexStatus = {
 };
 
 export type ManagedLibraryAsset = {
+  readonly media_category?: MediaCategory;
   readonly canonical_asset_id?: string | null;
   readonly id: string;
   readonly project_id: string;
@@ -524,6 +526,8 @@ export type JobUsage = {
 };
 
 export type UsageDashboard = {
+  readonly organization_requests?: number;
+  readonly organization_tokens?: number;
   readonly concept_requests?: number;
   readonly concept_tokens?: number;
   readonly days: number;
@@ -920,6 +924,7 @@ export function getLibraryAssetDetail(assetId: string) {
 export function updateLibraryAsset(assetId: string, input: {
   readonly displayName: string;
   readonly mediaRole?: MediaRole;
+  readonly mediaCategory?: MediaCategory;
   readonly notes: string;
   readonly favorite: boolean;
   readonly tags: readonly string[];
@@ -929,6 +934,7 @@ export function updateLibraryAsset(assetId: string, input: {
     body: JSON.stringify({
       display_name: input.displayName,
       media_role: input.mediaRole,
+      media_category: input.mediaCategory,
       notes: input.notes,
       favorite: input.favorite,
       tags: input.tags,
@@ -952,11 +958,12 @@ export async function getAllManagedLibraryAssets(collectionId?: string) {
   }
 }
 
-export function updateLibraryBatch(assetIds: readonly string[], action: "rename" | "role" | "trash" | "restore", options: {
+export function updateLibraryBatch(assetIds: readonly string[], action: "rename" | "role" | "category" | "trash" | "restore", options: {
   readonly namePrefix?: string; readonly mediaRole?: MediaRole;
+  readonly mediaCategory?: MediaCategory;
 } = {}) {
   return apiRequest<{ readonly updated: number; readonly action: string }>("library/assets/batch", {
-    method: "POST", body: JSON.stringify({ asset_ids: assetIds, action, name_prefix: options.namePrefix, media_role: options.mediaRole }),
+    method: "POST", body: JSON.stringify({ asset_ids: assetIds, action, name_prefix: options.namePrefix, media_role: options.mediaRole, media_category: options.mediaCategory }),
   });
 }
 
@@ -1292,4 +1299,27 @@ export function generateLibraryConcepts(input: { readonly id: string; readonly f
 }
 export function renderLibraryConcepts(id: string, input: { readonly concept_ids: readonly string[]; readonly effect_level: EffectLevel; readonly music_mode: MusicMode; readonly target_platform: TargetPlatform }) {
   return apiRequest<{ readonly jobs: readonly ConceptJob[] }>(`concepts/${encodeURIComponent(id)}/render`, { method: "POST", body: JSON.stringify(input) });
+}
+
+export type OrganizationSuggestion = {
+  readonly asset_id: string; readonly display_name: string; readonly media_role: MediaRole;
+  readonly media_category: MediaCategory; readonly tags: readonly string[];
+  readonly confidence: "supported" | "uncertain"; readonly reason: string;
+  readonly previous_name?: string; readonly mime_type?: string;
+};
+export type OrganizationSession = {
+  readonly id: string; readonly status: "pending" | "generating" | "ready" | "failed";
+  readonly asset_ids: readonly string[]; readonly suggestions: readonly OrganizationSuggestion[];
+  readonly applied_asset_ids: readonly string[]; readonly total_tokens: number; readonly error: string | null;
+  readonly created_at: string;
+};
+export function getOrganizationSessions() { return apiRequest<readonly OrganizationSession[]>("library/organization", { cache: "no-store" }); }
+export function getOrganizationSession(id: string) { return apiRequest<OrganizationSession>(`library/organization/${encodeURIComponent(id)}`, { cache: "no-store" }); }
+export function suggestLibraryOrganization(input: { readonly id: string; readonly asset_ids: readonly string[]; readonly rename_existing: boolean; readonly privacy_mode: "hybrid" | "text_only" }) {
+  return apiRequest<OrganizationSession>("library/organization", { method: "POST", body: JSON.stringify(input) });
+}
+export function applyLibraryOrganization(id: string, suggestions: readonly OrganizationSuggestion[]) {
+  return apiRequest<{ readonly updated: number; readonly applied_asset_ids: readonly string[] }>(`library/organization/${encodeURIComponent(id)}/apply`, {
+    method: "POST", body: JSON.stringify({ suggestions: suggestions.map(({ asset_id, display_name, media_role, media_category, tags, confidence, reason }) => ({ asset_id, display_name, media_role, media_category, tags, confidence, reason })) }),
+  });
 }

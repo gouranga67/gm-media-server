@@ -1,4 +1,10 @@
-import type { ManagedLibraryAsset, MediaRole } from "@/lib/media-api";
+import type { ManagedLibraryAsset, MediaRole, MediaCategory } from "@/lib/media-api";
+
+export const mediaCategories: readonly { readonly id: MediaCategory; readonly label: string }[] = [
+  { id: "auto", label: "Uncategorized" }, { id: "review", label: "Reviews" },
+  { id: "product", label: "Products" }, { id: "scene", label: "Scenes" },
+  { id: "document", label: "Documents" }, { id: "other", label: "Other" },
+];
 
 export const mediaRoleLabels: Record<MediaRole, string> = {
   auto: "Unsorted video", talking: "Talking footage", broll: "B-roll",

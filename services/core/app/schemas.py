@@ -313,6 +313,7 @@ class ManagedLibraryAssetResponse(BaseModel):
     source_name: str
     display_name: str
     media_role: Literal["auto", "talking", "broll"] = "auto"
+    media_category: Literal["auto", "review", "product", "scene", "document", "other"] = "auto"
     notes: str = ""
     favorite: bool = False
     tags: list[str] = Field(default_factory=list)
@@ -333,6 +334,7 @@ class LibraryAssetUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     media_role: Literal["auto", "talking", "broll"] | None = None
+    media_category: Literal["auto", "review", "product", "scene", "document", "other"] | None = None
     display_name: str | None = Field(default=None, min_length=1, max_length=255)
     notes: str = Field(default="", max_length=4000)
     favorite: bool = False
@@ -367,9 +369,10 @@ class LibraryBatchUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     asset_ids: list[UUID] = Field(min_length=1, max_length=500)
-    action: Literal["rename", "role", "trash", "restore"]
+    action: Literal["rename", "role", "category", "trash", "restore"]
     name_prefix: str | None = Field(default=None, min_length=1, max_length=255)
     media_role: Literal["auto", "talking", "broll"] | None = None
+    media_category: Literal["auto", "review", "product", "scene", "document", "other"] | None = None
 
     @field_validator("asset_ids")
     @classmethod
@@ -1026,6 +1029,8 @@ class UsageJobSummary(BaseModel):
 
 
 class UsageDashboardResponse(BaseModel):
+    organization_requests: int = 0
+    organization_tokens: int = 0
     concept_requests: int = 0
     concept_tokens: int = 0
     days: int
