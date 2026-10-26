@@ -132,6 +132,8 @@ class JobCreate(BaseModel):
     id: UUID | None = None
     recipe: Recipe = Recipe.TALKING_HEAD
     reel_intent: ReelIntent = ReelIntent.AUTO
+    assembly_mode: Literal["auto", "talking_head", "montage"] | None = None
+    pacing_mode: Literal["auto", "manual"] = "manual"
     target_duration_seconds: Literal[15, 20, 30, 45, 60] = 45
     edit_style: EditStyle = EditStyle.ENERGETIC
     music_mode: MusicMode = MusicMode.NONE
@@ -176,6 +178,9 @@ class JobResponse(BaseModel):
     project_id: UUID
     recipe: Recipe
     reel_intent: ReelIntent = ReelIntent.AUTO
+    assembly_mode: str = "talking_head"
+    pacing_mode: str = "manual"
+    assembly_decision: dict[str, Any] | None = None
     status: str
     revision: int
     target_duration_seconds: int | None = None

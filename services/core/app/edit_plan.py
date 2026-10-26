@@ -850,8 +850,8 @@ def _validate_broll(plan: EditPlan, assets: list[dict[str, Any]], duration: floa
         return
     if plan.schema_version not in {"1.4", "1.5"}:
         raise ValueError("B-roll overlays require edit-plan schema 1.4 or newer")
-    if direction.get("edit_style") != "high_impact":
-        raise ValueError("B-roll overlays require the High impact style")
+    if direction.get("edit_style") != "high_impact" and direction.get("assembly_mode") != "auto" and not (direction.get("assembly_decision") or {}).get("brief_first"):
+        raise ValueError("B-roll overlays require automatic assembly or the High impact style")
     inventory = {str(asset["asset_id"]): asset for asset in assets}
     previous_end = 0.0
     covered = 0.0

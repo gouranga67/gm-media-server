@@ -23,6 +23,7 @@ from app.productization import router as productization_router
 from app.upload_hooks import router as upload_hooks_router
 from app.runtime_metrics import performance_snapshot
 from app.knowledge import router as knowledge_router
+from app.assembly import router as assembly_router
 
 
 @asynccontextmanager
@@ -46,6 +47,7 @@ app.include_router(editing_router)
 app.include_router(library_router)
 app.include_router(library_organization_router)
 app.include_router(knowledge_router)
+app.include_router(assembly_router)
 app.include_router(learning_lab_router)
 app.include_router(pilot_readiness_router)
 app.include_router(concepts_router)

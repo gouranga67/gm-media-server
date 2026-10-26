@@ -4,6 +4,7 @@ import { libraryRoleLabel } from "@/lib/library-organization";
 import { Component, type DragEvent, type ErrorInfo, type FormEvent, type ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { AssemblyReadiness } from "./assembly-readiness";
 import { StudioNav } from "./studio-nav";
 import { readMediaBasket, writeMediaBasket } from "@/lib/media-basket";
 import { useRouter } from "next/navigation";
@@ -63,7 +64,8 @@ import {
   type PrivacyMode,
   type OutputAspect,
   type ReasoningEffort,
-  type Recipe,
+  type AssemblyMode,
+  type PacingMode,
   type TargetDuration,
   type TargetPlatform,
   type VisualIndexStatus,
@@ -374,52 +376,6 @@ function SectionHeading({ number, children }: { readonly number: string; readonl
   );
 }
 
-function RecipeCard({
-  name,
-  detail,
-  selected = false,
-  disabled = false,
-  value,
-  onChange,
-}: {
-  readonly name: string;
-  readonly detail: string;
-  readonly selected?: boolean;
-  readonly disabled?: boolean;
-  readonly value: Recipe;
-  readonly onChange: (value: Recipe) => void;
-}) {
-  return (
-    <label
-      className={cn(
-        "flex min-h-16 w-full items-center justify-between rounded-md bg-white p-4 text-left",
-        selected ? "border-2 border-[#173F5F]" : "border border-[#D7D9D3]",
-        disabled && "cursor-not-allowed bg-[#F7F7F5] opacity-55",
-      )}
-    >
-      <span>
-        <span className={cn("block font-bold", selected ? "text-[#173F5F]" : "text-[#666862]")}>{name}</span>
-        <span className="mt-1 block font-mono text-xs text-[#666862]">{detail}</span>
-      </span>
-      <span className="flex items-center gap-2">
-        {disabled ? (
-          <span className="font-mono text-[10px] font-bold tracking-wide text-[#666862] uppercase">Later</span>
-        ) : null}
-        <input
-          aria-label={name}
-          checked={selected}
-          className="size-5 accent-[#173F5F]"
-          disabled={disabled}
-          name="recipe"
-          onChange={() => onChange(value)}
-          type="radio"
-          value={value}
-        />
-      </span>
-    </label>
-  );
-}
-
 function PrivacyCard({
   description,
   disabled,
@@ -708,7 +664,9 @@ function NewJobFormContent() {
   const [brief, setBrief] = useState("");
   const [privacyMode, setPrivacyMode] = useState<PrivacyMode>("hybrid");
   const [aiCopyAllowed, setAiCopyAllowed] = useState(false);
-  const [recipe, setRecipe] = useState<Recipe>("talking_head");
+  const [assemblyMode, setAssemblyMode] = useState<AssemblyMode>("auto");
+  const [pacingMode, setPacingMode] = useState<PacingMode>("auto");
+  const [assemblyReady, setAssemblyReady] = useState(false);
   const [reelIntent, setReelIntent] = useState<"auto" | "story" | "promotion" | "bloopers">("auto");
   const [targetDuration, setTargetDuration] = useState<TargetDuration>(45);
   const [editStyle, setEditStyle] = useState<EditStyle>("energetic");
@@ -937,7 +895,7 @@ function NewJobFormContent() {
     (asset) => asset.allowed_platforms.includes("all_social")
       || asset.allowed_platforms.includes(targetPlatform),
   ).length;
-  const durationOptions: readonly TargetDuration[] = recipe === "montage" ? [15, 30, 45, 60] : [20, 30, 45, 60];
+  const durationOptions: readonly TargetDuration[] = [15, 20, 30, 45, 60];
   const libraryProjects = Array.from(
     new Map(libraryAssets.map((asset) => [asset.project_id, asset.project_name])).entries(),
   ).sort((left, right) => left[1].localeCompare(right[1]));
@@ -964,16 +922,6 @@ function NewJobFormContent() {
       if (rightMatch !== undefined) return 1;
       return new Date(right.created_at).getTime() - new Date(left.created_at).getTime();
     });
-
-  const selectRecipe = (selected: Recipe) => {
-    setRecipe(selected);
-    setFormError(undefined);
-    if (selected === "montage") {
-      setTargetDuration(30);
-    } else if (targetDuration === 15) {
-      setTargetDuration(20);
-    }
-  };
 
   const updateEntry = (localId: string, changes: Partial<UploadEntry>) => {
     if (!mountedRef.current) return;
@@ -1172,10 +1120,6 @@ function NewJobFormContent() {
       setFormError("Select server media or add at least one new file.");
       return;
     }
-    if (recipe === "talking_head" && /\bmontage\b/i.test(cleanBrief)) {
-      setFormError("Your brief asks for a montage. Select the Montage recipe, then submit again.");
-      return;
-    }
 
     setIsSubmitting(true);
     setFormError(undefined);
@@ -1200,7 +1144,9 @@ function NewJobFormContent() {
         jobRequestIdRef.current ??= crypto.randomUUID();
         const job = await createMediaJob(activeProjectId, {
           id: jobRequestIdRef.current,
-          recipe,
+          recipe: assemblyMode === "auto" ? "talking_head" : assemblyMode,
+          assemblyMode,
+          pacingMode,
           reelIntent,
           targetDurationSeconds: targetDuration,
           editStyle,
@@ -1277,7 +1223,7 @@ function NewJobFormContent() {
   };
 
   const startEditing = async () => {
-    if (jobId === undefined || !allReady) return;
+    if (jobId === undefined || !allReady || !assemblyReady) return;
     setIsSubmitting(true);
     setFormError(undefined);
     try {
@@ -1333,460 +1279,9 @@ function NewJobFormContent() {
           </p>
         </section>
 
-        <fieldset className="space-y-4" disabled={formLocked}>
-          <legend className="sr-only">Edit format and purpose</legend>
-          <SectionHeading number="01">Edit format</SectionHeading>
-          <div className="space-y-2">
-            <RecipeCard
-              detail="20–60 sec · transcript-led"
-              name="Speech-led reel"
-              onChange={selectRecipe}
-              selected={recipe === "talking_head"}
-              value="talking_head"
-            />
-            <RecipeCard
-              detail="15–60 sec · video + photos"
-              name="Montage"
-              onChange={selectRecipe}
-              selected={recipe === "montage"}
-              value="montage"
-            />
-          </div>
-          <p className="text-xs text-[#666862]">The format controls how footage is assembled. It does not make the reel an ad.</p>
-          <div className="space-y-2">
-            <label className="text-xs font-bold text-[#173F5F]" htmlFor="reel-intent">REEL PURPOSE</label>
-            <select
-              className="h-12 w-full rounded-md border border-[#D7D9D3] bg-white px-3 text-sm"
-              id="reel-intent"
-              value={reelIntent}
-              onChange={(event) => setReelIntent(event.currentTarget.value as typeof reelIntent)}
-            >
-              <option value="auto">Follow my brief</option>
-              <option value="story">Story / explanation</option>
-              <option value="promotion">Product / promotion</option>
-              <option value="bloopers">Bloopers / outtakes</option>
-            </select>
-            <p className="text-xs leading-relaxed text-[#666862]">
-              {reelIntent === "bloopers"
-                ? "Keep the recorded setup, stumble and real reaction. No sales payoff or call to action is required."
-                : "Purpose guides the story; pacing, effects and publishing presets control presentation. Saved creative profiles do not change this choice."}
-            </p>
-          </div>
-        </fieldset>
-
-        <section className="space-y-4">
-          <SectionHeading number="02">Direction</SectionHeading>
-          <div className="space-y-5">
-            {creativeProfiles.length > 0 ? (
-              <div className="space-y-2 rounded-md border border-[#BFE3FF] bg-[#F4FAFE] p-4">
-                <label className="text-xs font-bold text-[#173F5F]" htmlFor="creative-profile">
-                  CREATIVE PROFILE
-                </label>
-                <select
-                  className="h-12 w-full rounded-md border border-[#D7D9D3] bg-white px-3 text-sm text-[#20211F] focus:border-[#173F5F] focus:outline-none focus:ring-2 focus:ring-[#173F5F]/20"
-                  disabled={formLocked}
-                  id="creative-profile"
-                  onChange={(event) => {
-                    const profile = creativeProfiles.find((item) => item.id === event.currentTarget.value);
-                    setCreativeProfileId(profile?.id ?? null);
-                    if (profile) {
-                      setRecipe(profile.recipe);
-                      setTargetDuration(profile.target_duration_seconds);
-                      setEditStyle(profile.edit_style);
-                      setMusicMode(profile.music_mode);
-                      setSelectedMusicTrackId(null);
-                      setTargetPlatform(profile.target_platform);
-                      if (!creativeAssets.some((asset) => asset.allowed_platforms.includes("all_social") || asset.allowed_platforms.includes(profile.target_platform))) setEffectLevel("off");
-                      else if (profile.edit_style === "high_impact" && effectLevel === "off" && privacyMode !== "local_only") setEffectLevel("social");
-                      setOutputAspect(profile.output_aspect);
-                      setReasoningEffort(profile.reasoning_effort);
-                      setBrandKitId(profile.brand_kit_id);
-                      setPublishingPreset(profile.publishing_preset);
-                    }
-                  }}
-                  value={creativeProfileId ?? ""}
-                >
-                  <option value="">No saved profile</option>
-                  {creativeProfiles.map((profile) => (
-                    <option key={profile.id} value={profile.id}>{profile.name}</option>
-                  ))}
-                </select>
-                <p className="text-xs leading-relaxed text-[#666862]">
-                  Applies your saved recipe, pacing, music, platform, shape and reasoning settings. You can still adjust them below.
-                </p>
-              </div>
-            ) : null}
-            <div className="grid gap-4 rounded-md border border-[#D7D9D3] bg-white p-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-[#173F5F]" htmlFor="publishing-preset">PUBLISHING PRESET</label>
-                <select
-                  className="h-12 w-full rounded-md border border-[#D7D9D3] bg-white px-3 text-sm"
-                  disabled={formLocked}
-                  id="publishing-preset"
-                  onChange={(event) => {
-                    const preset = event.currentTarget.value as PublishingPreset;
-                    setPublishingPreset(preset);
-                    if (preset === "instagram_reel") { setTargetPlatform("instagram"); setOutputAspect("vertical"); setTargetDuration(30); }
-                    if (preset === "tiktok") { setTargetPlatform("tiktok"); setOutputAspect("vertical"); setTargetDuration(30); }
-                    if (preset === "youtube_short") { setTargetPlatform("youtube"); setOutputAspect("vertical"); setTargetDuration(45); }
-                    if (preset === "linkedin_landscape") { setTargetPlatform("linkedin"); setOutputAspect("landscape"); setTargetDuration(30); }
-                    if (preset === "facebook_square") { setTargetPlatform("facebook"); setOutputAspect("square"); setTargetDuration(30); }
-                  }}
-                  value={publishingPreset}
-                >
-                  <option value="custom">Custom settings</option>
-                  <option value="instagram_reel">Instagram Reel · 9:16 · 30s</option>
-                  <option value="tiktok">TikTok · 9:16 · 30s</option>
-                  <option value="youtube_short">YouTube Short · 9:16 · 45s</option>
-                  <option value="linkedin_landscape">LinkedIn · 16:9 · 30s</option>
-                  <option value="facebook_square">Facebook · 1:1 · 30s</option>
-                </select>
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-[#173F5F]" htmlFor="brand-kit">BRAND KIT</label>
-                <select
-                  className="h-12 w-full rounded-md border border-[#D7D9D3] bg-white px-3 text-sm"
-                  disabled={formLocked}
-                  id="brand-kit"
-                  onChange={(event) => setBrandKitId(event.currentTarget.value || null)}
-                  value={brandKitId ?? ""}
-                >
-                  <option value="">GM Studio default</option>
-                  {brandKits.map((kit) => <option key={kit.id} value={kit.id}>{kit.name}</option>)}
-                </select>
-              </div>
-              <p className="text-xs leading-relaxed text-[#666862] sm:col-span-2">
-                Presets set the platform, shape and duration. Brand kits apply your caption colours, weight and typeface.
-              </p>
-            </div>
-            <div className="space-y-2">
-              <label className="flex justify-between text-xs font-bold text-[#173F5F]" htmlFor="project-name">
-                <span>PROJECT NAME</span>
-                <span className="text-[10px] text-[#A23B2A]">REQUIRED</span>
-              </label>
-              <Input
-                aria-invalid={formError === "Enter a project name."}
-                className="h-12 rounded-sm border-[#D7D9D3] bg-white text-[#20211F] shadow-none focus-visible:border-[#173F5F] focus-visible:ring-[#173F5F]/20 dark:bg-white dark:text-[#20211F]"
-                disabled={formLocked}
-                id="project-name"
-                maxLength={160}
-                onChange={(event) => {
-                  setName(event.currentTarget.value);
-                  setFormError(undefined);
-                }}
-                placeholder="e.g. Spring launch interview"
-                required
-                value={name}
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-[#173F5F]" htmlFor="project-brief">
-                BRIEF
-              </label>
-              <Textarea
-                className="min-h-28 rounded-sm border-[#D7D9D3] bg-white text-[#20211F] shadow-none focus-visible:border-[#173F5F] focus-visible:ring-[#173F5F]/20 dark:bg-white dark:text-[#20211F]"
-                disabled={formLocked}
-                id="project-brief"
-                maxLength={4000}
-                onChange={(event) => {
-                  setBrief(event.currentTarget.value);
-                  setFormError(undefined);
-                }}
-                placeholder="Describe the audience, key message, tone and intended platform…"
-                value={brief}
-              />
-            </div>
-            <details className="rounded-md border border-[#D7D9D3] bg-white p-3"><summary className="min-h-11 cursor-pointer content-center text-sm font-bold text-[#173F5F]">Optional story direction</summary>
-            <fieldset className="rounded-md border border-[#D7D9D3] bg-[#EFF6FA] p-4" disabled={formLocked}>
-              <legend className="px-2 font-mono text-xs font-bold tracking-wide text-[#173F5F] uppercase">
-                Story direction
-              </legend>
-              <p className="mb-4 text-xs leading-relaxed text-[#53646F]">
-                Optional answers give the editor a clear hook, payoff and ending. They reuse local source analysis and do not add another model call.
-              </p>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <label className="text-xs font-bold text-[#173F5F]" htmlFor="story-audience">
-                  WHO IS THIS FOR?
-                  <Input className="mt-2 h-11 bg-white" id="story-audience" maxLength={600} onChange={(event) => setAudience(event.currentTarget.value)} placeholder="e.g. First-time home buyers" value={audience} />
-                </label>
-                <label className="text-xs font-bold text-[#173F5F]" htmlFor="story-feeling">
-                  HOW SHOULD THEY FEEL?
-                  <Input className="mt-2 h-11 bg-white" id="story-feeling" maxLength={600} onChange={(event) => setDesiredFeeling(event.currentTarget.value)} placeholder="e.g. Curious, then reassured" value={desiredFeeling} />
-                </label>
-                <label className="text-xs font-bold text-[#173F5F] sm:col-span-2" htmlFor="story-goal">
-                  WHAT SHOULD THEY UNDERSTAND?
-                  <Textarea className="mt-2 min-h-20 bg-white" id="story-goal" maxLength={1200} onChange={(event) => setStoryGoal(event.currentTarget.value)} placeholder="The one idea the edit should make clear." value={storyGoal} />
-                </label>
-                <label className="text-xs font-bold text-[#173F5F] sm:col-span-2" htmlFor="story-ending">
-                  HOW SHOULD IT END?
-                  <Input className="mt-2 h-11 bg-white" id="story-ending" maxLength={600} onChange={(event) => setEndingInstruction(event.currentTarget.value)} placeholder="e.g. End on the laugh, then show the call to action" value={endingInstruction} />
-                </label>
-              </div>
-            </fieldset>
-            </details>
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-[#173F5F]" htmlFor="must-include">
-                MUST-INCLUDE POINTS
-              </label>
-              <Textarea
-                className="min-h-20 rounded-sm border-[#D7D9D3] bg-white text-[#20211F] shadow-none focus-visible:border-[#173F5F] focus-visible:ring-[#173F5F]/20 dark:bg-white dark:text-[#20211F]"
-                disabled={formLocked}
-                id="must-include"
-                maxLength={2000}
-                onChange={(event) => setMustInclude(event.currentTarget.value)}
-                placeholder="For example: include the price, launch date and final call to action."
-                value={mustInclude}
-              />
-            </div>
-            <fieldset className="space-y-3" disabled={formLocked}>
-              <legend className="text-xs font-bold text-[#173F5F]">TARGET LENGTH</legend>
-              <div className="grid grid-cols-4 gap-2">
-                {durationOptions.map((duration) => (
-                  <label
-                    className={cn(
-                      "flex min-h-12 cursor-pointer items-center justify-center rounded-md bg-white font-mono text-xs font-bold",
-                      targetDuration === duration
-                        ? "border-2 border-[#173F5F] text-[#173F5F]"
-                        : "border border-[#D7D9D3] text-[#666862]",
-                      formLocked && "cursor-not-allowed opacity-60",
-                    )}
-                    key={duration}
-                  >
-                    <input
-                      checked={targetDuration === duration}
-                      className="sr-only"
-                      name="target-duration"
-                      onChange={() => setTargetDuration(duration)}
-                      type="radio"
-                      value={duration}
-                    />
-                    {duration} sec
-                  </label>
-                ))}
-              </div>
-              <p className="text-xs leading-relaxed text-[#666862]">An approximate aim. The editor can finish sooner when the story is complete, without adding pauses to fill time.</p>
-            </fieldset>
-            <fieldset className="space-y-3" disabled={formLocked}>
-              <legend className="text-xs font-bold text-[#173F5F]">OUTPUT SHAPE</legend>
-              <div className="grid grid-cols-3 gap-2">
-                {([
-                  { value: "vertical", label: "Vertical 9:16" },
-                  { value: "landscape", label: "Landscape 16:9" },
-                  { value: "square", label: "Square 1:1" },
-                ] as const).map((option) => (
-                  <label
-                    className={cn(
-                      "flex min-h-12 cursor-pointer items-center justify-center rounded-md bg-white text-xs font-bold",
-                      outputAspect === option.value
-                        ? "border-2 border-[#173F5F] text-[#173F5F]"
-                        : "border border-[#D7D9D3] text-[#666862]",
-                    )}
-                    key={option.value}
-                  >
-                    <input
-                      checked={outputAspect === option.value}
-                      className="sr-only"
-                      name="output-aspect"
-                      onChange={() => setOutputAspect(option.value)}
-                      type="radio"
-                      value={option.value}
-                    />
-                    {option.label}
-                  </label>
-                ))}
-              </div>
-            </fieldset>
-            <fieldset className="space-y-3" disabled={formLocked}>
-              <legend className="text-xs font-bold text-[#173F5F]">EDITING STYLE</legend>
-              <div className="space-y-2">
-                {EDIT_STYLE_OPTIONS.map((option) => (
-                  <CreativeOptionCard
-                    description={option.description}
-                    disabled={formLocked}
-                    key={option.value}
-                    label={option.label}
-                    name="edit-style"
-                    onChange={() => {
-                      setEditStyle(option.value);
-                      if (option.value === "high_impact" && effectLevel === "off" && compatibleEffectCount > 0 && privacyMode !== "local_only") setEffectLevel("social");
-                    }}
-                    selected={editStyle === option.value}
-                    value={option.value}
-                  />
-                ))}
-              </div>
-            </fieldset>
-            <fieldset className="space-y-3" disabled={formLocked}>
-              <legend className="text-xs font-bold text-[#173F5F]">BACKING MUSIC</legend>
-              {editStyle === "high_impact" ? <p className="text-xs leading-relaxed text-[#53646F]">Include product close-ups or relevant scene footage among your selected media for B-roll. Your speech continues underneath. Sounds and stickers still follow your Creative effects setting below.</p> : null}
-              <label className="block space-y-2 text-xs font-bold text-[#173F5F]" htmlFor="target-platform">
-                TARGET PLATFORM
-                <select
-                  className="h-12 w-full rounded-md border border-[#D7D9D3] bg-white px-3 text-sm text-[#20211F] shadow-none focus:border-[#173F5F] focus:outline-none focus:ring-2 focus:ring-[#173F5F]/20 disabled:opacity-60"
-                  disabled={formLocked}
-                  id="target-platform"
-                  onChange={(event) => {
-                    const selected = event.currentTarget.value as TargetPlatform;
-                    setTargetPlatform(selected);
-                    const hasCompatibleTrack = musicTracks.some(
-                      (track) =>
-                        track.allowed_platforms.includes("all_social")
-                        || track.allowed_platforms.includes(selected),
-                    );
-                    if (!hasCompatibleTrack) setMusicMode("none");
-                    if (!hasCompatibleTrack || (selectedMusicTrackId && !musicTracks.some((track) => track.id === selectedMusicTrackId && (track.allowed_platforms.includes("all_social") || track.allowed_platforms.includes(selected))))) setSelectedMusicTrackId(null);
-                    if (!creativeAssets.some((asset) => asset.allowed_platforms.includes("all_social") || asset.allowed_platforms.includes(selected))) setEffectLevel("off");
-                  }}
-                  value={targetPlatform}
-                >
-                  {PLATFORM_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
-              </label>
-              <div className="space-y-2">
-                {MUSIC_OPTIONS.map((option) => (
-                  <CreativeOptionCard
-                    description={option.description}
-                    disabled={formLocked || (option.value !== "none" && compatibleMusicCount === 0)}
-                    key={option.value}
-                    label={option.label}
-                    name="music-mode"
-                    onChange={() => { setMusicMode(option.value); if (option.value === "none") setSelectedMusicTrackId(null); }}
-                    selected={musicMode === option.value}
-                    value={option.value}
-                  />
-                ))}
-              </div>
-              <p className="text-xs leading-relaxed text-[#666862]">
-                {compatibleMusicCount > 0
-                  ? `${compatibleMusicCount} compatible rights-recorded ${compatibleMusicCount === 1 ? "track" : "tracks"} available.`
-                  : "No compatible tracks are imported yet, so this job will remain voice-only."}
-              </p>
-              {musicMode !== "none" && compatibleMusicCount > 0 ? (
-                <label className="block space-y-2 text-xs font-bold text-[#173F5F]">
-                  TRACK
-                  <select className="h-12 w-full rounded-md border border-[#D7D9D3] bg-white px-3 text-sm font-normal text-[#20211F]" onChange={(event) => setSelectedMusicTrackId(event.currentTarget.value || null)} value={selectedMusicTrackId ?? ""}>
-                    <option value="">Auto-select for the story</option>
-                    {musicTracks.filter((track) => track.allowed_platforms.includes("all_social") || track.allowed_platforms.includes(targetPlatform)).map((track) => <option key={track.id} value={track.id}>{track.title}{track.artist ? ` — ${track.artist}` : ""} · {track.mood}</option>)}
-                  </select>
-                </label>
-              ) : null}
-            </fieldset>
-            <details className="rounded-md border border-[#D7D9D3] bg-white p-3"><summary className="min-h-11 cursor-pointer content-center text-sm font-bold text-[#173F5F]">Advanced model settings</summary>
-            <fieldset className="space-y-3" disabled={formLocked || privacyMode === "local_only"}>
-              <legend className="text-xs font-bold text-[#173F5F]">CREATIVE EFFECTS</legend>
-              <p className="text-xs leading-relaxed text-[#666862]">
-                {privacyMode === "local_only"
-                  ? "The fixed local recipe does not select creative effects. Choose a model-assisted privacy mode to have the editor select cues."
-                  : "Adds reviewed sounds, stickers, GIFs, or meme assets at suitable story beats. Choose Social for a more noticeable test. Punch-ins and camera moves are controlled separately by the edit style."}
-              </p>
-              <div className="grid grid-cols-2 gap-2">
-                {([
-                  ["off", "Off", "Clean edit"], ["subtle", "Subtle", "Up to 2 cues"],
-                  ["social", "Social", "Up to 4 cues"], ["meme_heavy", "Meme-heavy", "Up to 8 cues"],
-                ] as const).map(([value, label, description]) => { const unavailable = value !== "off" && compatibleEffectCount === 0; return <label className={`rounded-md border p-3 focus-within:ring-2 focus-within:ring-[#173F5F]/40 ${unavailable ? "cursor-not-allowed opacity-45" : ""} ${effectLevel === value ? "border-[#173F5F] bg-[#EFF6FA]" : "border-[#D7D9D3] bg-white"}`} key={value}><input checked={effectLevel === value} className="sr-only" disabled={unavailable} name="effect-level" onChange={() => setEffectLevel(value)} type="radio" /><span className="block text-sm font-bold text-[#173F5F]">{label}</span><span className="mt-1 block text-[11px] text-[#666862]">{description}</span></label>; })}
-              </div>
-              <p className="text-xs text-[#666862]">
-                {compatibleEffectCount > 0
-                  ? `${compatibleEffectCount} compatible reviewed effects available. Off adds no sounds or overlays; other modes are maximum cue counts, not a guarantee of effects.`
-                  : "No compatible effects are installed yet. Import the starter library before testing sounds and stickers."}
-                {" "}<Link className="font-bold text-[#173F5F] underline underline-offset-4" href="/creative">View music &amp; effects library</Link>
-              </p>
-            </fieldset>
-            </details>
-            <fieldset className="space-y-3" disabled={formLocked || privacyMode === "local_only"}>
-              <legend className="text-xs font-bold text-[#173F5F]">EDITOR MODEL</legend>
-              <label className="block space-y-2 text-xs font-bold text-[#173F5F]" htmlFor="editor-model">
-                MODEL
-                <select
-                  className="h-12 w-full rounded-md border border-[#D7D9D3] bg-white px-3 text-sm text-[#20211F] shadow-none focus:border-[#173F5F] focus:outline-none focus:ring-2 focus:ring-[#173F5F]/20 disabled:opacity-60"
-                  id="editor-model"
-                  onChange={(event) => setEditorModel(event.currentTarget.value || null)}
-                  value={editorModel ?? ""}
-                >
-                  {editorModels.length === 0 ? <option value="">Server default</option> : null}
-                  {editorModels.map((model) => (
-                    <option key={model.slug} value={model.slug}>{model.display_name}</option>
-                  ))}
-                </select>
-              </label>
-              <div className="grid grid-cols-3 gap-2">
-                {([
-                  { value: "low", label: "Economy" },
-                  { value: "medium", label: "Balanced" },
-                  { value: "high", label: "Best" },
-                ] as const).map((option) => (
-                  <label
-                    className={cn(
-                      "flex min-h-12 cursor-pointer items-center justify-center rounded-md bg-white text-xs font-bold",
-                      reasoningEffort === option.value
-                        ? "border-2 border-[#173F5F] text-[#173F5F]"
-                        : "border border-[#D7D9D3] text-[#666862]",
-                    )}
-                    key={option.value}
-                  >
-                    <input
-                      checked={reasoningEffort === option.value}
-                      className="sr-only"
-                      name="reasoning-effort"
-                      onChange={() => setReasoningEffort(option.value)}
-                      type="radio"
-                      value={option.value}
-                    />
-                    {option.label}
-                  </label>
-                ))}
-              </div>
-              <p className="text-xs leading-relaxed text-[#666862]">
-                Lower effort generally uses fewer reasoning tokens. The final screen records the actual usage.
-              </p>
-            </fieldset>
-          </div>
-        </section>
-
-        <fieldset className="space-y-4" disabled={formLocked}>
-          <legend className="sr-only">Privacy</legend>
-          <SectionHeading number="03">Privacy</SectionHeading>
-          <div className="space-y-2">
-            {PRIVACY_OPTIONS.map((option) => (
-              <PrivacyCard
-                description={option.description}
-                disabled={formLocked}
-                key={option.value}
-                label={option.label}
-                onChange={(value) => {
-                  setPrivacyMode(value);
-                  if (value === "local_only") setEffectLevel("off");
-                }}
-                selected={privacyMode === option.value}
-                value={option.value}
-              />
-            ))}
-          </div>
-          <label className={cn("flex min-h-14 items-start justify-between gap-4 pt-4", formLocked ? "cursor-not-allowed opacity-60" : "cursor-pointer")}>
-            <span className="space-y-1">
-              <span className="block text-sm font-bold text-[#173F5F]">Allow AI-written caption copy</span>
-              <span className="block text-xs leading-relaxed text-[#666862]">
-                This affects text only. Visuals and speech remain grounded in your selected media.
-              </span>
-            </span>
-            <span className="flex size-11 shrink-0 items-center justify-end">
-              <input
-                checked={aiCopyAllowed}
-                className="peer sr-only"
-                disabled={formLocked}
-                onChange={(event) => setAiCopyAllowed(event.currentTarget.checked)}
-                role="switch"
-                type="checkbox"
-              />
-              <span className="relative h-6 w-12 rounded-full bg-[#D7D9D3] transition-colors peer-checked:bg-[#173F5F] peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[#173F5F] after:absolute after:top-1 after:left-1 after:size-4 after:rounded-full after:bg-white after:transition-transform peer-checked:after:translate-x-6 motion-reduce:transition-none motion-reduce:after:transition-none" />
-            </span>
-          </label>
-        </fieldset>
-
+        {jobId !== undefined && allReady ? <AssemblyReadiness jobId={jobId} onReady={setAssemblyReady} onApplied={(settings) => { setAssemblyMode(settings.assembly_mode); setPacingMode(settings.pacing_mode); setEditStyle(settings.edit_style); setReelIntent(settings.reel_intent); }} /> : null}
         <section className="space-y-4 pb-8" id="server-library">
-          <SectionHeading number="04">Source media</SectionHeading>
+          <SectionHeading number="01">Source media</SectionHeading>
           <div className="rounded-md border border-[#BFD2DE] bg-[#EFF6FA] p-4 text-sm text-[#173F5F]">
             <p className="font-bold">Combine server footage and new uploads in one job</p>
             <p className="mt-1 text-xs leading-relaxed">Add files from this device and select existing footage below, then create your job. Both selections are included together.</p>
@@ -2018,6 +1513,464 @@ function NewJobFormContent() {
             </p>
           ) : null}
         </section>
+        <section className="space-y-4">
+          <SectionHeading number="02">Describe your edit</SectionHeading>
+          <div className="space-y-5">            <div className="space-y-2">
+              <label className="flex justify-between text-xs font-bold text-[#173F5F]" htmlFor="project-name">
+                <span>PROJECT NAME</span>
+                <span className="text-[10px] text-[#A23B2A]">REQUIRED</span>
+              </label>
+              <Input
+                aria-invalid={formError === "Enter a project name."}
+                className="h-12 rounded-sm border-[#D7D9D3] bg-white text-[#20211F] shadow-none focus-visible:border-[#173F5F] focus-visible:ring-[#173F5F]/20 dark:bg-white dark:text-[#20211F]"
+                disabled={formLocked}
+                id="project-name"
+                maxLength={160}
+                onChange={(event) => {
+                  setName(event.currentTarget.value);
+                  setFormError(undefined);
+                }}
+                placeholder="e.g. Spring launch interview"
+                required
+                value={name}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-[#173F5F]" htmlFor="project-brief">
+                BRIEF
+              </label>
+              <Textarea
+                className="min-h-28 rounded-sm border-[#D7D9D3] bg-white text-[#20211F] shadow-none focus-visible:border-[#173F5F] focus-visible:ring-[#173F5F]/20 dark:bg-white dark:text-[#20211F]"
+                disabled={formLocked}
+                id="project-brief"
+                maxLength={4000}
+                onChange={(event) => {
+                  setBrief(event.currentTarget.value);
+                  setFormError(undefined);
+                }}
+                placeholder="e.g. Make a warm product story. Keep my explanation and show the cream close-ups. No sales ending."
+                value={brief}
+              />
+            </div>
+            <fieldset className="space-y-2" disabled={formLocked}>
+              <legend className="text-xs font-bold text-[#173F5F]">OPTIONAL BRIEF STARTERS</legend>
+              <div className="flex flex-wrap gap-2">
+                {([
+                  ["Product story", "Make a product story from the recorded explanation and relevant supporting pictures."],
+                  ["Recorded bloopers", "Make a bloopers reel. Keep the real mistake, enough setup to understand it and its genuine reaction. Trim empty waiting."],
+                  ["Feel-good montage", "Make a gentle, feel-good visual montage from these scenes and pictures."],
+                  ["Surprise me", "Find a coherent story in these sources and make a reel from the strongest recorded moments."],
+                ] as const).map(([label, text]) => <Button className="min-h-11 whitespace-normal" key={label} type="button" variant="outline" onClick={() => setBrief((current) => current.includes(text) ? current : `${current.trim()}${current.trim() ? "\n\n" : ""}${text}`)}>{label}</Button>)}
+              </div>
+              <p className="text-xs text-[#666862]">Adds editable text to your brief. Nothing starts until you submit.</p>
+            </fieldset>
+            <details className="rounded-md border border-[#D7D9D3] bg-white p-3"><summary className="min-h-11 cursor-pointer content-center text-sm font-bold text-[#173F5F]">Optional story direction</summary>
+            <fieldset className="rounded-md border border-[#D7D9D3] bg-[#EFF6FA] p-4" disabled={formLocked}>
+              <legend className="px-2 font-mono text-xs font-bold tracking-wide text-[#173F5F] uppercase">
+                Story direction
+              </legend>
+              <p className="mb-4 text-xs leading-relaxed text-[#53646F]">
+                Optional answers give the editor a clear hook, payoff and ending. They reuse local source analysis and do not add another model call.
+              </p>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="text-xs font-bold text-[#173F5F]" htmlFor="story-audience">
+                  WHO IS THIS FOR?
+                  <Input className="mt-2 h-11 bg-white" id="story-audience" maxLength={600} onChange={(event) => setAudience(event.currentTarget.value)} placeholder="e.g. First-time home buyers" value={audience} />
+                </label>
+                <label className="text-xs font-bold text-[#173F5F]" htmlFor="story-feeling">
+                  HOW SHOULD THEY FEEL?
+                  <Input className="mt-2 h-11 bg-white" id="story-feeling" maxLength={600} onChange={(event) => setDesiredFeeling(event.currentTarget.value)} placeholder="e.g. Curious, then reassured" value={desiredFeeling} />
+                </label>
+                <label className="text-xs font-bold text-[#173F5F] sm:col-span-2" htmlFor="story-goal">
+                  WHAT SHOULD THEY UNDERSTAND?
+                  <Textarea className="mt-2 min-h-20 bg-white" id="story-goal" maxLength={1200} onChange={(event) => setStoryGoal(event.currentTarget.value)} placeholder="The one idea the edit should make clear." value={storyGoal} />
+                </label>
+                <label className="text-xs font-bold text-[#173F5F] sm:col-span-2" htmlFor="story-ending">
+                  HOW SHOULD IT END?
+                  <Input className="mt-2 h-11 bg-white" id="story-ending" maxLength={600} onChange={(event) => setEndingInstruction(event.currentTarget.value)} placeholder="e.g. End on the laugh, then show the call to action" value={endingInstruction} />
+                </label>
+              </div>
+            </fieldset>
+            </details>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-[#173F5F]" htmlFor="must-include">
+                MUST-INCLUDE POINTS
+              </label>
+              <Textarea
+                className="min-h-20 rounded-sm border-[#D7D9D3] bg-white text-[#20211F] shadow-none focus-visible:border-[#173F5F] focus-visible:ring-[#173F5F]/20 dark:bg-white dark:text-[#20211F]"
+                disabled={formLocked}
+                id="must-include"
+                maxLength={2000}
+                onChange={(event) => setMustInclude(event.currentTarget.value)}
+                placeholder="For example: include the price, launch date and final call to action."
+                value={mustInclude}
+              />
+            </div>
+          </div>
+        </section>
+        <details className="space-y-4" open>
+          <summary className="min-h-11 cursor-pointer content-center text-sm font-bold text-[#173F5F]">03 · Presentation: length, music, effects &amp; saved defaults</summary>
+          <div className="space-y-5">
+            {creativeProfiles.length > 0 ? (
+              <div className="space-y-2 rounded-md border border-[#BFE3FF] bg-[#F4FAFE] p-4">
+                <label className="text-xs font-bold text-[#173F5F]" htmlFor="creative-profile">
+                  CREATIVE PROFILE
+                </label>
+                <select
+                  className="h-12 w-full rounded-md border border-[#D7D9D3] bg-white px-3 text-sm text-[#20211F] focus:border-[#173F5F] focus:outline-none focus:ring-2 focus:ring-[#173F5F]/20"
+                  disabled={formLocked}
+                  id="creative-profile"
+                  onChange={(event) => {
+                    const profile = creativeProfiles.find((item) => item.id === event.currentTarget.value);
+                    setCreativeProfileId(profile?.id ?? null);
+                    if (profile) {
+                      setTargetDuration(profile.target_duration_seconds);
+                      setEditStyle(profile.edit_style);
+                      setPacingMode("auto");
+                      setMusicMode(profile.music_mode);
+                      setSelectedMusicTrackId(null);
+                      setTargetPlatform(profile.target_platform);
+                      if (!creativeAssets.some((asset) => asset.allowed_platforms.includes("all_social") || asset.allowed_platforms.includes(profile.target_platform))) setEffectLevel("off");
+                      else if (profile.edit_style === "high_impact" && effectLevel === "off" && privacyMode !== "local_only") setEffectLevel("social");
+                      setOutputAspect(profile.output_aspect);
+                      setReasoningEffort(profile.reasoning_effort);
+                      setBrandKitId(profile.brand_kit_id);
+                      setPublishingPreset(profile.publishing_preset);
+                    }
+                  }}
+                  value={creativeProfileId ?? ""}
+                >
+                  <option value="">No saved profile</option>
+                  {creativeProfiles.map((profile) => (
+                    <option key={profile.id} value={profile.id}>{profile.name}</option>
+                  ))}
+                </select>
+                <p className="text-xs leading-relaxed text-[#666862]">
+                  Applies saved presentation defaults: pacing, music, platform, shape and reasoning. Your brief still guides automatic pacing; the profile does not change assembly or purpose.
+                </p>
+              </div>
+            ) : null}
+            <div className="grid gap-4 rounded-md border border-[#D7D9D3] bg-white p-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-[#173F5F]" htmlFor="publishing-preset">PUBLISHING PRESET</label>
+                <select
+                  className="h-12 w-full rounded-md border border-[#D7D9D3] bg-white px-3 text-sm"
+                  disabled={formLocked}
+                  id="publishing-preset"
+                  onChange={(event) => {
+                    const preset = event.currentTarget.value as PublishingPreset;
+                    setPublishingPreset(preset);
+                    if (preset === "instagram_reel") { setTargetPlatform("instagram"); setOutputAspect("vertical"); setTargetDuration(30); }
+                    if (preset === "tiktok") { setTargetPlatform("tiktok"); setOutputAspect("vertical"); setTargetDuration(30); }
+                    if (preset === "youtube_short") { setTargetPlatform("youtube"); setOutputAspect("vertical"); setTargetDuration(45); }
+                    if (preset === "linkedin_landscape") { setTargetPlatform("linkedin"); setOutputAspect("landscape"); setTargetDuration(30); }
+                    if (preset === "facebook_square") { setTargetPlatform("facebook"); setOutputAspect("square"); setTargetDuration(30); }
+                  }}
+                  value={publishingPreset}
+                >
+                  <option value="custom">Custom settings</option>
+                  <option value="instagram_reel">Instagram Reel · 9:16 · 30s</option>
+                  <option value="tiktok">TikTok · 9:16 · 30s</option>
+                  <option value="youtube_short">YouTube Short · 9:16 · 45s</option>
+                  <option value="linkedin_landscape">LinkedIn · 16:9 · 30s</option>
+                  <option value="facebook_square">Facebook · 1:1 · 30s</option>
+                </select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-[#173F5F]" htmlFor="brand-kit">BRAND KIT</label>
+                <select
+                  className="h-12 w-full rounded-md border border-[#D7D9D3] bg-white px-3 text-sm"
+                  disabled={formLocked}
+                  id="brand-kit"
+                  onChange={(event) => setBrandKitId(event.currentTarget.value || null)}
+                  value={brandKitId ?? ""}
+                >
+                  <option value="">GM Studio default</option>
+                  {brandKits.map((kit) => <option key={kit.id} value={kit.id}>{kit.name}</option>)}
+                </select>
+              </div>
+              <p className="text-xs leading-relaxed text-[#666862] sm:col-span-2">
+                Presets set the platform, shape and duration. Brand kits apply your caption colours, weight and typeface.
+              </p>
+            </div>
+            <fieldset className="space-y-3" disabled={formLocked}>
+              <legend className="text-xs font-bold text-[#173F5F]">TARGET LENGTH</legend>
+              <div className="grid grid-cols-4 gap-2">
+                {durationOptions.map((duration) => (
+                  <label
+                    className={cn(
+                      "flex min-h-12 cursor-pointer items-center justify-center rounded-md bg-white font-mono text-xs font-bold",
+                      targetDuration === duration
+                        ? "border-2 border-[#173F5F] text-[#173F5F]"
+                        : "border border-[#D7D9D3] text-[#666862]",
+                      formLocked && "cursor-not-allowed opacity-60",
+                    )}
+                    key={duration}
+                  >
+                    <input
+                      checked={targetDuration === duration}
+                      className="sr-only"
+                      name="target-duration"
+                      onChange={() => setTargetDuration(duration)}
+                      type="radio"
+                      value={duration}
+                    />
+                    {duration} sec
+                  </label>
+                ))}
+              </div>
+              <p className="text-xs leading-relaxed text-[#666862]">An approximate aim. The editor can finish sooner when the story is complete, without adding pauses to fill time.</p>
+            </fieldset>
+            <fieldset className="space-y-3" disabled={formLocked}>
+              <legend className="text-xs font-bold text-[#173F5F]">OUTPUT SHAPE</legend>
+              <div className="grid grid-cols-3 gap-2">
+                {([
+                  { value: "vertical", label: "Vertical 9:16" },
+                  { value: "landscape", label: "Landscape 16:9" },
+                  { value: "square", label: "Square 1:1" },
+                ] as const).map((option) => (
+                  <label
+                    className={cn(
+                      "flex min-h-12 cursor-pointer items-center justify-center rounded-md bg-white text-xs font-bold",
+                      outputAspect === option.value
+                        ? "border-2 border-[#173F5F] text-[#173F5F]"
+                        : "border border-[#D7D9D3] text-[#666862]",
+                    )}
+                    key={option.value}
+                  >
+                    <input
+                      checked={outputAspect === option.value}
+                      className="sr-only"
+                      name="output-aspect"
+                      onChange={() => setOutputAspect(option.value)}
+                      type="radio"
+                      value={option.value}
+                    />
+                    {option.label}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+            <fieldset className="space-y-3" disabled={formLocked}>
+              <legend className="text-xs font-bold text-[#173F5F]">EDITING STYLE</legend>
+              <div className="space-y-2">
+                <CreativeOptionCard description={`Use explicit pacing in your brief; otherwise use ${editStyle.replaceAll("_", " ")} presentation defaults.`} disabled={formLocked} label="Follow my brief" name="edit-style" onChange={() => setPacingMode("auto")} selected={pacingMode === "auto"} value="auto" />
+                {EDIT_STYLE_OPTIONS.map((option) => (
+                  <CreativeOptionCard
+                    description={option.description}
+                    disabled={formLocked}
+                    key={option.value}
+                    label={option.label}
+                    name="edit-style"
+                    onChange={() => {
+                      setEditStyle(option.value);
+                      setPacingMode("manual");
+                      if (option.value === "high_impact" && effectLevel === "off" && compatibleEffectCount > 0 && privacyMode !== "local_only") setEffectLevel("social");
+                    }}
+                    selected={pacingMode === "manual" && editStyle === option.value}
+                    value={option.value}
+                  />
+                ))}
+              </div>
+            </fieldset>
+            <fieldset className="space-y-3" disabled={formLocked}>
+              <legend className="text-xs font-bold text-[#173F5F]">BACKING MUSIC</legend>
+              {editStyle === "high_impact" ? <p className="text-xs leading-relaxed text-[#53646F]">Include product close-ups or relevant scene footage among your selected media for B-roll. Your speech continues underneath. Sounds and stickers still follow your Creative effects setting below.</p> : null}
+              <label className="block space-y-2 text-xs font-bold text-[#173F5F]" htmlFor="target-platform">
+                TARGET PLATFORM
+                <select
+                  className="h-12 w-full rounded-md border border-[#D7D9D3] bg-white px-3 text-sm text-[#20211F] shadow-none focus:border-[#173F5F] focus:outline-none focus:ring-2 focus:ring-[#173F5F]/20 disabled:opacity-60"
+                  disabled={formLocked}
+                  id="target-platform"
+                  onChange={(event) => {
+                    const selected = event.currentTarget.value as TargetPlatform;
+                    setTargetPlatform(selected);
+                    const hasCompatibleTrack = musicTracks.some(
+                      (track) =>
+                        track.allowed_platforms.includes("all_social")
+                        || track.allowed_platforms.includes(selected),
+                    );
+                    if (!hasCompatibleTrack) setMusicMode("none");
+                    if (!hasCompatibleTrack || (selectedMusicTrackId && !musicTracks.some((track) => track.id === selectedMusicTrackId && (track.allowed_platforms.includes("all_social") || track.allowed_platforms.includes(selected))))) setSelectedMusicTrackId(null);
+                    if (!creativeAssets.some((asset) => asset.allowed_platforms.includes("all_social") || asset.allowed_platforms.includes(selected))) setEffectLevel("off");
+                  }}
+                  value={targetPlatform}
+                >
+                  {PLATFORM_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
+              <div className="space-y-2">
+                {MUSIC_OPTIONS.map((option) => (
+                  <CreativeOptionCard
+                    description={option.description}
+                    disabled={formLocked || (option.value !== "none" && compatibleMusicCount === 0)}
+                    key={option.value}
+                    label={option.label}
+                    name="music-mode"
+                    onChange={() => { setMusicMode(option.value); if (option.value === "none") setSelectedMusicTrackId(null); }}
+                    selected={musicMode === option.value}
+                    value={option.value}
+                  />
+                ))}
+              </div>
+              <p className="text-xs leading-relaxed text-[#666862]">
+                {compatibleMusicCount > 0
+                  ? `${compatibleMusicCount} compatible rights-recorded ${compatibleMusicCount === 1 ? "track" : "tracks"} available.`
+                  : "No compatible tracks are imported yet, so this job will remain voice-only."}
+              </p>
+              {musicMode !== "none" && compatibleMusicCount > 0 ? (
+                <label className="block space-y-2 text-xs font-bold text-[#173F5F]">
+                  TRACK
+                  <select className="h-12 w-full rounded-md border border-[#D7D9D3] bg-white px-3 text-sm font-normal text-[#20211F]" onChange={(event) => setSelectedMusicTrackId(event.currentTarget.value || null)} value={selectedMusicTrackId ?? ""}>
+                    <option value="">Auto-select for the story</option>
+                    {musicTracks.filter((track) => track.allowed_platforms.includes("all_social") || track.allowed_platforms.includes(targetPlatform)).map((track) => <option key={track.id} value={track.id}>{track.title}{track.artist ? ` — ${track.artist}` : ""} · {track.mood}</option>)}
+                  </select>
+                </label>
+              ) : null}
+            </fieldset>
+            <details className="rounded-md border border-[#D7D9D3] bg-white p-3"><summary className="min-h-11 cursor-pointer content-center text-sm font-bold text-[#173F5F]">Advanced model settings</summary>
+            <fieldset className="space-y-3" disabled={formLocked || privacyMode === "local_only"}>
+              <legend className="text-xs font-bold text-[#173F5F]">CREATIVE EFFECTS</legend>
+              <p className="text-xs leading-relaxed text-[#666862]">
+                {privacyMode === "local_only"
+                  ? "The fixed local recipe does not select creative effects. Choose a model-assisted privacy mode to have the editor select cues."
+                  : "Adds reviewed sounds, stickers, GIFs, or meme assets at suitable story beats. Choose Social for a more noticeable test. Punch-ins and camera moves are controlled separately by the edit style."}
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                {([
+                  ["off", "Off", "Clean edit"], ["subtle", "Subtle", "Up to 2 cues"],
+                  ["social", "Social", "Up to 4 cues"], ["meme_heavy", "Meme-heavy", "Up to 8 cues"],
+                ] as const).map(([value, label, description]) => { const unavailable = value !== "off" && compatibleEffectCount === 0; return <label className={`rounded-md border p-3 focus-within:ring-2 focus-within:ring-[#173F5F]/40 ${unavailable ? "cursor-not-allowed opacity-45" : ""} ${effectLevel === value ? "border-[#173F5F] bg-[#EFF6FA]" : "border-[#D7D9D3] bg-white"}`} key={value}><input checked={effectLevel === value} className="sr-only" disabled={unavailable} name="effect-level" onChange={() => setEffectLevel(value)} type="radio" /><span className="block text-sm font-bold text-[#173F5F]">{label}</span><span className="mt-1 block text-[11px] text-[#666862]">{description}</span></label>; })}
+              </div>
+              <p className="text-xs text-[#666862]">
+                {compatibleEffectCount > 0
+                  ? `${compatibleEffectCount} compatible reviewed effects available. Off adds no sounds or overlays; other modes are maximum cue counts, not a guarantee of effects.`
+                  : "No compatible effects are installed yet. Import the starter library before testing sounds and stickers."}
+                {" "}<Link className="font-bold text-[#173F5F] underline underline-offset-4" href="/creative">View music &amp; effects library</Link>
+              </p>
+            </fieldset>
+            </details>
+          </div>
+        </details>
+        <details className="space-y-4 rounded-md border border-[#D7D9D3] bg-white p-4">
+          <summary className="min-h-11 cursor-pointer content-center text-sm font-bold text-[#173F5F]">Advanced: assembly, purpose, privacy &amp; model</summary>
+          <fieldset className="space-y-4" disabled={formLocked}>
+            <label className="block text-xs font-bold text-[#173F5F]" htmlFor="assembly-mode">ASSEMBLY
+              <select id="assembly-mode" className="mt-2 h-12 w-full rounded-md border border-[#D7D9D3] bg-white px-3 text-sm" value={assemblyMode} onChange={(event) => setAssemblyMode(event.currentTarget.value as AssemblyMode)}>
+                <option value="auto">Automatic from brief and analysed media</option><option value="talking_head">Speech with supporting pictures</option><option value="montage">Visual montage</option>
+              </select>
+            </label>
+            <p className="text-xs text-[#666862]">Automatic keeps recorded dialogue when it is central, or uses a visual sequence. You will see the interpretation after analysis and before Start editing.</p>
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-[#173F5F]" htmlFor="reel-intent">REEL PURPOSE</label>
+            <select
+              className="h-12 w-full rounded-md border border-[#D7D9D3] bg-white px-3 text-sm"
+              id="reel-intent"
+              value={reelIntent}
+              onChange={(event) => setReelIntent(event.currentTarget.value as typeof reelIntent)}
+            >
+              <option value="auto">Follow my brief</option>
+              <option value="story">Story / explanation</option>
+              <option value="promotion">Product / promotion</option>
+              <option value="bloopers">Bloopers / outtakes</option>
+            </select>
+            <p className="text-xs leading-relaxed text-[#666862]">
+              {reelIntent === "bloopers"
+                ? "Keep the recorded setup, stumble and real reaction. No sales payoff or call to action is required."
+                : "Purpose guides the story; pacing, effects and publishing presets control presentation. Saved creative profiles do not change this choice."}
+            </p>
+          </div>
+          </fieldset>
+        <fieldset className="space-y-4" disabled={formLocked}>
+          <legend className="sr-only">Privacy</legend>
+          <SectionHeading number="04">Privacy</SectionHeading>
+          <div className="space-y-2">
+            {PRIVACY_OPTIONS.map((option) => (
+              <PrivacyCard
+                description={option.description}
+                disabled={formLocked}
+                key={option.value}
+                label={option.label}
+                onChange={(value) => {
+                  setPrivacyMode(value);
+                  if (value === "local_only") setEffectLevel("off");
+                }}
+                selected={privacyMode === option.value}
+                value={option.value}
+              />
+            ))}
+          </div>
+          <label className={cn("flex min-h-14 items-start justify-between gap-4 pt-4", formLocked ? "cursor-not-allowed opacity-60" : "cursor-pointer")}>
+            <span className="space-y-1">
+              <span className="block text-sm font-bold text-[#173F5F]">Allow AI-written caption copy</span>
+              <span className="block text-xs leading-relaxed text-[#666862]">
+                This affects text only. Visuals and speech remain grounded in your selected media.
+              </span>
+            </span>
+            <span className="flex size-11 shrink-0 items-center justify-end">
+              <input
+                checked={aiCopyAllowed}
+                className="peer sr-only"
+                disabled={formLocked}
+                onChange={(event) => setAiCopyAllowed(event.currentTarget.checked)}
+                role="switch"
+                type="checkbox"
+              />
+              <span className="relative h-6 w-12 rounded-full bg-[#D7D9D3] transition-colors peer-checked:bg-[#173F5F] peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-[#173F5F] after:absolute after:top-1 after:left-1 after:size-4 after:rounded-full after:bg-white after:transition-transform peer-checked:after:translate-x-6 motion-reduce:transition-none motion-reduce:after:transition-none" />
+            </span>
+          </label>
+        </fieldset>
+
+            <fieldset className="space-y-3" disabled={formLocked || privacyMode === "local_only"}>
+              <legend className="text-xs font-bold text-[#173F5F]">EDITOR MODEL</legend>
+              <label className="block space-y-2 text-xs font-bold text-[#173F5F]" htmlFor="editor-model">
+                MODEL
+                <select
+                  className="h-12 w-full rounded-md border border-[#D7D9D3] bg-white px-3 text-sm text-[#20211F] shadow-none focus:border-[#173F5F] focus:outline-none focus:ring-2 focus:ring-[#173F5F]/20 disabled:opacity-60"
+                  id="editor-model"
+                  onChange={(event) => setEditorModel(event.currentTarget.value || null)}
+                  value={editorModel ?? ""}
+                >
+                  {editorModels.length === 0 ? <option value="">Server default</option> : null}
+                  {editorModels.map((model) => (
+                    <option key={model.slug} value={model.slug}>{model.display_name}</option>
+                  ))}
+                </select>
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {([
+                  { value: "low", label: "Economy" },
+                  { value: "medium", label: "Balanced" },
+                  { value: "high", label: "Best" },
+                ] as const).map((option) => (
+                  <label
+                    className={cn(
+                      "flex min-h-12 cursor-pointer items-center justify-center rounded-md bg-white text-xs font-bold",
+                      reasoningEffort === option.value
+                        ? "border-2 border-[#173F5F] text-[#173F5F]"
+                        : "border border-[#D7D9D3] text-[#666862]",
+                    )}
+                    key={option.value}
+                  >
+                    <input
+                      checked={reasoningEffort === option.value}
+                      className="sr-only"
+                      name="reasoning-effort"
+                      onChange={() => setReasoningEffort(option.value)}
+                      type="radio"
+                      value={option.value}
+                    />
+                    {option.label}
+                  </label>
+                ))}
+              </div>
+              <p className="text-xs leading-relaxed text-[#666862]">
+                Lower effort generally uses fewer reasoning tokens. The final screen records the actual usage.
+              </p>
+            </fieldset>
+        </details>
       </main>
 
       <footer className="z-50 shrink-0 touch-none border-t border-[#D7D9D3] bg-white px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] dark:bg-white">
@@ -2049,7 +2002,7 @@ function NewJobFormContent() {
         </div>
         <Button
           className="h-14 w-full touch-manipulation rounded-md bg-[#173F5F] text-sm font-bold text-white hover:bg-[#12344F] focus-visible:ring-[#173F5F]/35 disabled:bg-[#8A9CAB]"
-          disabled={isSubmitting || (jobId !== undefined && !allReady)}
+          disabled={isSubmitting || (jobId !== undefined && (!allReady || !assemblyReady))}
           onClick={jobId !== undefined && allReady ? () => void startEditing() : undefined}
           type={jobId !== undefined && allReady ? "button" : "submit"}
         >

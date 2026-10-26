@@ -34,6 +34,9 @@ def editing_policy(job: dict[str, Any]) -> dict[str, Any]:
                                  instruction + " " + str(job.get("project_name") or "").lower()))
     explicit = str(job.get("reel_intent") or "auto")
     inferred = "bloopers" if requests_bloopers and not excludes_bloopers else "promotion" if promotional else "story"
+    if job.get("assembly_mode") == "auto" or (job.get("assembly_decision") or {}).get("brief_first"):
+        from app.brief_direction import read_brief
+        inferred = read_brief(job)["purpose"]
     intent = explicit if explicit in {"bloopers", "promotion", "story"} else inferred
     return {
         "intent": intent,

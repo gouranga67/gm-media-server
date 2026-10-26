@@ -203,6 +203,11 @@ export function JobPreview({ jobId }: { readonly jobId: string }) {
               <p className="text-center font-mono text-[10px] leading-relaxed text-[#666862]">
                 Version {run?.version} · {review?.job.target_duration_seconds ?? 60}s target · {review?.job.edit_style ?? "legacy"} style · {review?.job.music_mode ?? "none"} music{retainedFinalAvailable ? " · final delivery playback" : ""}
               </p>
+              {review?.job.assembly_decision ? <div className="rounded-md bg-[#EFF6FA] p-4 text-sm text-[#173F5F]">
+                <p className="font-bold">{review.job.assembly_decision.label}</p>
+                <p className="mt-1">{review.job.assembly_decision.reason}</p>
+                <p className="mt-1 text-xs">Purpose: {review.job.assembly_decision.purpose === "auto" ? "Follow the brief" : review.job.assembly_decision.purpose}. Pacing: {(review.job.assembly_decision.edit_style ?? "legacy").replaceAll("_", " ")}.</p>
+              </div> : null}
               {prompts}
               {run ? (
                 <JobReviewControls

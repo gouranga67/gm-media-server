@@ -16,6 +16,9 @@ def pilot_readiness():
                 "SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename IN ('source_products','asset_range_annotations','learning_lessons','learning_evaluations')"
             ).fetchall()
         )
+        assembly_columns = database.execute(
+            "SELECT column_name FROM information_schema.columns WHERE table_schema='public' AND table_name='jobs' AND column_name IN ('assembly_mode','pacing_mode','assembly_decision')"
+        ).fetchall()
         members = list(
             database.execute(
                 "SELECT role,count(*) AS count FROM studio_members WHERE active=true GROUP BY role"
@@ -28,6 +31,12 @@ def pilot_readiness():
     return {
         "version": "19-25.1",
         "schema_ready": schema_ready,
+        "brief_first_editing": {
+            "schema_ready": len(assembly_columns) == 3,
+            "automatic_assembly": True,
+            "extra_classification_calls": 0,
+            "legacy_engines_preserved": True,
+        },
         "configured_private_owner": bool(settings.tailscale_owner_login),
         "member_roles": {row["role"]: row["count"] for row in members},
         "failed_previews_last_7_days": failures["count"],

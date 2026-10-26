@@ -472,6 +472,7 @@ def _manifest(
         "edit_plan_sha256": document_sha256(document),
         "editor": {"provider": provider, "model": model},
         "revision_report": context.get("revision_report"),
+        "assembly": context["job"].get("assembly_decision"),
         "creative_direction": {
             "target_duration_seconds": context["job"].get("target_duration_seconds"),
             "edit_style": context["job"].get("edit_style"),

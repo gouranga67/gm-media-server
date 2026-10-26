@@ -22,6 +22,8 @@ const ts = require("typescript");
 const Module = require("node:module");
 const originalLoad = Module._load;
 let lessonProposed = false;
+let assemblySettings, assemblyError, assemblyLocked, profiles;
+function assemblyPreview() { return {ready: !assemblyError, locked: assemblyLocked, error:assemblyError, settings:assemblySettings, decision:assemblyError ? null : {recipe:assemblySettings.assembly_mode === "auto" ? "talking_head" : assemblySettings.assembly_mode,edit_style:assemblySettings.edit_style,purpose:assemblySettings.reel_intent === "auto" ? "story" : assemblySettings.reel_intent,label:"Speech with supporting pictures",reason:"Keep recorded speech continuous.",hosted_model_calls:0}}; }
 let calls = [], transfers = [], navigation = [], readyEvents = 0, analysisStatus = "ready", root, managedAssets = [], batchFailure = false, conceptHistory = [], renderConceptFailure = false, conceptCounter = 0, organizationHistory = [], organizationFailure = false;
 const serverId = "11111111-1111-4111-8111-111111111111";
 const jobId = "22222222-2222-4222-8222-222222222222";
@@ -52,6 +54,7 @@ for (const extension of [".ts", ".tsx"]) Module._extensions[extension] = (module
   assert.equal(errors.length, 0, errors.map((diagnostic) => ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n")).join("\n"));
   module._compile(outputText, filename);
 };
+const { AssemblyReadiness } = require(path.join(repo, "apps/web/app/_components/assembly-readiness.tsx"));
 const { NewJobForm } = require(path.join(repo, "apps/web/app/_components/new-job-form.tsx"));
 const { ConceptDesk } = require(path.join(repo, "apps/web/app/_components/concept-desk.tsx"));
 const { MediaLibrary } = require(path.join(repo, "apps/web/app/_components/media-library.tsx"));
@@ -129,7 +132,15 @@ globalThis.fetch = async (url, options = {}) => {
   }
   else if (/^library\/assets\/[^/?]+$/.test(route)) payload = { asset: managedAssets.find((item) => item.id === route.split("/").at(-1)), collections: [], evidence: [], visual_frames: [] };
   else if (route === "projects") payload = { ...body, id: body.id };
-  else if (/^projects\/[^/]+\/jobs$/.test(route)) payload = { ...body, id: jobId };
+  else if (/^projects\/[^/]+\/jobs$/.test(route)) { assemblySettings={assembly_mode:body.assembly_mode ?? body.recipe,pacing_mode:body.pacing_mode ?? "manual",edit_style:body.edit_style,reel_intent:body.reel_intent}; payload = { ...body, id: jobId }; }
+  else if (route === `jobs/${jobId}/assembly`) {
+    if (options.method === "PUT") {
+      if (assemblyLocked) return {ok:false,status:409,json:async () => ({detail:"Assembly is frozen after planning starts."})};
+      assemblySettings=body; assemblyError=null;
+    }
+    payload=assemblyPreview();
+  }
+  else if (route === "creative-profiles") payload=profiles;
   else if (/^projects\/[^/]+\/assets$/.test(route)) payload = { ...body, project_id: route.split("/")[1], status: "registered" };
   else if (/^assets\/[^/]+\/analysis$/.test(route)) payload = { status: analysisStatus, error: analysisStatus === "failed" ? "Analysis fixture failed" : null };
   else if (/^assets\/[^/?]+$/.test(route)) payload = { id: route.split("/")[1], status: "ready" };
@@ -153,6 +164,7 @@ beforeEach(() => {
     { ...serverAsset, id: "unsorted", source_name: "VID_0003.mp4", display_name: "VID_0003.mp4", media_role: "auto", job_references: 0 },
   ].map((item) => ({ notes: "", tags: [], favorite: false, library_status: "active", collection_count: 0, visual_status: "ready", updated_at: item.created_at, ...item }));
   lessonProposed=false;
+  assemblySettings={assembly_mode:"auto",pacing_mode:"auto",edit_style:"energetic",reel_intent:"auto"}; assemblyError=null; assemblyLocked=false; profiles=[];
   window.sessionStorage.clear();
   document.body.innerHTML = '<div id="root"></div>';
   root = createRoot(document.getElementById("root"));
@@ -205,7 +217,7 @@ test("one job combines selected server footage and a device upload, with an expl
   assert.equal(uploadRequests[0].body.source_name, "close-up.mp4");
   assert.equal(posts("/preview").length, 0);
   await act(async () => transfers[0].callbacks.onSuccess());
-  await waitFor(() => document.body.textContent.includes("Start editing"));
+  await waitFor(() => button("Start editing") && !button("Start editing").disabled);
   await click(button("Start editing"));
   assert.equal(posts("/preview").length, 1);
   assert.deepEqual(navigation, [`/jobs/${jobId}`]);
@@ -598,4 +610,75 @@ test("lesson proposals stay inactive and cannot start a trial without an explici
  assert.equal(button("Create trial preview · uses model tokens").disabled,true);
  assert.equal(calls.filter(c=>c.method==="POST").length,1);
  assert.equal(calls.some(c=>c.route.endsWith("/trial")),false);
+});
+
+
+test("brief starters are visible editable instructions and never submit or change technical settings", async () => {
+  await act(async () => root.render(React.createElement(NewJobForm)));
+  await waitFor(() => document.getElementById("assembly-mode"));
+  const headings=[...document.querySelectorAll("h2")].map((element) => element.textContent);
+  assert.ok(headings.indexOf("Source media") < headings.indexOf("Describe your edit"));
+  assert.equal(document.querySelector('input[name="recipe"]'),null);
+  await type("#project-brief","Keep my existing thought.");
+  await click(button("Recorded bloopers"));
+  await click(button("Recorded bloopers"));
+  assert.match(document.getElementById("project-brief").value,/Keep my existing thought/);
+  assert.equal(document.getElementById("project-brief").value.match(/Make a bloopers reel/g).length,1);
+  assert.equal(document.getElementById("assembly-mode").value,"auto");
+  assert.equal(document.getElementById("reel-intent").value,"auto");
+  assert.equal(posts("projects").length,0);
+  assert.equal(posts("/jobs").length,0);
+  assert.equal(posts("/preview").length,0);
+});
+
+test("negated montage brief is accepted in automatic mode and waits for interpretation before editing", async () => {
+  assemblyError="No usable recorded video speech was found.";
+  await act(async () => root.render(React.createElement(NewJobForm)));
+  await waitFor(() => document.querySelector(`input[aria-label="Use ${serverAsset.source_name}"]`));
+  await click(document.querySelector(`input[aria-label="Use ${serverAsset.source_name}"]`));
+  await type("#project-name","Keep my explanation");
+  await type("#project-brief","Do not make a montage. Keep my whole explanation.");
+  await act(async () => document.querySelector("form").dispatchEvent(new Event("submit", {bubbles:true,cancelable:true})));
+  await waitFor(() => document.body.textContent.includes("No usable recorded"));
+  assert.equal(posts("/jobs")[0].body.assembly_mode,"auto");
+  assert.equal(posts("/jobs")[0].body.pacing_mode,"auto");
+  assert.equal(button("Start editing").disabled,true);
+  assert.equal(posts("/preview").length,0);
+  await chooseOption("#ready-assembly","montage");
+  await chooseOption("#ready-pacing","calm");
+  assert.equal(calls.filter((call) => call.method === "PUT").length,0);
+  await click(button("Apply overrides"));
+  await waitFor(() => !button("Start editing").disabled);
+  assert.equal(calls.filter((call) => call.method === "PUT").length,1);
+  assert.equal(document.getElementById("assembly-mode").value,"montage");
+  assert.equal(document.querySelector('input[name="edit-style"][value="calm"]').checked,true);
+  assert.equal(posts("/preview").length,0);
+});
+
+test("saved presentation profile never changes explicit assembly or purpose", async () => {
+  profiles=[{id:serverId,name:"Montage defaults",recipe:"montage",target_duration_seconds:30,edit_style:"calm",music_mode:"none",target_platform:"all_social",output_aspect:"vertical",reasoning_effort:"medium",brand_kit_id:null,publishing_preset:"custom"}];
+  await act(async () => root.render(React.createElement(NewJobForm)));
+  await waitFor(() => document.getElementById("creative-profile"));
+  await chooseOption("#assembly-mode","talking_head");
+  await chooseOption("#reel-intent","bloopers");
+  await chooseOption("#creative-profile",serverId);
+  assert.equal(document.getElementById("assembly-mode").value,"talking_head");
+  assert.equal(document.getElementById("reel-intent").value,"bloopers");
+  assert.equal(document.querySelector('input[name="edit-style"][value="auto"]').checked,true);
+  assert.equal(posts("/jobs").length,0);
+});
+
+test("stale advanced overrides report a freeze without starting a duplicate preview", async () => {
+  let ready=false;
+  const onReady=(value) => {ready=value;};
+  await act(async () => root.render(React.createElement(AssemblyReadiness,{jobId,onReady})));
+  await waitFor(() => ready);
+  await chooseOption("#ready-pacing","calm");
+  assert.equal(ready,false);
+  assemblyLocked=true;
+  await click(button("Apply overrides"));
+  await waitFor(() => document.body.textContent.includes("frozen after planning"));
+  assert.equal(ready,false);
+  assert.equal(posts("/preview").length,0);
+  assert.equal(posts("/jobs").length,0);
 });

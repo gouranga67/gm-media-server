@@ -925,6 +925,11 @@ def process_one_edit(state: WorkerState) -> bool:
     state.active_edit_run_id = run_id
     try:
         context = build_editor_context(run["job_id"], include_internal_paths=True)
+        if context["job"].get("assembly_mode") == "auto" and not context["job"].get("assembly_decision") and not run.get("edit_plan_id") and not run.get("based_on_run_id"):
+            from app.assembly import persist_assembly
+            with connection() as database:
+                persist_assembly(database, context)
+            context = build_editor_context(run["job_id"], include_internal_paths=True)
         if run.get("broll_enabled") is False:
             context["job"]["broll_enabled"] = False
         if not context["ready_for_editing"]:

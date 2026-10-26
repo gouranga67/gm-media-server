@@ -965,6 +965,8 @@ def create_job(
     x_gm_user_login: str | None = Header(default=None),
 ) -> dict[str, Any]:
     job_id = payload.id or uuid4()
+    assembly_mode = payload.assembly_mode or payload.recipe.value
+    recipe = payload.recipe.value if assembly_mode == "auto" else assembly_mode
     try:
         with connection() as database:
             if payload.music_mode.value == "none" and payload.selected_music_track_id is not None:
@@ -1001,18 +1003,18 @@ def create_job(
                     target_platform, must_include,
                     audience, story_goal, desired_feeling, ending_instruction,
                     editor_model, reasoning_effort, output_aspect, creative_profile_id,
-                    brand_kit_id, publishing_preset, created_by_login, reel_intent
+                    brand_kit_id, publishing_preset, created_by_login, reel_intent, assembly_mode, pacing_mode
                 )
                 VALUES (
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                 )
                 RETURNING *
                 """,
                 (
                     job_id,
                     project_id,
-                    payload.recipe.value,
+                    recipe,
                     payload.target_duration_seconds,
                     payload.edit_style.value,
                     payload.music_mode.value,
@@ -1032,6 +1034,8 @@ def create_job(
                     payload.publishing_preset.value,
                     actor_login(x_gm_user_login),
                     payload.reel_intent.value,
+                    assembly_mode,
+                    payload.pacing_mode,
                 ),
             ).fetchone()
     except ForeignKeyViolation as error:
@@ -1041,10 +1045,12 @@ def create_job(
             row = database.execute("SELECT * FROM jobs WHERE id = %s", (job_id,)).fetchone()
         if row is None or (
             row["project_id"] != project_id
-            or row["recipe"] != payload.recipe.value
+            or (row["recipe"] != recipe and not row.get("assembly_decision"))
+            or row.get("assembly_mode", row["recipe"]) != assembly_mode
+            or row.get("pacing_mode", "manual") != payload.pacing_mode
             or row.get("reel_intent", "auto") != payload.reel_intent.value
             or row["target_duration_seconds"] != payload.target_duration_seconds
-            or row["edit_style"] != payload.edit_style.value
+            or (row.get("assembly_decision") or {}).get("requested_edit_style", row["edit_style"]) != payload.edit_style.value
             or row["music_mode"] != payload.music_mode.value
             or row["selected_music_track_id"] != payload.selected_music_track_id
             or row["effect_level"] != payload.effect_level.value

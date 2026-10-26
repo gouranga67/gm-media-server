@@ -4,6 +4,20 @@ export type MusicMode = "none" | "subtle" | "present";
 export type EffectLevel = "off" | "subtle" | "social" | "meme_heavy";
 export type TargetDuration = 15 | 20 | 30 | 45 | 60;
 export type Recipe = "talking_head" | "montage";
+export type AssemblyMode = "auto" | Recipe;
+export type PacingMode = "auto" | "manual";
+export type AssemblyDecision = {
+  readonly recipe: Recipe; readonly edit_style: EditStyle | null; readonly purpose: ReelIntent;
+  readonly reason: string; readonly label: string; readonly hosted_model_calls: number;
+};
+export type AssemblySettings = {
+  readonly assembly_mode: AssemblyMode; readonly pacing_mode: PacingMode;
+  readonly edit_style: EditStyle; readonly reel_intent: ReelIntent;
+};
+export type AssemblyPreview = {
+  readonly ready: boolean; readonly locked: boolean; readonly decision: AssemblyDecision | null;
+  readonly error: string | null; readonly settings: AssemblySettings;
+};
 export type ReelIntent = "auto" | "story" | "promotion" | "bloopers";
 export type ReasoningEffort = "low" | "medium" | "high";
 export type OutputAspect = "vertical" | "landscape" | "square";
@@ -24,6 +38,9 @@ export type MediaJob = {
   readonly id: string;
   readonly project_id: string;
   readonly recipe: Recipe;
+  readonly assembly_mode?: AssemblyMode;
+  readonly pacing_mode?: PacingMode;
+  readonly assembly_decision?: AssemblyDecision | null;
   readonly reel_intent?: ReelIntent;
   readonly status: string;
   readonly revision: number;
@@ -722,6 +739,8 @@ export function createMediaJob(
   input: {
     readonly id?: string;
     readonly recipe: Recipe;
+    readonly assemblyMode?: AssemblyMode;
+    readonly pacingMode?: PacingMode;
     readonly reelIntent?: ReelIntent;
     readonly targetDurationSeconds: TargetDuration;
     readonly editStyle: EditStyle;
@@ -747,6 +766,8 @@ export function createMediaJob(
     body: JSON.stringify({
       id: input.id,
       recipe: input.recipe,
+      assembly_mode: input.assemblyMode,
+      pacing_mode: input.pacingMode,
       reel_intent: input.reelIntent ?? "auto",
       target_duration_seconds: input.targetDurationSeconds,
       edit_style: input.editStyle,
@@ -1397,3 +1418,10 @@ export const getHookOptions = (jobId: string) => apiRequest<HookOptions>(`jobs/$
 
 export type PilotReadiness = { readonly version: string; readonly schema_ready: boolean; readonly configured_private_owner: boolean; readonly deployment_scope: string; readonly tools: Readonly<Record<string, boolean>>; readonly remaining_acceptance: readonly string[]; readonly failed_previews_last_7_days: number };
 export const getPilotReadiness = () => apiRequest<PilotReadiness>("pilot-readiness");
+
+export function getJobAssembly(jobId: string) {
+  return apiRequest<AssemblyPreview>(`jobs/${jobId}/assembly`);
+}
+export function updateJobAssembly(jobId: string, settings: AssemblySettings) {
+  return apiRequest<AssemblyPreview>(`jobs/${jobId}/assembly`, { method: "PUT", body: JSON.stringify(settings) });
+}

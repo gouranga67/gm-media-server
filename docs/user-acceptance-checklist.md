@@ -2,7 +2,7 @@
 
 Updated: 2026-10-26 (Australia/Brisbane).
 
-Use this checklist to judge whether the deployed tools make useful reels. A successful render alone is not a pass: listen, watch and compare against the raw footage. The brief-first form described in the [next-build plan](brief-led-editing-plan.md) is proposed, not yet implemented.
+Use this checklist to judge whether the deployed tools make useful reels. A successful render alone is not a pass: listen, watch and compare against the raw footage. The first increment of the [brief-first flow](brief-led-editing-plan.md) is implemented in source; test it after deploying migration 033.
 
 ## Start with these eight checks
 
@@ -22,6 +22,19 @@ Keep one excellent existing edit as the baseline. Use fresh test jobs for change
 Work through one render at a time. Reuse the same small set rather than repeatedly uploading your whole library. Natural-language planning/revisions, concept generation, auto-sort and lesson trials use model requests. Explicit local finishing, precise edits, exact re-renders and delivery variants use local processing without another editor-model request. They still consume CPU/GPU time.
 
 For every problem, record the job link, preview version, exact reel timestamp, brief, expected result and actual result. Identify whether you watched the web preview or a downloaded export. A useful report is: “Version 3, 0:08–0:10: I asked to boost this phrase, but its volume did not change.”
+
+## Brief-first form and compatibility
+
+| ID | Test | Pass when |
+| --- | --- | --- |
+| R1 | Select media, write a brief, leave Advanced alone | No recipe selection is required. After analysis, the assembly and reason appear before Start editing. |
+| R2 | Add a brief starter, edit it, then apply a saved profile | The visible text is editable; no upload/model request starts from the shortcut. A profile changes presentation defaults, not purpose or assembly. |
+| R3 | “Use montage-style cutaways, but keep my whole explanation” with talking video, product B-roll and a review photo | It retains a speech spine and can use the supporting pictures without requiring High impact pacing. |
+| R4 | “Make a slow, warm visual montage” with photos and silent scenes | The interpretation uses visual assembly and calm pacing. Actual playback matches the mood. |
+| R5 | “Do not make an ad; explain the product” and a separate blooper request | The first stays a story; the second uses blooper guidance without sales requirements. Filenames and project titles do not change the intent. |
+| R6 | Inspect an explicit conflict, change Advanced, then Apply | The conflict blocks Start editing before a model call. Changing a field alone sends nothing; Apply updates the interpretation. Starting fixes the engine for retries/revisions. |
+| R7 | Submit insufficient media: one still, a very short silent video, or separate audio narration | A useful compatibility message appears. No invented/duplicated filler or paid planning request is used to hide the limit. |
+| R8 | Reopen an excellent old job, exact re-render it and inspect a new library concept job | Old engines, timing and approved plans remain intact. New concepts resolve once before their ordinary planning request. Compare real playback and usage. |
 
 ## Story and source selection
 

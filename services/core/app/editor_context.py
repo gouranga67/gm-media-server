@@ -170,7 +170,7 @@ def build_editor_context(
         asset["speech_gap_note"] = (
             "Word-timing gaps, not verified silence; may contain laughter, actions, or reactions."
         )
-        if job.get("edit_style") == "high_impact":
+        if job.get("edit_style") == "high_impact" or job.get("assembly_mode") == "auto" or (job.get("assembly_decision") or {}).get("brief_first"):
             asset["broll_guidance"] = broll_guidance(asset)
         if include_internal_paths:
             asset["_storage_key"] = row["storage_key"]
@@ -239,6 +239,9 @@ def build_editor_context(
             "project_id": str(job["project_id"]),
             "recipe": job["recipe"],
             "reel_intent": job.get("reel_intent") or "auto",
+            "assembly_mode": job.get("assembly_mode") or job["recipe"],
+            "pacing_mode": job.get("pacing_mode") or "manual",
+            "assembly_decision": job.get("assembly_decision"),
             "status": job["status"],
             "revision": job["revision"],
             "target_duration_seconds": job["target_duration_seconds"],

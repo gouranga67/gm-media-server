@@ -4,7 +4,7 @@ Updated: 2026-10-26 (Australia/Brisbane).
 
 The main job form should ask what the user wants to make, not require them to choose a rendering engine. A brief such as “Make a gentle, feel-good product montage; keep the spoken explanation and show the cream close-ups” combines purpose, mood and visual direction. Those instructions should work together rather than compete as exclusive recipes.
 
-This plan records the recommended change before modifying application behaviour. It preserves the successful existing model, source-analysis settings and render path during the first increment. The current human acceptance checks are in the [hands-on checklist](user-acceptance-checklist.md).
+The first increment of this plan is implemented in source with migration 033. Deployment and paired human playback remain required. It preserves the successful existing model, source-analysis settings and render path during the first increment. The current human acceptance checks are in the [hands-on checklist](user-acceptance-checklist.md).
 
 ## Current source findings
 
@@ -100,4 +100,8 @@ The goal is for a reel to combine sustained dialogue, a music-led passage, photo
 - Phone, keyboard, source switching, resume, stale-tab, failed-request and no-duplicate-job interactions pass.
 - Paired human tests cover an ad, a non-ad explanation, a slow montage, mixed dialogue/B-roll and actual bloopers.
 
-Application behaviour remains unchanged while this proposal is reviewed. Documentation and test preparation can proceed independently.
+Implemented first increment: the job form begins with media and an editable brief. Optional brief starters add visible text without submitting. Automatic assembly and pacing use stored analysis and conservative reading of explicit directions; Advanced holds deliberate overrides. The read-only interpretation is checked after analysis, and the engine is persisted under a job lock when editing starts. Existing jobs retain their engine/style through migration 033, and existing plans are never rewritten. The worker also resolves newly selected library concepts before their normal planning request. Automatic jobs can use suitable picture cutaways at calm pacing, with the existing evidence, source bounds and coverage limits.
+
+This local compatibility reader is not a general language model. Complex story decisions still belong to the existing bounded editorial request. A single still, an insufficiently short silent source or separate audio-file narration receives an explicit compatibility error rather than duplicated filler. The shared-track renderer described in the second increment remains future work.
+
+Deploy with `sudo ./scripts/install-service.sh`, then run `python3 scripts/verify-brief-first.py` and the live suite. The brief-first verifier is read-only: it creates no jobs and calls no model. Use R1–R8 in the hands-on checklist for creative acceptance.

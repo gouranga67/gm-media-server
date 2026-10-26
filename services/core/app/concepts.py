@@ -191,8 +191,8 @@ def render_selected_concepts(request_id: UUID, payload: ConceptSelection, x_gm_u
                              (project_id, concept["title"], concept_brief(concept), session["privacy_mode"]))
             target = next((value for value in (20,30,45,60) if value >= concept["estimated_seconds"]), 60)
             database.execute("""INSERT INTO jobs (id,project_id,recipe,status,target_duration_seconds,edit_style,
-                music_mode,effect_level,target_platform,story_goal,audience,editor_model,reasoning_effort,output_aspect,created_by_login,reel_intent)
-                VALUES (%s,%s,'talking_head','planning',%s,'high_impact',%s,%s,%s,%s,%s,%s,'medium','vertical',%s,%s)""",
+                music_mode,effect_level,target_platform,story_goal,audience,editor_model,reasoning_effort,output_aspect,created_by_login,reel_intent,assembly_mode)
+                VALUES (%s,%s,'talking_head','planning',%s,'high_impact',%s,%s,%s,%s,%s,%s,'medium','vertical',%s,%s,'auto')""",
                              (job_id, project_id, target, payload.music_mode.value, payload.effect_level.value,
                               payload.target_platform.value, concept["angle"][:1200], session["audience"], get_settings().chatgpt_model, actor_login(x_gm_user_login),
                               "bloopers" if session.get("reel_kind") == "bloopers" else "story"))

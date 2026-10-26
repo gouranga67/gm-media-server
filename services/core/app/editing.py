@@ -349,6 +349,12 @@ def request_preview(job_id: UUID) -> dict[str, Any]:
             "ready",
         }:
             return _response(latest)
+        if context["job"].get("assembly_mode") and not context["job"].get("assembly_decision"):
+            from app.assembly import persist_assembly
+            try:
+                persist_assembly(database, context)
+            except ValueError as error:
+                raise HTTPException(status_code=422, detail=str(error)) from error
         if latest is not None and latest["status"] == "failed":
             assert_job_capacity(database, job_id)
             row = database.execute(
