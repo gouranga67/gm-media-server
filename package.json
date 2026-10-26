@@ -43,6 +43,7 @@
     "stack:config": "bash scripts/stack.sh config",
     "stack:status": "bash scripts/stack.sh status",
     "audit:public": "bash scripts/check-public-release.sh",
+    "test:media-selection": "node scripts/verify-media-selection-ui.mjs",
     "verify:phase2": "bash scripts/verify-phase2.sh",
     "dev:web": "next dev apps/web",
     "build:web": "next build apps/web --webpack",
@@ -52,6 +53,7 @@
     "@types/node": "^26.6.5",
     "@types/react": "^19.2.15",
     "@types/react-dom": "^19.2.3",
+    "happy-dom": "21.0.4",
     "typescript": "5.9.3"
   }
 }

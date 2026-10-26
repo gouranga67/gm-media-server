@@ -772,7 +772,7 @@ export function mediaTypeForFile(file: File): string {
   return inferred;
 }
 
-export function registerAsset(projectId: string, jobId: string, file: File, id?: string) {
+export function registerAsset(projectId: string, jobId: string | null, file: File, id?: string) {
   const mimeType = mediaTypeForFile(file);
 
   return apiRequest<Asset>(`projects/${projectId}/assets`, {
@@ -789,6 +789,12 @@ export function registerAsset(projectId: string, jobId: string, file: File, id?:
 
 export function getAsset(assetId: string) {
   return apiRequest<Asset>(`assets/${assetId}`, { cache: "no-store" });
+}
+
+export function getAssetAnalysis(assetId: string) {
+  return apiRequest<{ readonly status: string; readonly error: string | null }>(
+    `assets/${assetId}/analysis`, { cache: "no-store" },
+  );
 }
 
 export function getServerLibraryAssets() {

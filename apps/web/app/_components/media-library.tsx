@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { LibraryUpload } from "@/app/_components/library-upload";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   ArchiveIcon,
@@ -330,6 +331,8 @@ export function MediaLibrary() {
           <div className="flex flex-wrap items-center justify-between gap-4"><div className="flex flex-wrap items-center gap-x-5 gap-y-2"><Link className="text-sm font-bold tracking-tight text-[#173F5F]" href="/jobs/new">GM Studio</Link><nav className="flex flex-wrap gap-4 text-xs font-bold text-[#666862]"><Link href="/jobs/new">New job</Link><Link href="/library/duplicates">Duplicate audit</Link><Link href="/usage">AI usage</Link><Link href="/system">System</Link></nav></div><span className="inline-flex items-center gap-1.5 rounded-full border border-[#D7D9D3] bg-white px-3 py-2 font-mono text-[10px] font-bold text-[#173F5F]"><span className="size-1.5 rounded-full bg-[#3A8F63]" />PRIVATE · ONLINE</span></div>
           <div className="mt-6 flex flex-col justify-between gap-5 lg:flex-row lg:items-end"><div className="max-w-3xl"><p className="font-mono text-[10px] font-bold tracking-widest text-[#174D73] uppercase">Content memory</p><h1 className="mt-2 text-3xl font-bold tracking-tight text-[#173F5F]">Media library</h1><p className="mt-3 max-w-2xl text-sm leading-6 text-[#666862]">Search spoken words and visual scenes, organize useful originals, and keep every source private on this server.</p></div><Link className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-[#173F5F] px-5 text-sm font-bold text-white" href="/jobs/new"><FilmIcon className="size-4" />Start a new job</Link></div>
         </header>
+
+        <LibraryUpload onReady={refreshVisible} />
 
         <section aria-label="Library summary" className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4"><Metric icon={<LibraryIcon className="size-4" />} label="Active originals" note="Ready for editing" value={summary.active.toLocaleString()} /><Metric icon={<ArchiveIcon className="size-4" />} label="Archived" note="Hidden, never deleted" value={summary.archived.toLocaleString()} /><Metric icon={<HeartIcon className="size-4" />} label="Favorites" note="Pinned source media" value={summary.favorites.toLocaleString()} /><Metric highlighted icon={<HardDriveIcon className="size-4" />} label="Library size" note="Originals on Lenovo" value={formatBytes(summary.bytes)} /></section>
 

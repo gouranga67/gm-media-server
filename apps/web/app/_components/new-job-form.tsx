@@ -73,7 +73,6 @@ const READY_POLL_ATTEMPTS = 45;
 const READY_POLL_INTERVAL_MS = 1_000;
 
 type ServerStatus = "checking" | "online" | "offline";
-type SourcePanel = "upload" | "library";
 type LibraryKind = "all" | "video" | "image" | "audio";
 type UploadPhase =
   | "queued"
@@ -729,7 +728,6 @@ function NewJobFormContent() {
   const [musicTracks, setMusicTracks] = useState<readonly MusicTrack[]>([]);
   const [creativeAssets, setCreativeAssets] = useState<readonly CreativeAsset[]>([]);
   const [entries, setEntries] = useState<UploadEntry[]>([]);
-  const [sourcePanel, setSourcePanel] = useState<SourcePanel>("library");
   const [libraryAssets, setLibraryAssets] = useState<readonly LibraryAsset[]>([]);
   const [selectedLibraryAssetIds, setSelectedLibraryAssetIds] = useState<ReadonlySet<string>>(new Set());
   const [libraryQuery, setLibraryQuery] = useState("");
@@ -1775,42 +1773,14 @@ function NewJobFormContent() {
 
         <section className="space-y-4 pb-8" id="server-library">
           <SectionHeading number="04">Source media</SectionHeading>
-          <div className="grid grid-cols-2 gap-2" role="tablist" aria-label="Source media options">
-            <button
-              aria-selected={sourcePanel === "upload"}
-              className={cn(
-                "min-h-11 rounded-md bg-white px-3 text-sm font-bold",
-                sourcePanel === "upload"
-                  ? "border-2 border-[#173F5F] text-[#173F5F]"
-                  : "border border-[#D7D9D3] text-[#666862]",
-              )}
-              onClick={() => setSourcePanel("upload")}
-              role="tab"
-              type="button"
-            >
-              Upload new
-            </button>
-            <button
-              aria-selected={sourcePanel === "library"}
-              className={cn(
-                "min-h-11 rounded-md bg-white px-3 text-sm font-bold",
-                sourcePanel === "library"
-                  ? "border-2 border-[#173F5F] text-[#173F5F]"
-                  : "border border-[#D7D9D3] text-[#666862]",
-              )}
-              onClick={() => setSourcePanel("library")}
-              role="tab"
-              type="button"
-            >
-              Server library
-            </button>
+          <div className="rounded-md border border-[#BFD2DE] bg-[#EFF6FA] p-4 text-sm text-[#173F5F]">
+            <p className="font-bold">Combine server footage and new uploads in one job</p>
+            <p className="mt-1 text-xs leading-relaxed">Add files from this device and select existing footage below, then create your job. Both selections are included together.</p>
+            <p aria-live="polite" className="mt-2 font-mono text-xs font-bold">{selectedLibraryAssets.length} from server + {entries.length} from this device</p>
           </div>
-          <p className="text-xs leading-relaxed text-[#666862]">
-            Selections persist when you switch sources. You can combine server media with new phone uploads.
-          </p>
 
-          {sourcePanel === "upload" ? (
-            <div className="space-y-4" role="tabpanel">
+            <div aria-label="Upload new source media" className="space-y-4">
+              <h3 className="text-sm font-bold text-[#173F5F]">Add from this device</h3>
               <label
                 className={cn(
                   "flex min-h-36 w-full cursor-pointer flex-col items-center justify-center rounded-md border-2 border-dashed border-[#C7CBD0] bg-white p-6 text-center transition-colors hover:border-[#173F5F] focus-within:border-[#173F5F] focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[#173F5F] dark:bg-white",
@@ -1820,12 +1790,13 @@ function NewJobFormContent() {
                 onDrop={handleDrop}
               >
                 <UploadCloudIcon aria-hidden="true" className="mb-2 size-6 text-[#173F5F]" />
-                <span className="text-sm font-bold text-[#173F5F]">Add source media</span>
+                <span className="text-sm font-bold text-[#173F5F]">Choose files or drop them here</span>
                 <span className="mt-1 font-mono text-[10px] tracking-tight text-[#666862] uppercase">
                   Video, photo, audio · Up to 20 GB per file
                 </span>
                 <input
                   accept="video/*,image/*,audio/*,.heic,.heif"
+                  aria-label="Add files from this device"
                   className="sr-only"
                   disabled={isSubmitting}
                   multiple
@@ -1881,11 +1852,11 @@ function NewJobFormContent() {
                 <p className="text-center font-mono text-[10px] text-[#666862]">No new files selected.</p>
               )}
               <p className="text-center font-mono text-[10px] leading-relaxed text-[#666862]">
-                Interrupted uploads continue when this phone reconnects. Keep the file on your phone until it shows Ready.
+                Keep this page open while uploading. Interrupted uploads can resume when this device reconnects.
               </p>
             </div>
-          ) : (
-            <div className="space-y-4" role="tabpanel">
+            <div aria-label="Choose existing server media" className="space-y-4 border-t border-[#D7D9D3] pt-5">
+              <h3 className="text-sm font-bold text-[#173F5F]">Choose from the server library</h3>
               <div className="flex items-center justify-between gap-4">
                 <p className="font-mono text-[10px] font-bold tracking-wide text-[#666862] uppercase">Analyzed originals</p>
                 <Link className="text-xs font-bold text-[#173F5F] underline underline-offset-4" href="/library/duplicates">
@@ -2022,7 +1993,6 @@ function NewJobFormContent() {
                 Selecting an item attaches the existing original. It does not copy or re-upload the file.
               </p>
             </div>
-          )}
           {jobId ? (
             <p className="text-center font-mono text-[10px] text-[#666862]" aria-live="polite">
               Job {jobId.slice(0, 8)} created

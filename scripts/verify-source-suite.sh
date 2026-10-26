@@ -24,6 +24,7 @@ run_check "Compose configuration" docker compose config --quiet
 run_check "Python source compilation" python3 -m compileall -q services/core/app services/core/tests scripts
 run_check "Public-release secret and media audit" npm run audit:public
 run_check "Web TypeScript" npm run typecheck:web
+run_check "Mixed media and library upload interactions" npm run test:media-selection
 run_check "Agent tool TypeScript" \
   npx tsc --noEmit --module esnext --moduleResolution bundler --target es2022 --skipLibCheck \
   agent/tools/search_library.ts agent/tools/attach_library_assets.ts \

@@ -290,6 +290,8 @@ Exit check: reboot during a render, restore service automatically, finish the jo
 
 ## Phase 8 — managed media memory
 
+Upload and selection follow-up (2026-10-26): `/library` now accepts resumable video, image, and audio uploads without creating an editing job. An upload-group project contains the originals; local analysis must finish before the files are marked ready and the library refreshes. Transfer failures resume the existing upload, and checking analysis status never registers or sends an original again. Keep the page open while transferring. The new-job form shows its device picker and server library together with a combined selection count, so existing talking footage and newly selected B-roll can enter one job. Choose both before creating it, then explicitly start editing when uploads are ready. No migration is required.
+
 **Purpose:** turn analyzed originals into a clean, durable content memory that can be searched and reused across future editing jobs.
 
 Current source checkpoint (2026-10-24): migration 014 adds user-owned display names, notes, favorites, normalized tags, and collections without altering original hashes or paths. The new `/library` UI combines metadata search with transcript and local CLIP-frame results, keeps strongest evidence ordering, previews the existing original/proxy, exposes timestamped speech/scene evidence and representative source frames, and supports collection membership. Archive/restore is reversible. Permanent deletion is deliberately absent and visibly locked until the encrypted backup passes its restore drill. `scripts/verify-phase8.py` round-trips metadata, a temporary collection, archive/restore, and preview download while restoring the original record and deleting no media.
