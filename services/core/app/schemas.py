@@ -27,6 +27,7 @@ class Recipe(StringEnum):
 class EditStyle(StringEnum):
     CLEAN = "clean"
     ENERGETIC = "energetic"
+    HIGH_IMPACT = "high_impact"
     CALM = "calm"
 
 
@@ -576,6 +577,7 @@ class EditRunResponse(BaseModel):
     caption_corrections: list[dict[str, str]] = Field(default_factory=list)
     caption_settings: dict[str, Any] = Field(default_factory=dict)
     effects_enabled: bool | None = None
+    broll_enabled: bool | None = None
     clip_adjustments: list[dict[str, Any]] = Field(default_factory=list)
     locked_elements: list[str] = Field(default_factory=list)
     approved_at: datetime | None = None
@@ -615,7 +617,7 @@ class ClipAdjustment(BaseModel):
     clip_index: int = Field(ge=0, le=47)
     action: Literal["keep", "remove", "move_up", "move_down"] = "keep"
     visual_preset: Literal[
-        "standard", "punch_in", "strong_punch_in", "slow_push_in", "slow_pull_out"
+        "standard", "punch_in", "strong_punch_in", "slow_push_in", "slow_pull_out", "rhythmic_punch"
     ] | None = None
     source_audio_gain_db: float | None = Field(default=None, ge=-12.0, le=12.0)
     max_pause_seconds: float | None = Field(default=None, ge=0.3, le=2.0)
@@ -637,6 +639,7 @@ class RevisionCreate(BaseModel):
     clip_adjustments: list[ClipAdjustment] = Field(default_factory=list, max_length=48)
     caption_settings: CaptionSettings | None = None
     effects_enabled: bool | None = None
+    broll_enabled: bool | None = None
     locked_elements: list[Literal["clip order", "spoken phrases", "captions", "music", "effects"]] = Field(default_factory=list, max_length=5)
 
     @field_validator("note")
@@ -658,6 +661,7 @@ class RevisionCreate(BaseModel):
             and not self.clip_adjustments
             and self.caption_settings is None
             and self.effects_enabled is None
+            and self.broll_enabled is None
         ):
             raise ValueError(
                 "provide a revision note, caption correction, timeline adjustment, or caption layout"

@@ -126,6 +126,9 @@ export function JobReviewControls({
     ? run.manifest.creative_effects as readonly Record<string, unknown>[]
     : [];
   const creativeDirection = run.manifest.creative_direction as { effect_level?: string } | undefined;
+  const plannedBroll = Array.isArray(run.manifest.broll)
+    ? run.manifest.broll as readonly Record<string, unknown>[] : [];
+  const finishing = run.manifest.finishing as { mode?: string; rhythmic_punch_beats?: readonly number[] } | undefined;
   const effectMode = creativeDirection?.effect_level;
   const punchInCount = editorialTimeline.filter((clip) =>
     clip.visual_preset === "punch_in" || clip.visual_preset === "strong_punch_in").length;
@@ -178,6 +181,14 @@ export function JobReviewControls({
     } finally {
       setSubmitting(undefined);
     }
+  };
+
+  const removeBroll = async () => {
+    setSubmitting("revision"); setError(undefined);
+    try {
+      await requestRevision(jobId, { note: "", captionCorrections: [], brollEnabled: false });
+      onUpdated();
+    } catch (revisionError) { setError(message(revisionError)); } finally { setSubmitting(undefined); }
   };
 
   const adjustClip = async (
@@ -406,7 +417,8 @@ export function JobReviewControls({
           <div className="mb-5 rounded-md border border-[#BFE3FF] bg-[#EFF6FA] p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="font-mono text-[10px] font-bold tracking-wide text-[#174D73] uppercase">Local story check</p>
+                <p className="font-mono text-[10px] font-bold tracking-wide text-[#174D73] uppercase">Source story hints</p>
+                <p className="mt-1 text-xs text-[#53646F]">Coverage in your uploaded footage, rather than a score of the finished edit.</p>
                 <p className="mt-1 text-xs leading-relaxed text-[#53646F]">
                   {storyAssessment.source_moments_considered} source moments · {storyAssessment.clean_spoken_edit_points} clean speech edits · zero extra model calls
                 </p>
@@ -458,6 +470,7 @@ export function JobReviewControls({
                   >
                     <option value="standard">Standard frame</option>
                     <option value="punch_in">Punch in</option>
+                    {clip.duration >= 3 ? <option value="rhythmic_punch">Rhythmic punch · 2.5s beats</option> : null}
                     {recipe === "talking_head" ? <option value="strong_punch_in">Strong punch in</option> : null}
                     {clip.duration >= 2 ? <option value="slow_push_in">Slow push in</option> : null}
                     {clip.duration >= 2 ? <option value="slow_pull_out">Slow pull out</option> : null}
@@ -555,6 +568,14 @@ export function JobReviewControls({
         </div>
         <div className="mb-5 border-t border-[#D7D9D3] pt-4">
           <p className="font-mono text-xs font-bold text-[#173F5F] uppercase">Creative effects</p>
+          {finishing?.mode === "high_impact" ? <p className="mt-2 text-xs font-bold text-[#174D73]">High impact · {finishing.rhythmic_punch_beats?.length ?? 0} rhythmic picture changes · {plannedBroll.length} B-roll cutaways</p> : null}
+          {plannedBroll.length ? <div className="mt-3 space-y-2">
+            {plannedBroll.map((cue, index) => <div className="rounded-md bg-[#EFF6FA] p-3 text-xs text-[#53646F]" key={`${String(cue.asset_id)}-${index}`}>
+              <p className="font-bold text-[#173F5F]">{String(cue.source_name || "B-roll")} · {Number(cue.start_seconds).toFixed(1)}–{(Number(cue.start_seconds) + Number(cue.duration_seconds)).toFixed(1)}s</p>
+              <p className="mt-1">{String(cue.editorial_intent || "Picture-only cutaway")} · main speech continues</p>
+            </div>)}
+            <Button className="h-10 w-full" disabled={submitting !== undefined} onClick={() => void removeBroll()} type="button" variant="outline"><Trash2Icon className="size-4" />Remove B-roll &amp; render · zero AI</Button>
+          </div> : null}
           <p className="mt-2 text-xs leading-relaxed text-[#53646F]">
             This edit: {punchInCount} punch-ins · {cameraMoveCount} camera moves · {transitionCount} dips to black · {plannedEffects.length} sound or overlay cues.
             {" "}Other clip boundaries use hard cuts. Use the clip framing controls above to adjust a punch-in without an AI call.

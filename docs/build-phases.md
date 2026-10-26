@@ -28,6 +28,7 @@ This is the working plan for turning the Lenovo into a private media-editing app
 | 11 | Editorial workspace and brand system | Complete |
 | 12 | Product dashboard, access, budgets, and retention | Source complete; live acceptance pending |
 | 17A | Local rendered-quality reports with zero hosted AI usage | Source complete; live acceptance pending |
+| 18 | Optional High impact style, rhythmic framing, and picture-only B-roll | Source complete; live acceptance pending |
 
 The current improvement-loop increment is Phase 17A: inspect the rendered file and retain a versioned report without changing the edit. Planned follow-ups are targeted, reversible repairs for verified faults; budgeted AI review of story and delivery; and evaluating candidate editing preferences against saved examples and human ratings before adopting them. These follow-ups are not implemented by the report-only increment.
 

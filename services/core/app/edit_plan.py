@@ -1,17 +1,18 @@
 import hashlib
 import json
 import math
+import re
 from collections import defaultdict
 from copy import deepcopy
 from typing import Any, Literal, TypeAlias
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 
 from app.take_quality import validate_story_content
 
 
-EDIT_PLAN_SCHEMA_VERSION = "1.3"
+EDIT_PLAN_SCHEMA_VERSION = "1.4"
 MAX_PREVIEW_SECONDS = 60.0
 MAX_CLIPS = 24
 MAX_MONTAGE_CLIPS = 48
@@ -38,6 +39,7 @@ class EditClip(BaseModel):
         "strong_punch_in",
         "slow_push_in",
         "slow_pull_out",
+        "rhythmic_punch",
     ] = "standard"
     story_role: Literal["hook", "context", "development", "payoff", "reaction", "ending"] = "development"
     editorial_intent: str = Field(default="", max_length=180)
@@ -60,10 +62,31 @@ class CreativeEffectCue(BaseModel):
     purpose: Literal["hook", "transition", "emphasis", "reveal", "reaction", "payoff"] = "emphasis"
 
 
-class TalkingHeadEditPlan(BaseModel):
+class BrollCue(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal["1.0", "1.1", "1.2", "1.3"]
+    asset_id: UUID
+    media_kind: Literal["video", "image"]
+    source_in: float = Field(ge=0)
+    source_out: float = Field(ge=0)
+    start_seconds: float = Field(ge=0, le=60)
+    duration_seconds: float = Field(ge=0.5, le=4)
+    editorial_intent: str = Field(min_length=1, max_length=180)
+
+
+class _CompatibleEditPlan(BaseModel):
+    @model_serializer(mode="wrap")
+    def serialize_legacy_plan(self, handler: Any) -> dict[str, Any]:
+        document = handler(self)
+        if document.get("schema_version") != "1.4" and not document.get("broll"):
+            document.pop("broll", None)
+        return document
+
+
+class TalkingHeadEditPlan(_CompatibleEditPlan):
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal["1.0", "1.1", "1.2", "1.3", "1.4"]
     recipe: Literal["talking_head"]
     clips: list[EditClip] = Field(min_length=1, max_length=MAX_CLIPS)
     caption_style: Literal["clean_blue_v1"]
@@ -76,6 +99,7 @@ class TalkingHeadEditPlan(BaseModel):
     caption_position: Literal["lower_safe", "middle", "upper"] = "lower_safe"
     caption_timing_offset_seconds: float = Field(default=0.0, ge=-0.5, le=0.5)
     effects: list[CreativeEffectCue] = Field(default_factory=list, max_length=8)
+    broll: list[BrollCue] = Field(default_factory=list, max_length=8)
 
 
 class MontageClip(BaseModel):
@@ -93,6 +117,7 @@ class MontageClip(BaseModel):
         "punch_in",
         "slow_push_in",
         "slow_pull_out",
+        "rhythmic_punch",
     ] = "standard"
     include_source_audio: bool = False
     source_audio_gain_db: float = Field(default=0.0, ge=-12.0, le=12.0)
@@ -100,10 +125,10 @@ class MontageClip(BaseModel):
     editorial_intent: str = Field(default="", max_length=180)
 
 
-class MontageEditPlan(BaseModel):
+class MontageEditPlan(_CompatibleEditPlan):
     model_config = ConfigDict(extra="forbid")
 
-    schema_version: Literal["1.0", "1.1", "1.2", "1.3"]
+    schema_version: Literal["1.0", "1.1", "1.2", "1.3", "1.4"]
     recipe: Literal["montage"]
     clips: list[MontageClip] = Field(min_length=2, max_length=MAX_MONTAGE_CLIPS)
     audio_preset: Literal["montage_mix_v1"]
@@ -115,6 +140,7 @@ class MontageEditPlan(BaseModel):
     caption_position: Literal["lower_safe", "middle", "upper"] = "lower_safe"
     caption_timing_offset_seconds: float = Field(default=0.0, ge=-0.5, le=0.5)
     effects: list[CreativeEffectCue] = Field(default_factory=list, max_length=8)
+    broll: list[BrollCue] = Field(default_factory=list, max_length=8)
 
 
 EditPlan: TypeAlias = TalkingHeadEditPlan | MontageEditPlan
@@ -171,7 +197,15 @@ def derive_duration_variant(plan: EditPlan, target_seconds: int) -> EditPlan:
         cue.duration_seconds = min(cue.duration_seconds, variant_duration - cue.start_seconds)
         if cue.duration_seconds >= 0.1:
             effects.append(cue)
-    return plan.model_copy(update={"clips": clips, "effects": effects}, deep=True)
+    broll = []
+    for source_cue in plan.broll:
+        duration = min(source_cue.duration_seconds, variant_duration - source_cue.start_seconds)
+        if duration >= 0.5:
+            updates = {"duration_seconds": duration}
+            if source_cue.media_kind == "video":
+                updates["source_out"] = source_cue.source_in + duration
+            broll.append(source_cue.model_copy(update=updates, deep=True))
+    return plan.model_copy(update={"clips": clips, "effects": effects, "broll": broll}, deep=True)
 
 
 def source_word_gaps(
@@ -347,8 +381,20 @@ def apply_timeline_adjustments(
                         "duration_seconds": duration,
                     }, deep=True))
                 break
+    broll = []
+    for cue in plan.broll:
+        for old_start, old_end, new_start in mapping:
+            if old_start <= cue.start_seconds < old_end:
+                duration = round(min(cue.duration_seconds, old_end - cue.start_seconds), 3)
+                if duration >= 0.5:
+                    updates = {"start_seconds": round(new_start + cue.start_seconds - old_start, 3),
+                               "duration_seconds": duration}
+                    if cue.media_kind == "video":
+                        updates["source_out"] = cue.source_in + duration
+                    broll.append(cue.model_copy(update=updates, deep=True))
+                break
     return plan.model_copy(
-        update={"clips": clips, "effects": effects,
+        update={"clips": clips, "effects": effects, "broll": broll,
                 "editorial_summary": f"{plan.editorial_summary} Adjusted in the local editorial workspace."},
         deep=True,
     )
@@ -369,6 +415,20 @@ EFFECT_CUE_JSON_SCHEMA: dict[str, Any] = {
     },
     "required": ["asset_id", "start_seconds", "duration_seconds", "position", "intensity", "purpose"],
     "additionalProperties": False,
+}
+
+BROLL_CUE_JSON_SCHEMA: dict[str, Any] = {
+    "type": "object", "additionalProperties": False,
+    "properties": {
+        "asset_id": {"type": "string", "format": "uuid"},
+        "media_kind": {"type": "string", "enum": ["video", "image"]},
+        "source_in": {"type": "number", "minimum": 0},
+        "source_out": {"type": "number", "minimum": 0},
+        "start_seconds": {"type": "number", "minimum": 0, "maximum": 60},
+        "duration_seconds": {"type": "number", "minimum": 0.5, "maximum": 4},
+        "editorial_intent": {"type": "string", "minLength": 1, "maxLength": 180},
+    },
+    "required": ["asset_id", "media_kind", "source_in", "source_out", "start_seconds", "duration_seconds", "editorial_intent"],
 }
 
 EDIT_PLAN_JSON_SCHEMA: dict[str, Any] = {
@@ -396,6 +456,7 @@ EDIT_PLAN_JSON_SCHEMA: dict[str, Any] = {
                             "strong_punch_in",
                             "slow_push_in",
                             "slow_pull_out",
+                            "rhythmic_punch",
                         ],
                     },
                     "story_role": {
@@ -427,6 +488,7 @@ EDIT_PLAN_JSON_SCHEMA: dict[str, Any] = {
         "caption_position": {"type": "string", "enum": ["lower_safe", "middle", "upper"]},
         "caption_timing_offset_seconds": {"type": "number", "minimum": -0.5, "maximum": 0.5},
         "effects": {"type": "array", "maxItems": 8, "items": EFFECT_CUE_JSON_SCHEMA},
+        "broll": {"type": "array", "maxItems": 8, "items": BROLL_CUE_JSON_SCHEMA},
     },
     "required": [
         "schema_version",
@@ -442,6 +504,7 @@ EDIT_PLAN_JSON_SCHEMA: dict[str, Any] = {
         "caption_position",
         "caption_timing_offset_seconds",
         "effects",
+        "broll",
     ],
     "additionalProperties": False,
 }
@@ -468,7 +531,7 @@ MONTAGE_EDIT_PLAN_JSON_SCHEMA: dict[str, Any] = {
                     "transition": {"type": "string", "enum": ["cut", "dip_to_black"]},
                     "visual_preset": {
                         "type": "string",
-                        "enum": ["standard", "punch_in", "slow_push_in", "slow_pull_out"],
+                        "enum": ["standard", "punch_in", "slow_push_in", "slow_pull_out", "rhythmic_punch"],
                     },
                     "include_source_audio": {"type": "boolean"},
                     "source_audio_gain_db": {
@@ -508,6 +571,7 @@ MONTAGE_EDIT_PLAN_JSON_SCHEMA: dict[str, Any] = {
         "caption_position": {"type": "string", "enum": ["lower_safe", "middle", "upper"]},
         "caption_timing_offset_seconds": {"type": "number", "minimum": -0.5, "maximum": 0.5},
         "effects": {"type": "array", "maxItems": 8, "items": EFFECT_CUE_JSON_SCHEMA},
+        "broll": {"type": "array", "maxItems": 8, "items": BROLL_CUE_JSON_SCHEMA},
     },
     "required": [
         "schema_version",
@@ -522,6 +586,7 @@ MONTAGE_EDIT_PLAN_JSON_SCHEMA: dict[str, Any] = {
         "caption_position",
         "caption_timing_offset_seconds",
         "effects",
+        "broll",
     ],
     "additionalProperties": False,
 }
@@ -551,11 +616,18 @@ def repair_predictable_plan_defaults(
 
     repaired = deepcopy(document)
     repairs: list[str] = []
-    if complete_creative_defaults and (creative_direction or {}).get("edit_style") == "energetic":
+    if complete_creative_defaults and (creative_direction or {}).get("edit_style") in {"energetic", "high_impact"}:
         # Only complete newly generated plans. Exact re-renders and local
         # revisions keep their saved transitions. Never split or retime a cut.
         if repaired.get("recipe") == "talking_head":
             parsed = TalkingHeadEditPlan.model_validate(repaired)
+            if (creative_direction or {}).get("edit_style") == "high_impact":
+                for index, clip in enumerate(parsed.clips):
+                    intentional_hold = clip.story_role == "reaction" or re.search(
+                        r"\b(hold|steady|stable|breathe|no zoom|stay wide)\b", clip.editorial_intent, re.IGNORECASE)
+                    if clip.visual_preset == "standard" and clip.source_out - clip.source_in >= 5 and not intentional_hold:
+                        repaired["clips"][index]["visual_preset"] = "rhythmic_punch"
+                        repairs.append("added_rhythmic_punch_without_changing_dialogue")
             if edit_plan_duration(parsed) >= 20 and len(parsed.clips) > 1 and all(
                 clip.transition == "cut" for clip in parsed.clips
             ):
@@ -570,6 +642,9 @@ def repair_predictable_plan_defaults(
                 repaired["clips"][chosen]["transition"] = "dip_to_black"
                 repairs.append("added_required_transition_at_existing_story_boundary")
     requested_music = (creative_direction or {}).get("music_mode") or "none"
+    if (creative_direction or {}).get("broll_enabled") is False and repaired.get("broll"):
+        repaired["broll"] = []
+        repairs.append("removed_broll_at_user_request")
     tracks = music_tracks or []
     if "effects" not in repaired:
         repaired["effects"] = []
@@ -699,6 +774,41 @@ def protect_spoken_boundaries(plan: EditPlan, assets: list[dict[str, Any]]) -> E
     return protected
 
 
+def _validate_broll(plan: EditPlan, assets: list[dict[str, Any]], duration: float, direction: dict[str, Any]) -> None:
+    if direction.get("broll_enabled") is False:
+        plan.broll = []
+    if not plan.broll:
+        return
+    if plan.schema_version != "1.4":
+        raise ValueError("B-roll overlays require edit-plan schema 1.4")
+    if direction.get("edit_style") != "high_impact":
+        raise ValueError("B-roll overlays require the High impact style")
+    inventory = {str(asset["asset_id"]): asset for asset in assets}
+    previous_end = 0.0
+    covered = 0.0
+    for cue in sorted(plan.broll, key=lambda item: item.start_seconds):
+        if not all(math.isfinite(value) for value in (cue.source_in, cue.source_out, cue.start_seconds, cue.duration_seconds)):
+            raise ValueError("B-roll timecodes must be finite")
+        asset = inventory.get(str(cue.asset_id))
+        if asset is None:
+            raise ValueError("B-roll asset does not belong to this job")
+        image = str(asset.get("mime_type") or "").startswith("image/")
+        if cue.media_kind == "image":
+            if not image or cue.source_in != 0 or cue.source_out != 0:
+                raise ValueError("image B-roll requires an uploaded image and zero source timecodes")
+        elif image or not asset.get("has_video") or abs(cue.source_out - cue.source_in - cue.duration_seconds) > 0.01:
+            raise ValueError("video B-roll duration must match an uploaded video source range")
+        elif cue.source_out > float(asset.get("duration_seconds") or 0) + 0.01:
+            raise ValueError("B-roll source range exceeds the uploaded video")
+        end = cue.start_seconds + cue.duration_seconds
+        if cue.start_seconds < previous_end - 0.001 or end > duration + 0.01:
+            raise ValueError("B-roll overlays cannot overlap or extend beyond the edit")
+        previous_end = end
+        covered += cue.duration_seconds
+    if covered > duration * 0.6 + 0.01:
+        raise ValueError("B-roll may cover at most 60 percent of the main story")
+
+
 def _validate_effect_cues(
     plan: EditPlan,
     total_duration: float,
@@ -805,9 +915,9 @@ def validate_edit_plan(
         raise ValueError("the calm style does not permit strong punch-ins")
     if strong_punches > 5:
         raise ValueError("an edit may contain at most five strong punch-ins")
-    if style == "energetic" and total_duration >= 8 and visual_emphasis_count == 0:
+    if style in {"energetic", "high_impact"} and total_duration >= 8 and visual_emphasis_count == 0:
         raise ValueError("the energetic style requires at least one bounded visual emphasis")
-    if style == "energetic" and total_duration >= 20 and transition_count == 0:
+    if style in {"energetic", "high_impact"} and total_duration >= 20 and transition_count == 0:
         raise ValueError("an energetic edit of 20 seconds or longer requires a transition beat")
 
     tracks = {str(track["track_id"]): track for track in music_tracks or []}
@@ -835,6 +945,7 @@ def validate_edit_plan(
             raise ValueError("the edit plan did not use the specifically selected music track")
 
     _validate_effect_cues(plan, total_duration, direction, creative_effects or [])
+    _validate_broll(plan, assets, total_duration, direction)
 
     for asset_id, asset_ranges in ranges.items():
         ordered = sorted(asset_ranges)
@@ -968,6 +1079,7 @@ def validate_montage_plan(
         if selected_track_id and track_id != str(selected_track_id):
             raise ValueError("the montage did not use the specifically selected music track")
     _validate_effect_cues(plan, total_duration, direction, creative_effects or [])
+    _validate_broll(plan, assets, total_duration, direction)
     return plan
 
 
@@ -989,7 +1101,7 @@ def deterministic_plan(
     if duration < 0.25:
         raise ValueError("the source video is too short to edit")
     selected_track = (music_tracks or [None])[0] if music_mode != "none" else None
-    if edit_style == "energetic" and duration >= 4:
+    if edit_style in {"energetic", "high_impact"} and duration >= 4:
         split = round(duration / 2, 3)
         clips = [
             EditClip(
@@ -1122,7 +1234,7 @@ def deterministic_montage_plan(
                     "slow_push_in"
                     if is_image
                     else "punch_in"
-                    if edit_style == "energetic" and index % 3 == 1
+                    if edit_style in {"energetic", "high_impact"} and index % 3 == 1
                     else "standard"
                 ),
                 include_source_audio=bool(asset.get("has_audio")) and index % 5 == 0,

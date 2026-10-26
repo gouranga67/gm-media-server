@@ -37,6 +37,10 @@ from app.media_analysis import (
     video_probe_hdr_mode,
 )
 from app.quality_review import review_rendered_video
+from app.finishing_renderer import (
+    append_broll_filters, broll_input_arguments, finishing_manifest,
+    public_broll_manifest, rhythmic_zoom, selected_broll,
+)
 
 
 def montage_caption_events(
@@ -105,6 +109,8 @@ def _video_filter(
         zoom = f"min(1+0.10*on/{final_frame},1.10)"
     elif preset == "slow_pull_out":
         zoom = f"max(1.10-0.10*on/{final_frame},1)"
+    elif preset == "rhythmic_punch":
+        zoom = rhythmic_zoom(fps)
     else:
         zoom = ""
 
@@ -328,6 +334,11 @@ def _render(
         context, plan, settings, len(plan.clips) + (1 if music_source is not None else 0)
     )
     common.extend(effect_input_arguments(effect_sources))
+    broll_sources = selected_broll(context, plan, settings,
+        len(plan.clips) + (1 if music_source is not None else 0) + len(effect_sources))
+    common.extend(broll_input_arguments(broll_sources))
+    if broll_sources:
+        common.extend(["-t", f"{sum(float(clip.duration) for clip in plan.clips):.3f}"])
     probe_cache: dict[Path, str | None] = {}
     hdr_modes: list[str | None] = []
     for source, clip in zip(render_sources, plan.clips, strict=True):
@@ -342,7 +353,7 @@ def _render(
     common.extend(
         [
             "-filter_complex",
-            append_effect_filters(_filter_graph(
+            append_effect_filters(append_broll_filters(_filter_graph(
                 plan,
                 inventory,
                 width=width,
@@ -351,7 +362,7 @@ def _render(
                 music_input_index=len(plan.clips) if music_source is not None else None,
                 captions_path=captions_path,
                 hdr_modes=hdr_modes,
-            ), effect_sources, width=width, height=height,
+            ), broll_sources, width=width, height=height, fps=30), effect_sources, width=width, height=height,
                 total_duration=sum(float(clip.duration) for clip in plan.clips)),
             "-map",
             "[vout]",
@@ -464,6 +475,8 @@ def _manifest(
         "story_assessment": context.get("story_spine", {}).get("engagement_assessment", {}),
         "music": music,
         "creative_effects": public_effect_manifest(effects),
+        "broll": public_broll_manifest(context, plan),
+        "finishing": finishing_manifest(context, plan),
         "render": {
             "width": width,
             "height": height,

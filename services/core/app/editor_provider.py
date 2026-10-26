@@ -442,6 +442,25 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
             "reaction, or payoff; match the asset's reviewed purpose, keep cues within the finished timeline, "
             "and prefer restraint over decoration. Subtle permits at most 2 cues, social 4, and meme_heavy 8."
         )
+    finishing_instruction = (
+        "High impact finishing: assemble a coherent dialogue story first. Then aim for a purposeful picture or "
+        "sound change about every 2–3 seconds, allowing important lines and reactions to breathe. "
+        "For long talking shots, rhythmic_punch alternates standard and 12% punch-in framing every 2.5s "
+        "without cutting the audio. Mix that with ordinary cuts, static emphasis, and suitable sound accents; "
+        "Keep reaction holds and intentional breathing room steady; mark such a shot with hold, steady, or breathe in editorial_intent. "
+        "do not put a sound on every beat. When effects are enabled, select reviewed clicks/dings/pops for real "
+        "reveals or emphasis, whooshes for movement, and comedic sounds only for earned reactions. Respect cue limits. "
+        "Use broll for 0.5–4s picture-only cutaways to relevant uploaded video or image assets. Main speech continues "
+        "unchanged under broll; never replace dialogue clips just to show a product close-up. Give each overlay a "
+        "source-backed editorial_intent. Do not infer an object from a generic visual_window or invent relevant footage. "
+        "Overlays must not overlap, must stay inside the final edit, and may cover at most 60% of it. "
+        "Image overlays use zero source timecodes; video duration must equal source_out-source_in. Return [] if no "
+        "appropriate B-roll is supplied.\n\n"
+        if public.get("job", {}).get("edit_style") == "high_impact"
+        else "Return broll as []; picture overlays are enabled only by the High impact style.\n\n"
+    )
+    if public.get("job", {}).get("broll_enabled") is False:
+        finishing_instruction += "The user removed B-roll. Return broll as [] and preserve the main speech.\n\n"
     content: list[dict[str, Any]] = [
         {
             "type": "input_text",
@@ -452,6 +471,7 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
                 + learning_instruction
                 + revision_instruction
                 + correction_instruction
+                + finishing_instruction
                 + json.dumps(public, ensure_ascii=False, separators=(",", ":"))
             ),
         }

@@ -28,6 +28,10 @@ from app.media_analysis import (
     video_probe_hdr_mode,
 )
 from app.quality_review import review_rendered_video
+from app.finishing_renderer import (
+    append_broll_filters, broll_input_arguments, finishing_manifest,
+    public_broll_manifest, rhythmic_zoom, selected_broll,
+)
 
 
 PREVIEW_WIDTH = 540
@@ -334,6 +338,8 @@ def _clip_video_filter(
         zoom = f"min(1+0.12*on/{total_frames},1.12)"
     elif visual_preset == "slow_pull_out":
         zoom = f"max(1.12-0.12*on/{total_frames},1)"
+    elif visual_preset == "rhythmic_punch":
+        zoom = rhythmic_zoom(frames_per_second)
     else:
         zoom = ""
     if zoom:
@@ -471,6 +477,7 @@ def _render_video(
     final_quality: bool = False,
     music_source: Path | None = None,
     effect_sources: list[dict[str, Any]] | None = None,
+    broll_sources: list[dict[str, Any]] | None = None,
 ) -> str:
     common = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-y"]
     for source, source_in, source_out in sources:
@@ -481,6 +488,10 @@ def _render_video(
         common.extend(["-stream_loop", "-1", "-i", str(music_source)])
     effects = effect_sources or []
     common.extend(effect_input_arguments(effects))
+    overlays = broll_sources or []
+    common.extend(broll_input_arguments(overlays))
+    if overlays:
+        common.extend(["-t", f"{sum(float(clip.source_out - clip.source_in) for clip in plan.clips):.3f}"])
     probe_cache: dict[Path, str | None] = {}
     hdr_modes: list[str | None] = []
     for source, _, _ in sources:
@@ -490,7 +501,7 @@ def _render_video(
     common.extend(
         [
             "-filter_complex",
-            append_effect_filters(_ffmpeg_filter(
+            append_effect_filters(append_broll_filters(_ffmpeg_filter(
                 plan,
                 captions_path,
                 width=width,
@@ -498,7 +509,7 @@ def _render_video(
                 frames_per_second=frames_per_second,
                 music_input_index=len(sources) if music_source is not None else None,
                 hdr_modes=hdr_modes,
-            ), effects, width=width, height=height,
+            ), overlays, width=width, height=height, fps=frames_per_second), effects, width=width, height=height,
                 total_duration=sum(float(clip.source_out - clip.source_in) for clip in plan.clips)),
             "-map",
             "[vout]",
@@ -622,6 +633,8 @@ def render_edit_preview(
     effect_sources = selected_effects(
         context, plan, settings, len(sources) + (1 if music_source is not None else 0)
     )
+    broll_sources = selected_broll(context, plan, settings,
+        len(sources) + (1 if music_source is not None else 0) + len(effect_sources))
     project_id = str(context["job"]["project_id"])
     job_id = str(context["job"]["id"])
     output_directory = settings.media_root / "exports" / project_id / job_id / f"v{version}"
@@ -655,6 +668,7 @@ def render_edit_preview(
         height=height,
         music_source=music_source,
         effect_sources=effect_sources,
+        broll_sources=broll_sources,
     )
 
     document = plan.model_dump(mode="json")
@@ -683,6 +697,8 @@ def render_edit_preview(
         "story_assessment": context.get("story_spine", {}).get("engagement_assessment", {}),
         "music": music_metadata,
         "creative_effects": public_effect_manifest(effect_sources),
+        "broll": public_broll_manifest(context, plan),
+        "finishing": finishing_manifest(context, plan),
         "brand_kit": context.get("brand_kit"),
         "caption_corrections": caption_corrections or [],
         "captions": {
@@ -819,6 +835,8 @@ def render_final_delivery(
     effect_sources = selected_effects(
         context, plan, settings, len(sources) + (1 if music_source is not None else 0)
     )
+    broll_sources = selected_broll(context, plan, settings,
+        len(sources) + (1 if music_source is not None else 0) + len(effect_sources))
     project_id = str(context["job"]["project_id"])
     job_id = str(context["job"]["id"])
     output_directory = settings.media_root / "deliveries" / project_id / job_id / f"v{version}"
@@ -861,6 +879,7 @@ def render_final_delivery(
         final_quality=True,
         music_source=music_source,
         effect_sources=effect_sources,
+        broll_sources=broll_sources,
     )
     technical_probe = probe_media(video_path, settings.analysis_command_timeout_seconds)
     video_stream = next(
@@ -937,6 +956,8 @@ def render_final_delivery(
         "story_assessment": context.get("story_spine", {}).get("engagement_assessment", {}),
         "music": music_metadata,
         "creative_effects": public_effect_manifest(effect_sources),
+        "broll": public_broll_manifest(context, plan),
+        "finishing": finishing_manifest(context, plan),
         "brand_kit": context.get("brand_kit"),
         "tools": {
             "gm_studio_core": "0.1.0",

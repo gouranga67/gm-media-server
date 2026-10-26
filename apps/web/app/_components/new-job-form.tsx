@@ -142,6 +142,11 @@ const EDIT_STYLE_OPTIONS: ReadonlyArray<{
     label: "Calm",
     description: "Longer thoughts with subtle push-ins and pull-outs.",
   },
+  {
+    value: "high_impact",
+    label: "High impact",
+    description: "Picture or sound accents around every 2–3 seconds, with punch-ins and relevant B-roll over continuous speech.",
+  },
 ];
 
 const MUSIC_OPTIONS: ReadonlyArray<{
@@ -1384,6 +1389,7 @@ function NewJobFormContent() {
                       setSelectedMusicTrackId(null);
                       setTargetPlatform(profile.target_platform);
                       if (!creativeAssets.some((asset) => asset.allowed_platforms.includes("all_social") || asset.allowed_platforms.includes(profile.target_platform))) setEffectLevel("off");
+                      else if (profile.edit_style === "high_impact" && effectLevel === "off" && privacyMode !== "local_only") setEffectLevel("social");
                       setOutputAspect(profile.output_aspect);
                       setReasoningEffort(profile.reasoning_effort);
                       setBrandKitId(profile.brand_kit_id);
@@ -1590,7 +1596,10 @@ function NewJobFormContent() {
                     key={option.value}
                     label={option.label}
                     name="edit-style"
-                    onChange={() => setEditStyle(option.value)}
+                    onChange={() => {
+                      setEditStyle(option.value);
+                      if (option.value === "high_impact" && effectLevel === "off" && compatibleEffectCount > 0 && privacyMode !== "local_only") setEffectLevel("social");
+                    }}
                     selected={editStyle === option.value}
                     value={option.value}
                   />
@@ -1599,6 +1608,7 @@ function NewJobFormContent() {
             </fieldset>
             <fieldset className="space-y-3" disabled={formLocked}>
               <legend className="text-xs font-bold text-[#173F5F]">BACKING MUSIC</legend>
+              {editStyle === "high_impact" ? <p className="text-xs leading-relaxed text-[#53646F]">Include product close-ups or relevant scene footage among your selected media for B-roll. Your speech continues underneath. Sounds and stickers still follow your Creative effects setting below.</p> : null}
               <label className="block space-y-2 text-xs font-bold text-[#173F5F]" htmlFor="target-platform">
                 TARGET PLATFORM
                 <select

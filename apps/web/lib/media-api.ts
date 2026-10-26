@@ -1,5 +1,5 @@
 export type PrivacyMode = "hybrid" | "text_only" | "local_only";
-export type EditStyle = "clean" | "energetic" | "calm";
+export type EditStyle = "clean" | "energetic" | "calm" | "high_impact";
 export type MusicMode = "none" | "subtle" | "present";
 export type EffectLevel = "off" | "subtle" | "social" | "meme_heavy";
 export type TargetDuration = 15 | 20 | 30 | 45 | 60;
@@ -266,6 +266,7 @@ export type EditRun = {
     timing_offset_seconds?: number;
   }>;
   readonly effects_enabled: boolean | null;
+  readonly broll_enabled?: boolean | null;
   readonly approved_at: string | null;
   readonly preview_available: boolean;
   readonly manifest: Record<string, unknown>;
@@ -336,7 +337,7 @@ export type EditorialClip = {
   readonly source_out: number;
   readonly duration: number;
   readonly transition: string;
-  readonly visual_preset: "standard" | "punch_in" | "strong_punch_in" | "slow_push_in" | "slow_pull_out";
+  readonly visual_preset: "standard" | "punch_in" | "strong_punch_in" | "slow_push_in" | "slow_pull_out" | "rhythmic_punch";
   readonly include_source_audio: boolean;
   readonly source_audio_gain_db: number;
   readonly transcript_excerpt: string;
@@ -1101,6 +1102,7 @@ export function requestRevision(
     };
     readonly lockedElements?: readonly string[];
     readonly effectsEnabled?: boolean;
+    readonly brollEnabled?: boolean;
   },
 ) {
   return apiRequest<EditRun>(`jobs/${jobId}/revisions`, {
@@ -1113,6 +1115,7 @@ export function requestRevision(
       caption_settings: input.captionSettings,
       locked_elements: input.lockedElements ?? [],
       effects_enabled: input.effectsEnabled,
+      broll_enabled: input.brollEnabled,
     }),
   });
 }

@@ -866,6 +866,8 @@ def process_one_edit(state: WorkerState) -> bool:
     state.active_edit_run_id = run_id
     try:
         context = build_editor_context(run["job_id"], include_internal_paths=True)
+        if run.get("broll_enabled") is False:
+            context["job"]["broll_enabled"] = False
         if not context["ready_for_editing"]:
             raise RuntimeError("source analysis is not ready")
 
@@ -976,6 +978,8 @@ def process_one_edit(state: WorkerState) -> bool:
                     )
                 if run.get("effects_enabled") is False:
                     proposed = proposed.model_copy(update={"effects": []}, deep=True)
+                if run.get("broll_enabled") is False:
+                    proposed = proposed.model_copy(update={"broll": []}, deep=True)
                 provenance = {
                     "provider": (
                         "local_timeline"
@@ -984,6 +988,8 @@ def process_one_edit(state: WorkerState) -> bool:
                         if caption_settings
                         else "local_effect_controls"
                         if run.get("effects_enabled") is False
+                        else "local_broll_controls"
+                        if run.get("broll_enabled") is False
                         else "local_caption"
                     ),
                     "model": "deterministic_editor_v1",
@@ -994,6 +1000,8 @@ def process_one_edit(state: WorkerState) -> bool:
                 proposed, provenance = create_edit_plan(context)
             request_kind = "revision" if run.get("based_on_run_id") else "initial_plan"
             _record_plan_usage(run, provenance, request_kind)
+            if run.get("broll_enabled") is False:
+                proposed = proposed.model_copy(update={"broll": []}, deep=True)
             revision_text = str(run.get("revision_note") or "").lower()
             check_story = context["project"]["privacy_mode"] != "local_only" and not deterministic_revision and (
                 not run.get("based_on_run_id") or run.get("revision_mode") == "rebuild_story"
@@ -1094,6 +1102,16 @@ def process_one_edit(state: WorkerState) -> bool:
             provider = provenance["provider"]
             model = provenance["model"]
             reasoning_effort = provenance.get("reasoning_effort")
+            if context["job"].get("edit_style") == "high_impact" and not deterministic_revision:
+                finished_document, finishing_changes = repair_predictable_plan_defaults(
+                    plan.model_dump(mode="json"), creative_direction=context["job"],
+                    music_tracks=context["music_library"], creative_effects=context["creative_effect_library"],
+                    previous_plan=(context.get("revision") or {}).get("previous_plan"), complete_creative_defaults=True)
+                if finishing_changes:
+                    plan = validate_edit_plan(finished_document, context["assets"],
+                        allow_post_copy=bool(context["project"]["ai_copy_allowed"]),
+                        creative_direction=context["job"], music_tracks=context["music_library"],
+                        creative_effects=context["creative_effect_library"])
             _persist_generated_plan(run, plan, provenance)
 
         if run.get("based_on_run_id"):
