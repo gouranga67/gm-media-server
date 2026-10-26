@@ -30,6 +30,12 @@ def main() -> None:
         overlays = manifest.get("broll") or []
         if len(overlays) > 8 or any(item.get("source_audio_used") is not False for item in overlays):
             raise RuntimeError("B-roll must remain a bounded picture-only layer")
+        images = [cue for cue in overlays if cue.get("media_kind") == "image"]
+        if finishing.get("image_broll_framing") == "contain_card_v1" and any(
+            cue.get("framing") != "contain_card_v1" or cue.get("source_cropped") is not False
+            or cue.get("alpha_preserved") is not True for cue in images
+        ):
+            raise RuntimeError("still-image B-roll must retain the full image and PNG alpha")
         timeline = sum(float(clip["duration"]) for clip in review.get("editorial_timeline", []))
         previous_end = 0.0
         for cue in sorted(overlays, key=lambda item: item["start_seconds"]):
@@ -41,7 +47,9 @@ def main() -> None:
             raise RuntimeError("B-roll covers too much of the main story")
         print(json.dumps({"status": "passed", "job_id": job["id"], "version": run["version"],
             "rhythmic_picture_changes": len(finishing.get("rhythmic_punch_beats") or []),
-            "broll_cutaways": len(overlays), "creative_effects": len(manifest.get("creative_effects") or []),
+            "broll_cutaways": len(overlays),
+            "contained_image_cutaways": sum(cue.get("framing") == "contain_card_v1" for cue in images),
+            "image_broll_framing": finishing.get("image_broll_framing", "legacy_center_fill"), "creative_effects": len(manifest.get("creative_effects") or []),
             "dialogue_timeline_preserved": True, "additional_finishing_model_calls": 0,
             "job_tokens": (review.get("usage") or {}).get("total_tokens", 0),
             "notice": "Checks the finishing plan and manifest. Review relevance, framing, and the finished story by watching the reel."}, indent=2))

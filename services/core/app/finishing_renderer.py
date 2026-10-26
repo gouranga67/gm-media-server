@@ -22,6 +22,7 @@ def selected_broll(context: dict[str, Any], plan: EditPlan, settings: Settings, 
         source = resolve_internal_asset_source(settings, asset) if cue.media_kind == "image" else resolve_internal_asset_render_source(settings, asset)
         selected.append({"cue": cue, "path": source, "input_index": first_input_index + index,
                          "source_name": asset.get("source_name"), "sha256": asset.get("sha256"),
+                         "caption_position": plan.caption_position,
                          "hdr_mode": video_probe_hdr_mode(probe_media(source, settings.analysis_command_timeout_seconds))
                          if cue.media_kind == "video" else None})
     return selected
@@ -36,6 +37,22 @@ def broll_input_arguments(sources: list[dict[str, Any]]) -> list[str]:
         else:
             arguments += ["-ss", f"{cue.source_in:.3f}", "-t", f"{cue.duration_seconds:.3f}", "-i", str(source["path"])]
     return arguments
+
+
+def image_broll_layout(width: int, height: int, caption_position: str = "lower_safe") -> dict[str, int]:
+    """A contained still card clear of the chosen caption band, in square pixels."""
+    vertical = height > width
+    height_ratio, center_y = (0.48, 0.36) if vertical else (0.62, 0.38)
+    if caption_position == "upper":
+        height_ratio, center_y = (0.40, 0.53) if vertical else (0.50, 0.62)
+    elif caption_position == "middle":
+        height_ratio, center_y = 0.30, 0.25
+    # Even bounds keep chroma subsampling stable at preview and export sizes.
+    return {
+        "max_width": max(2, int(width * 0.90) // 2 * 2),
+        "max_height": max(2, int(height * height_ratio) // 2 * 2),
+        "center_y": round(height * center_y),
+    }
 
 
 def append_broll_filters(graph: str, sources: list[dict[str, Any]], *, width: int, height: int, fps: int) -> str:
@@ -54,17 +71,39 @@ def append_broll_filters(graph: str, sources: list[dict[str, Any]], *, width: in
     for index, source in enumerate(sources):
         cue = source["cue"]
         normalise = hdr_to_sdr_filter(source["hdr_mode"]) + "," if source.get("hdr_mode") else ""
+        end = cue.start_seconds + cue.duration_seconds
+        active = f"gte(t,{cue.start_seconds:.3f})*lt(t,{end:.3f})"
+        if cue.media_kind == "image":
+            layout = image_broll_layout(width, height, source.get("caption_position", "lower_safe"))
+            # A review, screenshot or still must retain all four edges. Do not
+            # inherit a video's center-fill crop or flatten PNG alpha to YUV.
+            sizing = (
+                f"scale={layout['max_width']}:{layout['max_height']}:"
+                "force_original_aspect_ratio=decrease:force_divisible_by=2,"
+                "setsar=1,format=rgba,"
+            )
+            base = f"brollbackdrop{index}"
+            parts.append(
+                f"[brollbase{index}]drawbox=x=0:y=0:w=iw:h=ih:"
+                f"color=black@0.55:t=fill:enable='{active}'[{base}]"
+            )
+            position = f"x=(W-w)/2:y={layout['center_y']}-h/2"
+        else:
+            sizing = (
+                f"scale={width}:{height}:force_original_aspect_ratio=increase,"
+                f"crop={width}:{height},setsar=1,format=yuv420p,"
+            )
+            base = f"brollbase{index}"
+            position = "x=0:y=0"
         parts.append(
-            f"[{source['input_index']}:v:0]{normalise}"
-            f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},"
-            f"setsar=1,fps={fps},tpad=stop_mode=clone:stop_duration={cue.duration_seconds:.3f},"
-            f"trim=duration={cue.duration_seconds:.3f},format=yuv420p,"
+            f"[{source['input_index']}:v:0]{normalise}{sizing}"
+            f"fps={fps},tpad=stop_mode=clone:stop_duration={cue.duration_seconds:.3f},"
+            f"trim=duration={cue.duration_seconds:.3f},"
             f"setpts=PTS-STARTPTS+{cue.start_seconds:.3f}/TB[brollpicture{index}]"
         )
-        end = cue.start_seconds + cue.duration_seconds
         parts.append(
-            f"[brollbase{index}][brollpicture{index}]overlay=x=0:y=0:"
-            f"enable='gte(t,{cue.start_seconds:.3f})*lt(t,{end:.3f})':"
+            f"[{base}][brollpicture{index}]overlay={position}:"
+            f"enable='{active}':"
             f"eof_action=pass:repeatlast=0[brollbase{index + 1}]"
         )
     parts.append(f"[brollbase{len(sources)}]{captions or 'null'}[vout]")
@@ -74,7 +113,11 @@ def append_broll_filters(graph: str, sources: list[dict[str, Any]], *, width: in
 def public_broll_manifest(context: dict[str, Any], plan: EditPlan) -> list[dict[str, Any]]:
     inventory = {str(asset["asset_id"]): asset for asset in context["assets"]}
     return [{**cue.model_dump(mode="json"), "source_name": inventory[str(cue.asset_id)].get("source_name"),
-             "sha256": inventory[str(cue.asset_id)].get("sha256"), "source_audio_used": False}
+             "sha256": inventory[str(cue.asset_id)].get("sha256"), "source_audio_used": False,
+             "framing": "contain_card_v1" if cue.media_kind == "image" else "center_fill",
+             "source_cropped": cue.media_kind != "image",
+             "alpha_preserved": cue.media_kind == "image",
+             "caption_position": plan.caption_position}
             for cue in plan.broll]
 
 
@@ -93,6 +136,7 @@ def finishing_manifest(context: dict[str, Any], plan: EditPlan) -> dict[str, Any
         timeline += duration
     return {"mode": context["job"].get("edit_style"), "target_visual_beat_seconds": 2.5,
             "rhythmic_punch_beats": beats, "broll_count": len(plan.broll),
+            "image_broll_framing": "contain_card_v1",
             "creative_effect_count": len(plan.effects), "dialogue_timeline_preserved": True,
             "broll_selection_review": context.get("broll_selection_review", []),
             "additional_model_calls": 0}

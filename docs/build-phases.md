@@ -437,3 +437,9 @@ Single and batch renaming change display names, preserving original names, files
 Atomic bulk actions support renaming, role labels, reversible Trash, and restore (up to 500 explicitly selected records). A stale or unavailable record rejects the whole action before writes. Trash uses the existing archived state, requires confirmation, hides originals from future selection, and preserves existing job playback and export. It does not unlink files or reclaim storage. The separate exact-copy storage optimization remains available through Duplicate audit. The old permanently locked cleanup placeholder has been removed.
 
 Source acceptance covers real React interactions for roles, semantic search, naming, uploads, confirmation and restore, error preservation, and new-job selection. The Phase 8 live verifier now checks the database-backed round trips and restores its temporary metadata. It needs deployment before execution; no new paid/model render is needed for this library change.
+
+### Preserve complete still-image B-roll
+
+Still-image cutaways now use a contained inset card rather than the video's fill-and-crop path. The whole source stays visible with its aspect ratio, real PNG transparency survives compositing, and a timed dimming layer separates the card from the underlying footage. Card bounds leave room for the chosen lower, upper, or middle caption position; subtitles render after the picture layer. Video cutaways retain center fill. Both talking-head and montage preview/export use this shared renderer.
+
+The renderer records `contain_card_v1` in the finishing and B-roll manifests. No plan schema or migration changes are needed. Re-render exact edit applies the new local framing to an existing plan, retaining source selection, cue timing, speech, and music without a model call. A checkerboard or other background already baked into an RGB source remains part of the image; the renderer does not remove or invent source content.
