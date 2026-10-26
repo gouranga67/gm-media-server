@@ -48,6 +48,28 @@ class OrganizationValidationTests(unittest.TestCase):
         renamed = validate_organization({"suggestions":[suggestion(row)]}, [row], True)[0]
         self.assertEqual(renamed["display_name"], "Cream B-roll")
 
+    def test_stored_original_filename_is_renamed_without_replacing_custom_names(self):
+        for stored in ("VID_001.mp4", " vid_001.MP4 "):
+            with self.subTest(stored=stored):
+                row = source(custom_name=stored)
+                row["evidence"] = [{"kind":"transcript", "text":"We stock castor oil in several sizes."}]
+                proposal = suggestion(row, display_name="Talking about castor oil sizes")
+                result = validate_organization({"suggestions":[proposal]}, [row], False, set())[0]
+                self.assertEqual(result["display_name"], "Talking about castor oil sizes")
+                self.assertEqual(result["media_role"], "talking")
+                self.assertFalse(organization_model_context([row])[0]["name_is_custom"])
+        row = source(custom_name="Our castor oil range")
+        self.assertTrue(organization_model_context([row])[0]["name_is_custom"])
+        result = validate_organization({"suggestions":[suggestion(row)]}, [row], False)[0]
+        self.assertEqual(result["display_name"], "Our castor oil range")
+
+    def test_stored_filename_does_not_count_as_evidence_for_an_unseen_image(self):
+        row = source(mime="image/png", custom_name="VID_001.mp4")
+        row.update(notes="", tags=[])
+        result = validate_organization({"suggestions":[suggestion(row)]}, [row], False, set())[0]
+        self.assertEqual(result["display_name"], row["display_name"])
+        self.assertEqual(result["confidence"], "uncertain")
+
     def test_transcribed_talking_take_cannot_be_auto_mislabelled_as_silent_broll(self):
         row = source(); row["evidence"] = [{"kind":"transcript","text":"I am introducing the soap and explaining how to use it."}]
         result = validate_organization({"suggestions":[suggestion(row)]}, [row], False)[0]
