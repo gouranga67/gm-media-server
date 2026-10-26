@@ -296,7 +296,7 @@ export function JobReviewControls({
     const deliverable = recipe === "montage" ? "montage" : "reel";
     return (
       <div className="space-y-4">
-      <RenderQualityCard review={currentFinal.manifest.quality_review} />
+      <RenderQualityCard review={currentFinal.manifest.quality_review} storyContract={currentFinal.manifest.story_contract_review} storyFinishing={currentFinal.manifest.story_finishing} />
       <section className="space-y-4 rounded-md border border-[#BFE3FF] bg-white p-5">
         <div>
           <p className="flex items-center gap-2 font-mono text-xs font-bold tracking-wide text-[#215B43] uppercase">
@@ -422,7 +422,7 @@ export function JobReviewControls({
         </section>
       ) : null}
 
-      <RenderQualityCard review={run.manifest.quality_review} />
+      <RenderQualityCard review={run.manifest.quality_review} storyContract={run.manifest.story_contract_review} storyFinishing={run.manifest.story_finishing} />
       <section className="rounded-md border border-[#D7D9D3] bg-white p-5">
         {storyAssessment ? (
           <div className="mb-5 rounded-md border border-[#BFE3FF] bg-[#EFF6FA] p-4">

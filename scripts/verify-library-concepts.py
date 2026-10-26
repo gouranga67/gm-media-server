@@ -21,6 +21,7 @@ def main():
     if not isinstance(sessions, list):
         raise RuntimeError("concept history is not a list")
     ready = 0
+    story_contracts = 0
     for session in sessions:
         UUID(session["id"])
         detail = helper.request(f"concepts/{session['id']}")
@@ -41,7 +42,13 @@ def main():
                     UUID(beat["asset_id"])
                     if not beat["text"] or not 0 <= beat["start"] < beat["end"]:
                         raise RuntimeError("invalid recorded speech citation")
+                contract = concept.get("story_contract")
+                if contract:
+                    if bloopers or contract.get("version") != 1 or not contract.get("central_point") or contract.get("opening_evidence_id") != concept["script"][0]["evidence_id"] or contract.get("ending_evidence_id") != concept["script"][-1]["evidence_id"]:
+                        raise RuntimeError("invalid selected story contract")
+                    story_contracts += 1
     print(json.dumps({"status": "passed", "library": coverage, "saved_sessions": len(sessions), "ready_sessions": ready,
+                      "story_contracts_verified": story_contracts,
                       "generated_concepts": 0, "created_jobs": 0, "model_calls": 0}, indent=2))
 
 

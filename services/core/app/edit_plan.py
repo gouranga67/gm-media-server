@@ -268,12 +268,17 @@ def _tighten_clip_pauses(
     clip: Any,
     asset: dict[str, Any],
     max_pause_seconds: float,
+    verified_pause_ranges: list[list[float]] | None = None,
 ) -> list[Any]:
     gaps = [
         gap
         for gap in source_word_gaps(asset, float(clip.source_in), float(clip.source_out))
         if gap[2] > max_pause_seconds + 0.08
     ]
+    if verified_pause_ranges is not None:
+        gaps = [(max(left, a), min(right, b), min(right, b)-max(left, a))
+                for left, right, _ in gaps for a, b in verified_pause_ranges
+                if min(right, b)-max(left, a) > max_pause_seconds+.08]
     if not gaps:
         return [clip]
 
@@ -410,7 +415,7 @@ def apply_timeline_adjustments(
             asset = inventory.get(str(clips[index].asset_id))
             if asset is None:
                 raise ValueError("source transcript timing is unavailable for this clip")
-            tightened = _tighten_clip_pauses(plan, clips[index], asset, float(max_pause))
+            tightened = _tighten_clip_pauses(plan, clips[index], asset, float(max_pause), adjustment.get("verified_pause_ranges"))
             maximum = MAX_MONTAGE_CLIPS if isinstance(plan, MontageEditPlan) else MAX_CLIPS
             if len(clips) - 1 + len(tightened) > maximum:
                 raise ValueError("tightening pauses would create too many timeline clips")
@@ -1051,6 +1056,8 @@ def validate_edit_plan(
                 raise ValueError(f"asset {asset_id} contains overlapping source ranges")
 
     policy = direction.get("editorial_policy") or {}
+    from app.story_contract import check_story_contract
+    check_story_contract(plan, direction.get("_selected_story_contract"), assets)
     if enforce_story_quality:
         validate_story_content(plan, assets, policy)
         if policy.get("promotional") and not policy.get("bloopers_requested") and not policy.get("preserve_pauses_requested"):

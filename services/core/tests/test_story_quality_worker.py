@@ -8,6 +8,28 @@ from app.take_quality import editing_policy
 
 
 class StoryQualityWorkerTests(unittest.TestCase):
+    def test_selected_story_uses_existing_bounded_repair_if_ending_is_missing(self):
+        from app.story_contract import contract_for
+        asset_id, job_id = str(uuid4()), str(uuid4())
+        script=[{"evidence_id":i+1,"asset_id":asset_id,"start":start,"end":end,"text":text,"role":role}
+                for i,(start,end,text,role) in enumerate([(0,2,"A complete opening.","hook"),(4,6,"Its real explanation.","development"),(8,10,"The recorded ending.","ending")])]
+        context={"ready_for_editing":True,"project":{"name":"A story","brief":"Use the selected story.","privacy_mode":"hybrid","ai_copy_allowed":False},
+                 "job":{"recipe":"talking_head","edit_style":"clean","editorial_policy":{"intent":"story"}},
+                 "assets":[{"asset_id":asset_id,"duration_seconds":12,"has_video":True,"has_audio":True}],
+                 "music_library":[],"creative_effect_library":[],
+                 "selected_concept":{"script":script,"story_contract":contract_for("A clear explanation and result.",script),"reel_kind":"story"}}
+        run={"id":str(uuid4()),"job_id":job_id,"version":1,"edit_plan_id":None,"based_on_run_id":None}
+        bad=TalkingHeadEditPlan(schema_version="1.4",recipe="talking_head",clips=[{"asset_id":asset_id,"source_in":0,"source_out":2,"crop":"center_fill"}],caption_style="clean_blue_v1",audio_preset="spoken_voice_v1",end_card="none",editorial_summary="Forgot the ending.")
+        good=bad.model_copy(update={"clips":[bad.clips[0].model_copy(update={"source_in":a,"source_out":b}) for a,b in [(0,2),(4,6),(8,10)]]},deep=True)
+        planner=Mock(side_effect=[(bad,{"provider":"chatgpt_plan","model":"test"}),(good,{"provider":"chatgpt_plan","model":"test"})])
+        renderer=Mock(return_value={"outputs":{"preview":"preview.mp4"},"manifest_path":"manifest.json"})
+        with patch.multiple(worker,claim_pending_edit=Mock(return_value=run),build_editor_context=Mock(return_value=context),create_edit_plan=planner,assert_ai_budget=Mock(),_record_plan_usage=Mock(),_persist_generated_plan=Mock(),render_edit_preview=renderer,connection=MagicMock()):
+            worker.process_one_edit(worker.WorkerState())
+        self.assertEqual(planner.call_count,2)
+        renderer.assert_called_once()
+        self.assertEqual(renderer.call_args.args[0]['story_contract_review']['status'],'checked')
+        self.assertEqual(len(renderer.call_args.args[1].clips),3)
+
     def test_missing_transition_does_not_trigger_another_model_call(self):
         asset_id = str(uuid4())
         run = {"id": str(uuid4()), "job_id": str(uuid4()), "version": 1,

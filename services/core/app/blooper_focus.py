@@ -188,7 +188,7 @@ def focus_blooper_passages(
     return focused
 
 
-def attach_word_times(rows: list[dict], segments: list[dict]) -> list[dict]:
+def attach_word_times(rows: list[dict], segments: list[dict], *, all_sources: bool = False) -> list[dict]:
     """Read only existing transcript derivatives, and keep timings local."""
     from app.content_catalog import _transcript_segments
     from app.config import get_settings
@@ -197,7 +197,7 @@ def attach_word_times(rows: list[dict], segments: list[dict]) -> list[dict]:
     candidates = {
         str(segment["asset_id"])
         for segment in segments
-        if has_specific_blooper_clue(clues.get(int(segment["id"]), {}))
+        if all_sources or has_specific_blooper_clue(clues.get(int(segment["id"]), {}))
     }
     if not candidates:
         return deepcopy(segments)

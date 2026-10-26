@@ -931,6 +931,10 @@ def process_one_edit(state: WorkerState) -> bool:
                 persist_assembly(database, context)
             context = build_editor_context(run["job_id"], include_internal_paths=True)
         if not run.get("edit_plan_id") and not run.get("based_on_run_id"):
+            from app.story_contract import selected_story_contract
+            contract = selected_story_contract(context)
+            if contract:
+                context["job"]["_selected_story_contract"] = contract
             from app.blooper_focus import selected_blooper_scope
             scope = selected_blooper_scope(context)
             if scope:
@@ -1200,7 +1204,22 @@ def process_one_edit(state: WorkerState) -> bool:
                         allow_post_copy=bool(context["project"]["ai_copy_allowed"]),
                         creative_direction=context["job"], music_tracks=context["music_library"],
                         creative_effects=context["creative_effect_library"])
+            if not run.get("based_on_run_id"):
+                from app.story_finishing import finish_new_story
+                previous_plan = plan
+                try:
+                    plan, context["story_finishing"] = finish_new_story(context, plan)
+                    plan = validate_edit_plan(plan.model_dump(mode="json"), context["assets"],
+                        allow_post_copy=bool(context["project"]["ai_copy_allowed"]), creative_direction=context["job"],
+                        music_tracks=context["music_library"], creative_effects=context["creative_effect_library"])
+                except Exception:
+                    plan = previous_plan
+                    context["story_finishing"] = {"version": 1, "status": "attention", "changes": [],
+                        "findings": ["Optional story cleanup could not complete safely; the validated edit was preserved."], "hosted_model_calls": 0}
             _persist_generated_plan(run, plan, provenance)
+
+        from app.story_contract import check_story_contract
+        context["story_contract_review"] = check_story_contract(plan, context["job"].get("_selected_story_contract"), context["assets"])
 
         if run.get("based_on_run_id"):
             with connection() as database:
@@ -1315,7 +1334,7 @@ def claim_pending_final_export() -> dict[str, Any] | None:
             """
             SELECT final_exports.*, edit_runs.version, edit_runs.edit_plan_id,
                    edit_runs.provider, edit_runs.model, edit_runs.caption_corrections,
-                   edit_runs.approved_at
+                   edit_runs.approved_at, edit_runs.manifest AS preview_manifest
             FROM final_exports
             JOIN edit_runs ON edit_runs.id = final_exports.edit_run_id
             WHERE final_exports.status = 'pending'
@@ -1362,6 +1381,9 @@ def process_one_final_export(state: WorkerState) -> bool:
         if plan_row is None:
             raise RuntimeError("the approved edit plan was not found")
         context = build_editor_context(export["job_id"], include_internal_paths=True)
+        if isinstance(export.get("preview_manifest"), dict):
+            for key in ("story_contract_review", "story_finishing"):
+                context[key] = export["preview_manifest"].get(key)
         render_document, _ = repair_predictable_plan_defaults(
             plan_row["document"],
             creative_direction=context["job"],

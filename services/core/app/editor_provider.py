@@ -197,6 +197,10 @@ def list_chatgpt_models(settings: Settings | None = None) -> list[dict[str, str]
 
 def _public_context(context: dict[str, Any], max_characters: int) -> dict[str, Any]:
     public = deepcopy(context)
+    for key in list(public):
+        if key.startswith("_"):
+            public.pop(key)
+    public.get("job", {}).pop("_selected_story_contract", None)
     if public.get("job", {}).get("editorial_policy", {}).get("bloopers_requested"):
         public["learning_preferences"] = {"directives": [], "scope": "bloopers", "hosted_model_calls": 0}
     source_checksums: dict[str, str] = {}
@@ -442,7 +446,10 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
     concept_instruction = (
         "The user selected the source-backed concept in selected_concept. Preserve its recorded script order, "
         "source identities, and narrative meaning. Use the cited speech ranges as guides, preserving complete "
-        "words and natural boundaries. Use its supporting pictures only where relevant. Do not substitute a "
+        "sentences and necessary connecting clauses at natural word boundaries. selected_concept.story_contract identifies the central point, "
+        "opening and ending: retain each selected recorded beat in order. You may trim fillers and silence "
+        "and add word handles, but do not replace its explanation or ending with a different story. "
+        "Use its supporting pictures only where relevant. Do not substitute a "
         "different story or invent new narration. An explicit later revision may change this selection.\n\n"
         if isinstance(public.get("selected_concept"), dict) else ""
     )

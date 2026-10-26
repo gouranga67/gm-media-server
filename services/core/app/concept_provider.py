@@ -29,6 +29,10 @@ def generate_concepts(inventory: dict, privacy_mode: str, settings: Settings) ->
         "Suggest up to three distinct, compelling short reels we can genuinely make from this library. "
         "Build hook, explanation and a supported ending with clear referents. Do not mix claims between products, "
         "include bloopers, or pad the story to hit a duration. Each story needs at least two recorded passages. "
+        "State one clear central point in angle and explain how the recorded ending delivers it. "
+        "Prefer sentence windows with supported boundaries. needs_context means inspect and include the "
+        "necessary adjacent passage; do not open with a disconnected 'because' or end on an unfinished condition. "
+        "Drop disposable readiness/filler openings. Preserve meaningful connections and never transfer claims between products. "
     )
     content = [{"type": "input_text", "text": (
         direction +

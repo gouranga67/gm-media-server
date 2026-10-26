@@ -7,13 +7,17 @@ import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 from uuid import uuid4
 import zlib
+import wave
 
 from app.config import Settings
 from app.edit_plan import CreativeEffectCue, MontageEditPlan, TalkingHeadEditPlan
 from app.edit_renderer import _render_video, render_ass
 from app.montage_renderer import _render as render_montage
+from app.story_finishing import finish_new_story
 
 
 @unittest.skipUnless(shutil.which("ffmpeg"), "ffmpeg is required for the creative render test")
@@ -45,6 +49,16 @@ class CreativeRenderIntegrationTests(unittest.TestCase):
             })
             captions = root / "captions.ass"
             captions.write_text(render_ass([]))
+            context = {"project": {"brief": "A useful story."},
+                "job": {"editorial_policy": {"intent": "story"}},
+                "assets": [{"asset_id": str(clip.asset_id), "_storage_key": source[0].name,
+                    "transcript_segments": [{"words": [{"start": .2, "end": 1.8, "text": "Recorded speech."}]}]}
+                    for clip, source in zip(plan.clips, sources, strict=True)]}
+            with patch("app.config.get_settings", return_value=SimpleNamespace(media_root=root)):
+                measured_plan, measured_report = finish_new_story(context, plan)
+            self.assertEqual(measured_report["measured_clips"], 2)
+            self.assertEqual(measured_plan.clips[0].source_audio_gain_db, 0)
+            self.assertEqual(measured_plan.clips[1].source_audio_gain_db, 6)
             ratios = []
             for gain in (0, 12):
                 plan.clips[1].source_audio_gain_db = gain
@@ -57,6 +71,30 @@ class CreativeRenderIntegrationTests(unittest.TestCase):
                 ratios.append(20*math.log10(rms(2.4, 3.6)/rms(.4, 1.6)))
             self.assertGreater(ratios[1]-ratios[0], 8, "the requested boost must remain audible after whole-reel normalization")
             self.assertEqual([(c.source_in, c.source_out) for c in plan.clips], [(0, 2), (0, 2)])
+
+    def test_story_cleanup_measures_real_silence_and_preserves_both_spoken_windows(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            wav, source = root / "voice.wav", root / "source.mp4"
+            samples=array.array('h',(int(6000*math.sin(2*math.pi*440*i/16000)) if i < 16000 or i >= 5*16000 else 0 for i in range(7*16000)))
+            with wave.open(str(wav),'wb') as audio:
+                audio.setnchannels(1);audio.setsampwidth(2);audio.setframerate(16000);audio.writeframes(samples.tobytes())
+            self.ffmpeg('-f','lavfi','-i','color=black:s=180x320:r=30:d=7','-i',str(wav),'-c:v','libx264','-c:a','aac','-pix_fmt','yuv420p',str(source))
+            identity=str(uuid4())
+            plan=TalkingHeadEditPlan.model_validate({'schema_version':'1.4','recipe':'talking_head','clips':[{'asset_id':identity,'source_in':0,'source_out':7,'crop':'center_fill'}],'caption_style':'clean_blue_v1','audio_preset':'spoken_voice_v1','end_card':'none','editorial_summary':'A setup and its result.'})
+            asset={'asset_id':identity,'_storage_key':source.name,'transcript_segments':[{'words':[{'start':.1,'end':.8,'text':'Setup.'},{'start':5.1,'end':6.8,'text':'Result.'}]}]}
+            context={'project':{'brief':'Make a clear story.'},'job':{'editorial_policy':{'intent':'story'}},'assets':[asset]}
+            with patch('app.config.get_settings',return_value=SimpleNamespace(media_root=root)):
+                finished,report=finish_new_story(context,plan)
+            self.assertEqual(report['measured_clips'],1)
+            self.assertEqual(len(finished.clips),2)
+            self.assertGreater(finished.clips[0].source_out,1)
+            self.assertLess(finished.clips[1].source_in,5)
+            captions=root/'captions.ass';captions.write_text(render_ass([]))
+            output=root/'cleaned.mp4'
+            _render_video([(source,c.source_in,c.source_out)for c in finished.clips],finished,captions,output,60,width=180,height=320)
+            probe=json.loads(subprocess.check_output(['ffprobe','-v','error','-show_format','-of','json',str(output)],timeout=10))
+            self.assertAlmostEqual(float(probe['format']['duration']),3.6,delta=.15)
 
     def assert_rendered_content(self, output: Path, *, with_music: bool) -> None:
         probe = json.loads(subprocess.check_output([

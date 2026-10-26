@@ -88,6 +88,9 @@ def compact_inventory(rows: list[dict], segments: list[dict], payload: ConceptRe
     sources = []
     by_asset = defaultdict(list)
     bloopers = payload.reel_kind == "bloopers"
+    if not bloopers:
+        from app.story_passages import story_passages
+        segments = story_passages(segments)
     clues = find_blooper_evidence(segments) if bloopers else {}
     continuations = transcript_continuations(segments) if bloopers else {}
     focused = focus_blooper_passages(segments, clues) if bloopers else {}
@@ -105,6 +108,10 @@ def compact_inventory(rows: list[dict], segments: list[dict], payload: ConceptRe
             "start": start, "end": end, "text": text, **clues.get(int(segment["id"]), {}),
             **focused.get(int(segment["id"]), {}),
         }
+        if not bloopers and segment.get("boundary_evidence") != "catalogue_only":
+            evidence.update({key: segment[key] for key in ("catalogue_ids", "boundary_evidence", "sentence_end", "needs_context") if key in segment})
+        elif not bloopers and segment.get("needs_context"):
+            evidence["needs_context"] = True
         if bloopers and "catalog_range" not in focused.get(int(segment["id"]), {}) and int(segment["id"]) in continuations:
             evidence["possible_sentence_continuation"] = continuations[int(segment["id"])]
         by_asset[str(segment["asset_id"])].append(evidence)
@@ -189,8 +196,7 @@ def load_inventory(database: Any, payload: ConceptRequestCreate) -> tuple[dict, 
     recent = [{"title": option["title"][:100], "speech_evidence_ids": [beat["evidence_id"] for beat in option["script"][:10]]}
               for row in prior for option in row["concepts"]][:6]
     products = list(database.execute("SELECT id,name,aliases FROM source_products ORDER BY name LIMIT 100").fetchall())
-    if payload.reel_kind == "bloopers":
-        segments = attach_word_times(chosen, list(segments))
+    segments = attach_word_times(chosen, list(segments), all_sources=payload.reel_kind != "bloopers")
     inventory = compact_inventory(chosen, list(segments), payload, recent=recent, products=products)
     coverage = {"unique_sources_available": len({row["sha256"] for row in rows}),
                 "sources_considered": len(chosen), "speech_passages": len(inventory["evidence"]),
@@ -242,6 +248,9 @@ def validate_concepts(document: dict, inventory: dict, request_id: UUID) -> list
                        "angle": proposal.angle, "script": script, "visuals": visuals,
                        "asset_ids": source_ids, "estimated_seconds": round(seconds, 1),
                        "source_backed": True, "reel_kind": "bloopers" if bloopers else "story"})
+        if not bloopers:
+            from app.story_contract import contract_for
+            output[-1]["story_contract"] = contract_for(proposal.angle, script)
     return output
 
 

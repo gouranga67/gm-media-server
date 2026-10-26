@@ -319,6 +319,8 @@ def build_editor_context(
             context["selected_concept"] = {"request_id": str(concept_selection["request_id"]),
                 "title": selected["title"], "script": selected["script"], "visuals": selected["visuals"],
                 "reel_kind": selected.get("reel_kind", "story")}
+            if selected.get("story_contract"):
+                context["selected_concept"]["story_contract"] = selected["story_contract"]
     return context
 
 

@@ -706,6 +706,8 @@ def render_edit_preview(
         "edit_plan_sha256": document_sha256(document),
         "editor": {"provider": provider, "model": model},
         "revision_report": context.get("revision_report"),
+        "story_contract_review": context.get("story_contract_review"),
+        "story_finishing": context.get("story_finishing"),
         "assembly": context["job"].get("assembly_decision"),
         "creative_direction": {
             "target_duration_seconds": context["job"].get("target_duration_seconds"),
@@ -969,6 +971,8 @@ def render_final_delivery(
         "edit_plan_sha256": document_sha256(document),
         "editor": {"provider": provider, "model": model},
         "revision_report": context.get("revision_report"),
+        "story_contract_review": context.get("story_contract_review"),
+        "story_finishing": context.get("story_finishing"),
         "assembly": context["job"].get("assembly_decision"),
         "creative_direction": {
             "target_duration_seconds": context["job"].get("target_duration_seconds"),

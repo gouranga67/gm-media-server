@@ -56,6 +56,7 @@ for (const extension of [".ts", ".tsx"]) Module._extensions[extension] = (module
 };
 const { JobPreview } = require(path.join(repo, "apps/web/app/_components/job-preview.tsx"));
 const { EditProgress } = require(path.join(repo, "apps/web/app/_components/edit-progress.tsx"));
+const { RenderQualityCard } = require(path.join(repo, "apps/web/app/_components/render-quality-card.tsx"));
 const { AssemblyReadiness } = require(path.join(repo, "apps/web/app/_components/assembly-readiness.tsx"));
 const { NewJobForm } = require(path.join(repo, "apps/web/app/_components/new-job-form.tsx"));
 const { ConceptDesk } = require(path.join(repo, "apps/web/app/_components/concept-desk.tsx"));
@@ -722,4 +723,16 @@ test("progress distinguishes a stale worker heartbeat from a lost status connect
   await act(async () => root.render(React.createElement(EditProgress,{run,checkedAt:Date.now()-40_000,connectionError:true})));
   assert.equal(document.body.textContent.includes("Cannot refresh status"),true);
   assert.equal(document.body.textContent.includes("worker has not checked in"),false);
+});
+
+test("story review distinguishes recorded script coverage, automatic cleanup and human judgement", async () => {
+  const review={version:"1.0",status:"passed",checks:[],findings:[],finding_count:0};
+  await act(async () => root.render(React.createElement(RenderQualityCard,{review,storyContract:{status:"checked",central_point:"Explain the recorded result."},storyFinishing:{status:"attention",measured_clips:2,speech_clip_count:4,changes:["Shortened a measured quiet gap."],findings:["One passage could not be inspected."]}})));
+  assert.equal(document.body.textContent.includes("2 of 4 speech passages measured"),true);
+  assert.equal(document.body.textContent.includes("Shortened a measured quiet gap."),true);
+  assert.equal(document.body.textContent.includes("not whether its meaning"),true);
+  assert.equal(document.body.textContent.includes("Worth reviewing"),true);
+  assert.equal(calls.length,0);
+  await act(async () => root.render(React.createElement(RenderQualityCard,{review})));
+  assert.equal(document.body.textContent.includes("Story selection and cleanup"),false);
 });
