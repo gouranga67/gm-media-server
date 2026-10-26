@@ -203,6 +203,8 @@ class ConceptSelectionTests(unittest.TestCase):
 
     def test_blooper_selection_persists_editorial_purpose_separately_from_render_recipe(self):
         self.session["reel_kind"] = "bloopers"
+        for concept in self.session["concepts"]:
+            concept["script"][0].update(text="I forgot my line.", blooper_candidate=True, blooper_signals=["lost_line"])
         render_selected_concepts(self.session["id"], self.selection, "editor@example.invalid")
         inserts = [(sql, args) for sql, args in self.db.writes if "INSERT INTO jobs" in sql]
         self.assertEqual(len(inserts), 2)
@@ -210,6 +212,22 @@ class ConceptSelectionTests(unittest.TestCase):
             self.assertIn("reel_intent", sql)
             self.assertEqual(args[-1], "bloopers")
             self.assertIn("'talking_head'", sql)
+
+    def test_legacy_weak_saved_idea_creates_no_new_job_but_preserves_existing_jobs(self):
+        self.session["reel_kind"] = "bloopers"
+        for concept in self.session["concepts"]:
+            for beat in concept["script"]:
+                beat.update(blooper_candidate=True, blooper_signals=["possible_alternate_take"])
+        with self.assertRaises(HTTPException) as error:
+            render_selected_concepts(self.session["id"], self.selection, "editor@example.invalid")
+        self.assertEqual(error.exception.status_code, 409)
+        self.assertIn("only by weak outtake clues", error.exception.detail)
+        self.assertFalse(self.db.writes)
+        for concept in self.session["concepts"]:
+            self.db.jobs[UUID(concept["id"])] = uuid4()
+        existing = render_selected_concepts(self.session["id"], self.selection, "editor@example.invalid")
+        self.assertEqual(len(existing["jobs"]), 2)
+        self.assertFalse(self.db.writes)
 
     def test_selected_concept_with_music_creates_a_preview_and_retry_reuses_it(self):
         selection = ConceptSelection(concept_ids=self.selection.concept_ids[:1], music_mode="subtle", effect_level="meme_heavy")
@@ -384,6 +402,37 @@ class BlooperConceptTests(unittest.TestCase):
         doc = deepcopy(self.document); doc["concepts"][0]["script"] = [dict(evidence_id=1,role="hook")]
         with self.assertRaisesRegex(ValueError, "must cite a possible outtake"):
             validate_concepts(doc, self.inventory, self.payload.id)
+
+    def test_weak_repeat_only_option_is_declined_without_discarding_a_supported_gag(self):
+        weak = deepcopy(self.inventory["evidence"][0])
+        weak.update(evidence_id=50, start=20, end=26, text="The toy has a helpful feature. The toy has a helpful feature.",
+                    blooper_candidate=True, blooper_signals=["possible_alternate_take"])
+        inventory = deepcopy(self.inventory); inventory["evidence"].append(weak)
+        document = deepcopy(self.document)
+        weak_proposal = dict(title="A supposed joke", angle="Repeated information alone.", script=[dict(evidence_id=50, role="payoff")], visuals=[])
+        document["concepts"].insert(0, weak_proposal)
+        options = validate_concepts(document, inventory, self.payload.id)
+        self.assertEqual([item["title"] for item in options], ["The tongue twister"])
+        self.assertEqual(validate_concepts({"concepts": [weak_proposal]}, inventory, self.payload.id), [])
+
+    def test_weak_library_evidence_does_not_queue_a_paid_concept_request(self):
+        database = Mock(); database.execute.return_value.fetchone.side_effect = [None, {"count": 0}]
+        @contextmanager
+        def connection(): yield database
+        inventory = {"assets": [], "evidence": [{"blooper_candidate": True, "blooper_signals": ["possible_alternate_take"]}]}
+        with patch("app.concepts.connection", connection), patch("app.concepts.assert_ai_budget"), \
+             patch("app.concepts.load_inventory", return_value=(inventory, {})):
+            with self.assertRaises(HTTPException) as error:
+                request_concepts(self.payload)
+        self.assertIn("No model request was queued", error.exception.detail)
+        self.assertFalse(any("INSERT" in call.args[0] for call in database.execute.call_args_list))
+
+    def test_complete_short_gag_is_not_padded_to_a_five_second_minimum(self):
+        inventory = deepcopy(self.inventory)
+        inventory["evidence"] = [dict(evidence_id=10, asset_id=str(self.row["id"]), start=0, end=2,
+            text="Oops, I forgot my line!", blooper_candidate=True, blooper_signals=["lost_line"])]
+        document = deepcopy(self.document); document["concepts"][0]["script"] = [dict(evidence_id=10, role="payoff")]
+        self.assertEqual(validate_concepts(document, inventory, self.payload.id)[0]["estimated_seconds"], 2)
 
     def test_reusing_request_id_for_a_different_reel_type_is_rejected(self):
         _, _, _, session = fixture()

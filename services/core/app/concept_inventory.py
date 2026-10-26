@@ -8,7 +8,7 @@ from typing import Any
 from uuid import UUID, uuid5
 
 from app.concept_schemas import ConceptProposals, ConceptRequestCreate
-from app.blooper_detection import find_blooper_evidence
+from app.blooper_detection import find_blooper_evidence, has_specific_blooper_clue, transcript_continuations
 from app.take_quality import production_chatter_reason
 
 MAX_SOURCES = 60
@@ -88,6 +88,7 @@ def compact_inventory(rows: list[dict], segments: list[dict], payload: ConceptRe
     by_asset = defaultdict(list)
     bloopers = payload.reel_kind == "bloopers"
     clues = find_blooper_evidence(segments) if bloopers else {}
+    continuations = transcript_continuations(segments) if bloopers else {}
     for segment in segments:
         text = " ".join(str(segment.get("text") or "").split())
         start, end = float(segment["start_seconds"]), float(segment["end_seconds"])
@@ -97,10 +98,13 @@ def compact_inventory(rows: list[dict], segments: list[dict], payload: ConceptRe
             continue
         if not bloopers and (len(text) < 12 or end - start < 0.5 or production_chatter_reason(text)):
             continue
-        by_asset[str(segment["asset_id"])].append({
+        evidence = {
             "evidence_id": int(segment["id"]), "asset_id": str(segment["asset_id"]),
             "start": start, "end": end, "text": text, **clues.get(int(segment["id"]), {}),
-        })
+        }
+        if bloopers and int(segment["id"]) in continuations:
+            evidence["possible_sentence_continuation"] = continuations[int(segment["id"])]
+        by_asset[str(segment["asset_id"])].append(evidence)
     for row in rows:
         manifest = row.get("manifest") or {}
         derived = manifest.get("derived") or {}
@@ -131,7 +135,8 @@ def compact_inventory(rows: list[dict], segments: list[dict], payload: ConceptRe
         if not passages:
             continue
         # Retain candidate anchors before contextual passages under a tight budget.
-        sampled = (_sample([item for item in passages if item.get("blooper_candidate")], 8)
+        sampled = (_sample([item for item in passages if has_specific_blooper_clue(item)], 6)
+                   + _sample([item for item in passages if item.get("blooper_candidate") and not has_specific_blooper_clue(item)], 2)
                    + _sample([item for item in passages if not item.get("blooper_candidate")], 4)) if bloopers else _sample(passages, 12)
         queues.append(deque(sampled))
     # Round-robin means a long first recording cannot crowd every other source out.
@@ -211,8 +216,12 @@ def validate_concepts(document: dict, inventory: dict, request_id: UUID) -> list
                   for beat in proposal.script]
         if bloopers and not any(beat.get("blooper_candidate") for beat in script):
             raise ValueError("a blooper concept must cite a possible outtake, not only clean setup")
+        if bloopers and not any(has_specific_blooper_clue(beat) for beat in script):
+            # A plausible title cannot turn ordinary repeated product speech
+            # into an incident. Decline weak options without failing valid ones.
+            continue
         seconds = sum(beat["end"] - beat["start"] for beat in script)
-        if not 5 <= seconds <= 55 or sum(len(beat["text"]) for beat in script) > 2200:
+        if not (1 if bloopers else 5) <= seconds <= 55 or sum(len(beat["text"]) for beat in script) > 2200:
             raise ValueError("a concept's recorded script does not fit a short complete reel")
         if tuple(ids) in seen:
             raise ValueError("concept options must not repeat the same recorded script")
@@ -237,7 +246,9 @@ def concept_brief(concept: dict) -> str:
     if concept.get("reel_kind") == "bloopers":
         lines[2] = ("Make a bloopers reel from these recorded outtakes. Keep the mistake, enough setup to understand it, "
                     "and its real reaction or recovery. Keep the selected order and speech in sync; trim empty waiting. "
-                    "Never invent a mistake, laughter, dialogue or a reaction. Clues are possible outtakes, not proven errors.")
+                    "Never invent a mistake, laughter, dialogue or a reaction. Clues are possible outtakes, not proven errors. "
+                    "Transcript chunks can start or end mid-sentence. Preserve intelligible setup and the last complete comic beat; "
+                    "do not retain a dangling restart just to include every quoted word.")
     lines.extend(f"{beat['role']}: {beat['text']}" for beat in concept["script"])
     lines.extend(f"Supporting picture — {visual['display_name'][:80]}" for visual in concept["visuals"])
     result = "\n".join(lines)

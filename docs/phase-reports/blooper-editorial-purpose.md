@@ -33,3 +33,15 @@ After installation, retry the failed concept job once the editor service is avai
 Source verification uses synthetic inputs and isolated SQL, with no hosted model requests or live job changes. Actual comic timing and story quality require the new real-footage preview.
 
 Verified for this checkpoint: 319 backend tests including local FFmpeg renders; 24 interface interaction tests; all eight source-suite checks including TypeScript and the production web build; all 32 migrations plus actual job/learning/history SQL in isolation. Phone and desktop checks of the new-job and blooper-review screens found no JavaScript errors, horizontal overflow or automated WCAG 2 A/AA violations with synthetic fixtures.
+
+## Follow-up: decline weak ideas before making an edit
+
+A read-only inspection of the reported live job found that its API still exposed the earlier editorial-policy shape, without the new purpose/review-mode fields. The retry therefore did not establish that the new purpose handling had been deployed. Its selected concept relied only on possible alternate-take clues, and the saved cut retained a redundant explanation and a dangling restart. Transcript comparison can identify those structural problems; it does not establish whether the performance is funny.
+
+The follow-up adds a stricter evidence threshold for automatic blooper concepts. A selected script needs a recorded self-correction, word-stumble, lost-line or transcribed-laughter clue. Repeated takes, repeated starts and retake directions alone are insufficient. None of the accepted clues proves a mistake or comic value; the model must still decline uninteresting material.
+
+When only weak clues exist, discovery stops before queueing a model request. Weak returned options are omitted without discarding other supported options. Older weak saved ideas cannot create additional jobs, while existing jobs/previews and idempotent selection results remain available. Incident clues receive priority within the existing inventory budget.
+
+Blooper scripts may be 1–55 seconds, avoiding the earlier five-second minimum that could encourage filler. Short scripts still need an actual complete gag. Adjacent ASR text provides bounded, explicitly context-only sentence-continuation hints. These are not selectable evidence IDs or automatic trim points. Planning instructions favour intelligible setup and the last complete comic beat over a disconnected opening or a new unfinished restart.
+
+Verification after this follow-up: 325 backend tests passed, including local FFmpeg renders. Regression tests cover weak-only discovery without a queued model request, mixed supported/weak options, preserved existing jobs, short complete gags and sentence-continuation hints. No hosted generation, live revision, deployment or deletion was performed. A new real-footage preview remains human acceptance work; a passing technical suite does not certify editorial quality.

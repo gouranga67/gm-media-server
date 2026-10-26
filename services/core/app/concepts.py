@@ -11,6 +11,7 @@ from app.concept_schemas import ConceptRequestCreate, ConceptSelection
 from app.config import get_settings
 from app.database import connection
 from app.productization import actor_login, assert_ai_budget, assert_job_capacity
+from app.blooper_detection import has_specific_blooper_clue
 
 router = APIRouter(prefix="/api/v1/concepts", tags=["concepts"])
 
@@ -88,8 +89,8 @@ def request_concepts(payload: ConceptRequestCreate) -> dict:
             raise HTTPException(status_code=429, detail="two concept requests are already queued; wait for them to finish")
         require_concept_budget(database)
         inventory, coverage = load_inventory(database, payload)
-        if payload.reel_kind == "bloopers" and not any(item.get("blooper_candidate") for item in inventory["evidence"]):
-            raise HTTPException(status_code=409, detail="No possible bloopers were found in the scanned transcripts. No model request was queued. Try another collection or add footage with recorded mistakes, retakes or laughter; purely visual bloopers need manual review.")
+        if payload.reel_kind == "bloopers" and not any(has_specific_blooper_clue(item) for item in inventory["evidence"]):
+            raise HTTPException(status_code=409, detail="No possible bloopers with a specific recorded incident clue were found. Repeated takes or retake directions alone are not enough. No model request was queued. Try another collection or review the raw footage manually; purely visual bloopers need manual review.")
         if payload.reel_kind == "story" and len(inventory["evidence"]) < 2:
             raise HTTPException(status_code=409, detail="not enough indexed spoken video is ready in this scope; wait for analysis, choose a broader collection, or add talking footage")
         row = database.execute("""
@@ -166,6 +167,10 @@ def render_selected_concepts(request_id: UUID, payload: ConceptSelection, x_gm_u
         existing = database.execute("SELECT concept_id,job_id FROM reel_concept_jobs WHERE request_id=%s", (request_id,)).fetchall()
         jobs = {str(item["concept_id"]): item["job_id"] for item in existing}
         wanted = [options[str(id)] for id in payload.concept_ids if str(id) not in jobs]
+        if session.get("reel_kind") == "bloopers" and any(
+            not any(has_specific_blooper_clue(beat) for beat in concept["script"]) for concept in wanted
+        ):
+            raise HTTPException(status_code=409, detail="This saved idea is supported only by weak outtake clues. Generate fresh blooper ideas or review the source manually before creating another edit. Existing jobs and previews are retained.")
         if wanted:
             require_concept_budget(database)
             asset_ids = list(dict.fromkeys(id for concept in wanted for id in concept["asset_ids"]))

@@ -15,6 +15,46 @@ _CLUES = (
 )
 
 
+def has_specific_blooper_clue(item: dict) -> bool:
+    """An incident clue is required; repeated takes alone cannot qualify a reel.
+
+    This is an evidence threshold, not a judgement that the moment is funny or
+    that a mistake really occurred. Retake directions remain useful context.
+    """
+    return bool(item.get("blooper_candidate") and set(item.get("blooper_signals") or []) & {
+        "self_correction", "word_stumble", "lost_line", "transcribed_laughter",
+    })
+
+
+def transcript_continuations(segments: list[dict]) -> dict[int, dict]:
+    """Bounded neighbouring text to expose ASR chunks that split a sentence.
+
+    Punctuation is fallible. These are hints for the planner, never automatic
+    trim times or proof of a complete utterance.
+    """
+    groups = defaultdict(list)
+    for item in segments:
+        start, end = float(item["start_seconds"]), float(item["end_seconds"])
+        if math.isfinite(start + end) and 0 <= start < end:
+            groups[str(item["asset_id"])].append(item)
+    result = {}
+    for items in groups.values():
+        items.sort(key=lambda item: (float(item["start_seconds"]), int(item["id"])))
+        for index, item in enumerate(items):
+            hints = {}
+            for direction, neighbour in (("before", index - 1), ("after", index + 1)):
+                if not 0 <= neighbour < len(items):
+                    continue
+                other = items[neighbour]
+                left, right = (other, item) if direction == "before" else (item, other)
+                gap = float(right["start_seconds"]) - float(left["end_seconds"])
+                if -0.1 <= gap <= 0.35 and not str(left.get("text") or "").rstrip().endswith((".", "?", "!", "]", ")")):
+                    hints[direction] = {"context_only": True, "text": str(other.get("text") or "")[:180]}
+            if hints:
+                result[int(item["id"])] = hints
+    return result
+
+
 def find_blooper_evidence(segments: list[dict]) -> dict[int, dict]:
     """Return cited segment IDs and nearby setup/recovery from the same recording.
 

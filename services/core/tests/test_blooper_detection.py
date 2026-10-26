@@ -1,7 +1,7 @@
 import unittest
 from copy import deepcopy
 
-from app.blooper_detection import find_blooper_evidence
+from app.blooper_detection import find_blooper_evidence, has_specific_blooper_clue, transcript_continuations
 
 
 def passage(id, text, start=0, end=3, asset="a"):
@@ -59,3 +59,24 @@ class BlooperDetectionTests(unittest.TestCase):
         evidence = find_blooper_evidence([passage(1, "Oops!", -1, 3), passage(2, "Oops!", 0, float("inf")),
                                          passage(3, "Oops!", 5, 2), passage(4, "Oops!", 0, 100)])
         self.assertFalse(evidence)
+
+    def test_repeated_takes_and_directions_alone_do_not_qualify_a_blooper_concept(self):
+        for signal in ("possible_alternate_take", "repeated_start", "retake_direction"):
+            self.assertFalse(has_specific_blooper_clue({"blooper_candidate": True, "blooper_signals": [signal]}))
+        self.assertTrue(has_specific_blooper_clue({"blooper_candidate": True, "blooper_signals": ["word_stumble"]}))
+        self.assertFalse(has_specific_blooper_clue({"blooper_candidate": False, "blooper_signals": ["word_stumble"]}))
+
+    def test_sentence_continuations_expose_fragment_edges_without_inventing_trim_times(self):
+        segments = [passage(1, "The model train goes around the", 0, 3),
+                    passage(2, "track. I forgot my lines. What does it", 3, 6),
+                    passage(3, "do next?", 6, 7),
+                    passage(4, "A different speaker.", 6, 7, asset="b"),
+                    passage(5, "A separate later take", 20, 23)]
+        original = deepcopy(segments)
+        hints = transcript_continuations(segments)
+        self.assertEqual(hints[2]["before"]["text"], segments[0]["text"])
+        self.assertEqual(hints[2]["after"]["text"], "do next?")
+        self.assertTrue(hints[2]["after"]["context_only"])
+        self.assertNotIn(4, hints)
+        self.assertNotIn(5, hints)
+        self.assertEqual(segments, original)
