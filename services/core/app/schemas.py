@@ -1026,6 +1026,8 @@ class UsageJobSummary(BaseModel):
 
 
 class UsageDashboardResponse(BaseModel):
+    concept_requests: int = 0
+    concept_tokens: int = 0
     days: int
     requests: int
     jobs: int

@@ -21,7 +21,7 @@ const { createRoot } = require("react-dom/client");
 const ts = require("typescript");
 const Module = require("node:module");
 const originalLoad = Module._load;
-let calls = [], transfers = [], navigation = [], readyEvents = 0, analysisStatus = "ready", root, managedAssets = [], batchFailure = false;
+let calls = [], transfers = [], navigation = [], readyEvents = 0, analysisStatus = "ready", root, managedAssets = [], batchFailure = false, conceptHistory = [], renderConceptFailure = false, conceptCounter = 0;
 const serverId = "11111111-1111-4111-8111-111111111111";
 const jobId = "22222222-2222-4222-8222-222222222222";
 const serverAsset = {
@@ -52,6 +52,7 @@ for (const extension of [".ts", ".tsx"]) Module._extensions[extension] = (module
   module._compile(outputText, filename);
 };
 const { NewJobForm } = require(path.join(repo, "apps/web/app/_components/new-job-form.tsx"));
+const { ConceptDesk } = require(path.join(repo, "apps/web/app/_components/concept-desk.tsx"));
 const { MediaLibrary } = require(path.join(repo, "apps/web/app/_components/media-library.tsx"));
 const { LibraryUpload } = require(path.join(repo, "apps/web/app/_components/library-upload.tsx"));
 
@@ -60,7 +61,22 @@ globalThis.fetch = async (url, options = {}) => {
   const body = options.body ? JSON.parse(options.body) : undefined;
   calls.push({ route, method: options.method ?? "GET", body });
   let payload;
-  if (route.startsWith("library/assets?")) {
+  if (route === "concepts/library-status") payload = { unique_sources: 3, catalogued_sources: 3, spoken_sources: 2, visually_indexed_sources: 3, still_processing: 0 };
+  else if (route === "concepts" && (options.method ?? "GET") === "GET") payload = conceptHistory;
+  else if (route === "concepts") {
+    const created = conceptSession(body.id, body.focus);
+    conceptHistory.unshift(created);
+    conceptCounter += 1;
+    payload = { ...created, status: "pending" };
+  }
+  else if (/^concepts\/[^/]+\/render$/.test(route)) {
+    if (renderConceptFailure) return { ok: false, status: 409, json: async () => ({ detail: "Some footage was moved to Trash" }) };
+    const session = conceptHistory.find((item) => item.id === route.split("/")[1]);
+    for (const id of body.concept_ids) if (!session.jobs.some((job) => job.concept_id === id)) session.jobs.push({ concept_id: id, job_id: crypto.randomUUID() });
+    payload = { jobs: session.jobs.filter((job) => body.concept_ids.includes(job.concept_id)) };
+  }
+  else if (/^concepts\/[^/?]+$/.test(route)) payload = conceptHistory.find((item) => item.id === route.split("/")[1]);
+  else if (route.startsWith("library/assets?")) {
     const params = new URLSearchParams(route.split("?")[1]);
     payload = params.get("offset") === "0" ? managedAssets : [];
   }
@@ -94,7 +110,8 @@ globalThis.fetch = async (url, options = {}) => {
 };
 
 beforeEach(() => {
-  calls = []; transfers = []; navigation = []; readyEvents = 0; analysisStatus = "ready"; batchFailure = false;
+  window.history.replaceState(null, "", "/jobs/new");
+  calls = []; transfers = []; navigation = []; readyEvents = 0; analysisStatus = "ready"; batchFailure = false; conceptHistory = []; renderConceptFailure = false; conceptCounter = 0;
   managedAssets = [
     { ...serverAsset, id: "talk", source_name: "VID_0001.mp4", display_name: "Product introduction", media_role: "talking", job_references: 2 },
     { ...serverAsset, id: "broll", source_name: "VID_0002.mp4", display_name: "Cream close-up", media_role: "broll", job_references: 0 },
@@ -322,4 +339,54 @@ test("new-job picker shows readable names and filters footage roles without drop
     await type('#library-search', 'Finished product');
     await waitFor(() => document.querySelector(`input[aria-label="Use ${serverAsset.source_name}"]`));
   } finally { delete serverAsset.display_name; delete serverAsset.media_role; }
+});
+
+function conceptSession(id = crypto.randomUUID(), focus = "") {
+  return { id, focus, audience: "", privacy_mode: "hybrid", status: "ready", total_tokens: 1200,
+    created_at: "2026-01-01T00:00:00Z", error: null, model: "fixture-model", jobs: [],
+    coverage: { unique_sources_available: 3, sources_considered: 3, speech_passages: 6 },
+    concepts: [1,2,3].map((index) => ({ id: `option-${index}`, title: `Recorded story ${index}`,
+      angle: "A supported story from the existing footage.", estimated_seconds: 12, source_backed: true,
+      asset_ids: [serverId], visuals: [{ asset_id: serverId, display_name: "Product detail", reason: "Shows this recorded demonstration.", mime_type: "video/mp4" }],
+      script: [{ evidence_id: index * 2, asset_id: serverId, start: 0, end: 6, role: "hook", text: "These are the exact opening words from the recording.", display_name: "Product introduction", source_name: "talking.mp4" },
+               { evidence_id: index * 2 + 1, asset_id: serverId, start: 6, end: 12, role: "ending", text: "Here is the supported ending already recorded.", display_name: "Product introduction", source_name: "talking.mp4" }] })) };
+}
+async function mountConcepts() {
+  await act(async () => root.render(React.createElement(ConceptDesk)));
+  await waitFor(() => !button("Generate reel ideas").disabled);
+}
+
+test("concept discovery is explicit, shows recorded script and pictures, and renders only two selected options", async () => {
+  await mountConcepts();
+  assert.equal(posts("concepts").length, 0);
+  assert.equal(calls.some((call) => call.route.endsWith("/render")), false);
+  await click(button("Generate reel ideas"));
+  await waitFor(() => document.querySelector('input[aria-label="Choose Recorded story 1"]'));
+  assert.equal(conceptCounter, 1);
+  assert.match(document.body.textContent, /exact opening words from the recording/);
+  assert.match(document.body.textContent, /Supporting pictures/);
+  assert.equal(calls.some((call) => call.route.endsWith("/render")), false);
+  await click(document.querySelector('input[aria-label="Choose Recorded story 1"]'));
+  await click(document.querySelector('input[aria-label="Choose Recorded story 2"]'));
+  assert.equal(document.querySelector('input[aria-label="Choose Recorded story 3"]').disabled, true);
+  await click(button("Create 2 previews"));
+  await waitFor(() => [...document.querySelectorAll('a')].filter((item) => item.textContent === "Open edit").length === 2);
+  const render = calls.filter((call) => call.route.endsWith('/render'));
+  assert.equal(render.length, 1);
+  assert.deepEqual(render[0].body.concept_ids, ["option-1", "option-2"]);
+  assert.equal(conceptCounter, 1);
+});
+
+test("saved concepts reopen without a model call and a failed render retains the chosen option", async () => {
+  conceptHistory = [conceptSession()];
+  await mountConcepts();
+  await waitFor(() => document.querySelector('input[aria-label="Choose Recorded story 1"]'));
+  assert.equal(posts("concepts").length, 0);
+  renderConceptFailure = true;
+  await click(document.querySelector('input[aria-label="Choose Recorded story 1"]'));
+  await click(button("Create 1 preview"));
+  await waitFor(() => document.querySelector('[role="alert"]')?.textContent.includes("Trash"));
+  assert.equal(document.querySelector('input[aria-label="Choose Recorded story 1"]').checked, true);
+  assert.equal(posts("concepts").length, 0);
+  assert.equal(conceptHistory[0].jobs.length, 0);
 });

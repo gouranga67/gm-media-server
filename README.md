@@ -99,6 +99,16 @@ Use the pencil beside a file for a readable display name, or select several and 
 
 After deploying migration 025, `python3 scripts/verify-phase8.py` checks names, roles, collection filtering, atomic batch failures, Trash/restore, provenance, and preview download. It restores the original metadata afterward and makes no AI calls.
 
+## Find reel ideas from existing footage
+
+Open **Library → Find reel ideas** (`/concepts`). Add a batch of media there or in the library, then wait for its local speech/catalogue analysis. Leave Direction empty for discovery across the ready library, or choose a collection, audience, and subject. **Generate reel ideas** makes one explicit, bounded request using stored transcripts/metadata and, in Hybrid mode, small preview sheets. Original files remain on the server.
+
+The saved options show recorded script passages with source/time links and proposed supporting pictures. Script words come from cited transcript records, not generated narration. Select one or two options, choose effects/music/platform, then **Create previews**. Each selection becomes a separate ordinary editing job; you review the result before export. Repeated submissions reuse existing sessions/jobs. New concepts and their measured token usage are separate from editing history, and their usage counts toward studio budgets.
+
+Discovery considers up to 60 unique ready sources per request, spreads speech evidence across recordings and their beginnings/endings, and reports actual coverage. It does not promise to inspect the whole library in a single model call. Use a collection or focus to explore a larger library. Fewer than three options may be returned when that is all the evidence supports. Background processing failures and interrupted model calls are visible; ambiguous model requests are not automatically retried.
+
+After deploying migration 026, run `python3 scripts/verify-library-concepts.py` for read-only readiness checks with no model calls. Generating concepts and rendering selected previews are explicit actions in the browser.
+
 ## Import rights-approved music
 
 GM Studio can install the reviewed starter catalogue or accept your own non-synthetic audio files with recorded licence, commercial-use confirmation, attribution, and permitted platforms.

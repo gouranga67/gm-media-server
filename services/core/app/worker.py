@@ -10,6 +10,7 @@ from psycopg.types.json import Jsonb
 from redis import Redis
 
 from app.config import get_settings
+from app.concepts import process_one_concept, recover_interrupted_concepts
 from app.content_catalog import CATALOG_VERSION, build_catalog_segments
 from app.database import connection
 from app.duplicate_storage import share_exact_duplicate_storage
@@ -48,6 +49,7 @@ from app.visual_index import (
 @dataclass
 class WorkerState:
     stopping: bool = False
+    active_concept_request_id: str | None = None
     active_ingest_id: str | None = None
     active_catalog_id: str | None = None
     active_visual_index_id: str | None = None
@@ -1622,6 +1624,8 @@ def heartbeat_loop(state: WorkerState, stop_event: threading.Event) -> None:
                 if state.active_final_export_id
                 else "rendering-variant"
                 if state.active_delivery_variant_id
+                else "concept-planning"
+                if state.active_concept_request_id
                 else "idle"
             )
             client.set(
@@ -1630,6 +1634,7 @@ def heartbeat_loop(state: WorkerState, stop_event: threading.Event) -> None:
                     {
                         "unix_time": time.time(),
                         "status": status,
+                        "concept_request_id": state.active_concept_request_id,
                         "asset_id": state.active_ingest_id,
                         "catalog_asset_id": state.active_catalog_id,
                         "visual_index_asset_id": state.active_visual_index_id,
@@ -1640,6 +1645,13 @@ def heartbeat_loop(state: WorkerState, stop_event: threading.Event) -> None:
                 ),
                 ex=settings.worker_heartbeat_ttl_seconds,
             )
+            if state.active_concept_request_id:
+                try:
+                    with connection() as database:
+                        database.execute("UPDATE reel_concept_requests SET lease_expires_at=now()+(%s*interval '1 second'),updated_at=now() WHERE id=%s AND status='generating'",
+                                         (settings.edit_lease_seconds, state.active_concept_request_id))
+                except Exception as error:
+                    print(f"concept lease heartbeat failed: {error}", flush=True)
             if state.active_ingest_id:
                 try:
                     with connection() as database:
@@ -1801,6 +1813,9 @@ def main() -> None:
             pass
         while not state.stopping and process_one_delivery_variant(state):
             pass
+        recover_interrupted_concepts()
+        if not state.stopping:
+            process_one_concept(state)
         # Visual backfill is deliberately one asset per loop so an existing
         # library cannot starve user-requested previews or final exports.
         seed_pending_visual_indexes()

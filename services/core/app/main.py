@@ -7,6 +7,7 @@ from fastapi import FastAPI, HTTPException
 from redis import Redis
 
 from app.config import get_settings
+from app.concepts import router as concepts_router
 from app.creative_profiles import router as creative_profiles_router
 from app.creative_assets import router as creative_assets_router
 from app.brand_kits import router as brand_kits_router
@@ -37,6 +38,7 @@ app.include_router(productization_router)
 app.include_router(projects_router)
 app.include_router(editing_router)
 app.include_router(library_router)
+app.include_router(concepts_router)
 app.include_router(learning_router)
 app.include_router(upload_hooks_router)
 app.include_router(creative_profiles_router)

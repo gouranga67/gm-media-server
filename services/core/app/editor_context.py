@@ -75,6 +75,10 @@ def build_editor_context(
             """,
             (job_id,),
         ).fetchall()
+        concept_selection = database.execute("""
+            SELECT r.id AS request_id,c.concept_id,r.concepts FROM reel_concept_jobs c
+            JOIN reel_concept_requests r ON r.id=c.request_id WHERE c.job_id=%s
+        """, (job_id,)).fetchone()
         music_rows = database.execute(
             """
             SELECT * FROM music_tracks
@@ -219,7 +223,7 @@ def build_editor_context(
         if include_internal_paths:
             item["_storage_key"] = row["storage_key"]
         creative_library.append(item)
-    return {
+    context = {
         "job": {
             "id": str(job["id"]),
             "project_id": str(job["project_id"]),
@@ -292,6 +296,13 @@ def build_editor_context(
             "synthetic_music": False,
         },
     }
+
+    if concept_selection:
+        selected = next((item for item in concept_selection["concepts"] if item["id"] == str(concept_selection["concept_id"])), None)
+        if selected:
+            context["selected_concept"] = {"request_id": str(concept_selection["request_id"]),
+                "title": selected["title"], "script": selected["script"], "visuals": selected["visuals"]}
+    return context
 
 
 def resolve_internal_asset_source(settings: Settings, asset: dict[str, Any]) -> Path:

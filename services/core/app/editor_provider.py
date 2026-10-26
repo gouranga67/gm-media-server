@@ -358,6 +358,13 @@ def _public_context(context: dict[str, Any], max_characters: int) -> dict[str, A
 def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str, Any]]:
     public = _public_context(context, settings.editor_max_context_characters)
     revision = public.get("revision")
+    concept_instruction = (
+        "The user selected the source-backed concept in selected_concept. Preserve its recorded script order, "
+        "source identities, and narrative meaning. Use the cited speech ranges as guides, preserving complete "
+        "words and natural boundaries. Use its supporting pictures only where relevant. Do not substitute a "
+        "different story or invent new narration. An explicit later revision may change this selection.\n\n"
+        if isinstance(public.get("selected_concept"), dict) else ""
+    )
     revision_instruction = ""
     if isinstance(revision, dict):
         locked = revision.get("locked_elements") or []
@@ -537,6 +544,7 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
                 task_instruction
                 + "\n\n"
                 + source_instruction
+                + concept_instruction
                 + take_instruction
                 + learning_instruction
                 + revision_instruction
@@ -648,6 +656,7 @@ def _request_plan(
     reasoning_effort: str,
     context: dict[str, Any],
     settings: Settings,
+    structured_task: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     recipe = str(context.get("job", {}).get("recipe") or "talking_head")
     schema = schema_for_recipe(recipe)
@@ -662,7 +671,7 @@ def _request_plan(
             "post_copy may contain concise social caption text grounded only in the supplied transcript "
             "and brief; never invent factual claims."
         ),
-        "input": [{"role": "user", "content": _model_content(context, settings)}],
+        "input": [{"role": "user", "content": _model_content(context, settings) if structured_task is None else []}],
         "text": {
             "format": {
                 "type": "json_schema",
@@ -676,6 +685,14 @@ def _request_plan(
         "store": False,
         "stream": True,
     }
+    if structured_task is not None:
+        body["instructions"] = structured_task["instructions"]
+        body["input"] = [{"role": "user", "content": structured_task["content"]}]
+        body["text"]["format"] = {
+            "type": "json_schema", "name": structured_task["name"], "strict": True,
+            "schema": structured_task["schema"],
+        }
+        body["max_output_tokens"] = 6000
     request = urllib.request.Request(
         endpoint,
         data=json.dumps(body, ensure_ascii=False).encode("utf-8"),

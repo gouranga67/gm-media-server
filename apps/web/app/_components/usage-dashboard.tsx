@@ -117,6 +117,8 @@ export function UsageDashboard() {
               <Metric label="Total tokens" prominent value={tokens(usage.total_tokens)} /><Metric label="Requests" prominent value={tokens(usage.requests)} /><Metric label="Input" value={tokens(usage.input_tokens)} /><Metric label="Output" value={tokens(usage.output_tokens)} /><Metric label="Cached input" value={tokens(usage.cached_input_tokens)} /><Metric label="Reasoning" value={tokens(usage.reasoning_tokens)} />
             </section>
 
+            {usage.concept_requests ? <p className="text-xs leading-6 text-[#666862]">Totals include {usage.concept_requests} library concept requests ({tokens(usage.concept_tokens ?? 0)} tokens). Ideas stay in <Link className="font-bold text-[#173F5F] underline" href="/concepts">Find reel ideas</Link>; only selected concepts become editing jobs.</p> : null}
+
             <section className="rounded-md border border-[#D7D9D3] bg-white p-5">
               <h2 className="font-mono text-xs font-bold tracking-wide text-[#173F5F] uppercase">By model</h2>
               {usage.by_model.length ? <ul className="mt-4 divide-y divide-[#E7E8E4]">{usage.by_model.map((item) => <li className="flex items-center justify-between gap-4 py-3 text-sm" key={item.model}><span className="font-bold">{item.model}</span><span className="font-mono text-xs text-[#666862]">{tokens(item.total_tokens)} · {item.requests} calls</span></li>)}</ul> : <p className="mt-3 text-sm text-[#666862]">No hosted editor requests in this period.</p>}

@@ -524,6 +524,8 @@ export type JobUsage = {
 };
 
 export type UsageDashboard = {
+  readonly concept_requests?: number;
+  readonly concept_tokens?: number;
   readonly days: number;
   readonly requests: number;
   readonly jobs: number;
@@ -1259,4 +1261,33 @@ export function applyRetention() {
 
 export function getStudioAudit() {
   return apiRequest<readonly StudioAuditEvent[]>("studio/audit?limit=100", { cache: "no-store" });
+}
+
+export type ReelConcept = {
+  readonly id: string;
+  readonly title: string;
+  readonly angle: string;
+  readonly estimated_seconds: number;
+  readonly source_backed: boolean;
+  readonly asset_ids: readonly string[];
+  readonly script: readonly { readonly evidence_id: number; readonly asset_id: string; readonly start: number; readonly end: number; readonly text: string; readonly role: string; readonly source_name: string; readonly display_name: string }[];
+  readonly visuals: readonly { readonly asset_id: string; readonly reason: string; readonly display_name: string; readonly mime_type: string }[];
+};
+export type ConceptJob = { readonly concept_id: string; readonly job_id: string };
+export type ConceptSession = {
+  readonly id: string; readonly focus: string; readonly audience: string; readonly privacy_mode: "hybrid" | "text_only";
+  readonly status: "pending" | "generating" | "ready" | "failed";
+  readonly concepts: readonly ReelConcept[]; readonly jobs: readonly ConceptJob[];
+  readonly coverage: { readonly unique_sources_available: number; readonly sources_considered: number; readonly speech_passages: number };
+  readonly total_tokens: number; readonly model: string | null; readonly error: string | null; readonly created_at: string;
+};
+export type ConceptLibraryStatus = { readonly analysis_failed?: number; readonly unique_sources: number; readonly catalogued_sources: number; readonly spoken_sources: number; readonly visually_indexed_sources: number; readonly still_processing: number };
+export function getConceptLibraryStatus() { return apiRequest<ConceptLibraryStatus>("concepts/library-status", { cache: "no-store" }); }
+export function getConceptSessions() { return apiRequest<readonly ConceptSession[]>("concepts", { cache: "no-store" }); }
+export function getConceptSession(id: string) { return apiRequest<ConceptSession>(`concepts/${encodeURIComponent(id)}`, { cache: "no-store" }); }
+export function generateLibraryConcepts(input: { readonly id: string; readonly focus: string; readonly audience: string; readonly collection_id: string | null; readonly privacy_mode: "hybrid" | "text_only" }) {
+  return apiRequest<ConceptSession>("concepts", { method: "POST", body: JSON.stringify(input) });
+}
+export function renderLibraryConcepts(id: string, input: { readonly concept_ids: readonly string[]; readonly effect_level: EffectLevel; readonly music_mode: MusicMode; readonly target_platform: TargetPlatform }) {
+  return apiRequest<{ readonly jobs: readonly ConceptJob[] }>(`concepts/${encodeURIComponent(id)}/render`, { method: "POST", body: JSON.stringify(input) });
 }
