@@ -41,6 +41,76 @@ class RevisionContextTests(unittest.TestCase):
         with self.assertRaises(ProviderResponseError):
             _public_context({"assets": [], "huge_inventory": "x" * 2000}, 1000)
 
+    def test_large_multisource_inventory_compacts_hints_before_complete_dialogue(self):
+        # Several short recordings can have far more scoring metadata than
+        # dialogue. This used to exhaust the budget even after dropping speech.
+        context = self.context()
+        context["assets"] = []
+        for index in range(19):
+            context["assets"].append({
+                "asset_id": str(index), "sha256": f"checksum-{index}",
+                "source_name": f"Recording {index}.mp4", "duration_seconds": 45,
+                "transcript_segments": [
+                    {"start": n, "end": n + 1, "text": f"Recording {index}, complete phrase {n}."}
+                    for n in range(10)],
+                "take_quality": {"production_chatter": [{"start": 0, "end": 1, "text": "Ready?"}]},
+                "story_index": {"moments": [
+                    {"kind": "spoken", "moment_id": f"spoken-{n}", "start_seconds": n,
+                     "end_seconds": n + 1, "text": f"Complete phrase {n}. " * 5,
+                     "suggested_roles": ["context", "development"],
+                     "role_scores": {"context": 0.5, "development": 0.6},
+                     "score_components": {f"component-{m}": 0.5 for m in range(50)},
+                     "signals": ["complete_spoken_thought"],
+                     "edit_guidance": {"clean_cut_in": True, "clean_cut_out": True},
+                     "transcript_confidence": 0.9, "retrieval_score": 0.8}
+                    for n in range(12)] + [
+                    {"kind": "visual_window", "moment_id": "visual-0", "start_seconds": 0,
+                     "end_seconds": 4, "text": "Unlabelled source frame; inspect the contact sheet.",
+                     "evidence": ["source-frame"], "signals": ["visual_only"]}]},
+            })
+        original = deepcopy(context)
+        public = _public_context(context, 120_000)
+        self.assertLessEqual(len(json.dumps(public, ensure_ascii=False, separators=(",", ":"))), 120_000)
+        self.assertEqual(context, original)
+        self.assertEqual([a["asset_id"] for a in public["assets"]], [str(n) for n in range(19)])
+        for asset, source in zip(public["assets"], original["assets"]):
+            self.assertEqual(asset["transcript_segments"], source["transcript_segments"])
+            self.assertFalse(asset.get("transcript_truncated", False))
+            self.assertEqual(asset["take_quality"], source["take_quality"])
+            moments = asset["story_index"]["moments"]
+            self.assertEqual(moments[-1], source["story_index"]["moments"][-1])
+            self.assertEqual(moments[0]["edit_guidance"], source["story_index"]["moments"][0]["edit_guidance"])
+            self.assertEqual(moments[0]["suggested_roles"], ["context", "development"])
+
+    def test_duplicate_recordings_keep_inventory_and_dialogue_but_do_not_fake_diversity(self):
+        context = self.context()
+        context["assets"][0]["sha256"] = context["assets"][1]["sha256"] = "identical-bytes"
+        public = _public_context(context, 120_000)
+        self.assertEqual(public["assets"][1]["duplicate_of_asset_id"], "0")
+        self.assertNotIn("duplicate_of_asset_id", public["assets"][0])
+        self.assertNotIn("duplicate_of_asset_id", public["assets"][2])
+        self.assertNotIn("duplicate_of_asset_id", context["assets"][1])
+        for asset in public["assets"]:
+            self.assertNotIn("sha256", asset)
+            self.assertEqual(len(asset["transcript_segments"]), 32)
+
+    def test_cross_source_story_direction_reaches_both_recipes_without_an_extra_request(self):
+        context = self.context()
+        settings = SimpleNamespace(editor_max_context_characters=120_000)
+        for recipe in ("talking_head", "montage"):
+            context["job"]["recipe"] = recipe
+            content = _model_content(context, settings)
+            self.assertEqual(len(content), 1)
+            prompt = content[0]["text"]
+            self.assertIn("assemble complementary story beats across different recordings", prompt)
+            self.assertIn("why other source groups were omitted", prompt)
+            self.assertIn("never transfer a benefit, testimonial, or conclusion", prompt)
+            self.assertIn("Do not force unrelated", prompt)
+            for index in range(3):
+                self.assertIn(f"Source {index} sentence 31:", prompt)
+        context["assets"] = context["assets"][:1]
+        self.assertNotIn("Multi-source story:", _model_content(context, settings)[0]["text"])
+
     def test_rebuild_instruction_is_explicit_and_reaches_prompt(self):
         context = self.context()
         context["revision"] = {"mode": "rebuild_story", "instruction": "Keep the explanation together.",

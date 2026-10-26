@@ -197,7 +197,14 @@ def list_chatgpt_models(settings: Settings | None = None) -> list[dict[str, str]
 
 def _public_context(context: dict[str, Any], max_characters: int) -> dict[str, Any]:
     public = deepcopy(context)
+    source_checksums: dict[str, str] = {}
     for asset in public.get("assets", []):
+        checksum = asset.get("sha256")
+        if isinstance(checksum, str) and checksum:
+            if checksum in source_checksums:
+                asset["duplicate_of_asset_id"] = source_checksums[checksum]
+            else:
+                source_checksums[checksum] = str(asset.get("asset_id"))
         for key in list(asset):
             if key.startswith("_") or key in {"sha256", "byte_size", "asset_status", "analysis_status"}:
                 del asset[key]
@@ -259,15 +266,49 @@ def _public_context(context: dict[str, Any], max_characters: int) -> dict[str, A
     if len(encoded) <= max_characters:
         return public
 
-    # Reduce duplicate highlight evidence before allocating transcript space.
+    # Rich moment cards repeat locally calculated scores and provenance. Under
+    # pressure, preserve their actual passages, roles, cut hints, and visual
+    # evidence before considering any reduction of the complete dialogue.
     for asset in public.get("assets", []):
         story_index = asset.get("story_index")
         if isinstance(story_index, dict) and isinstance(story_index.get("moments"), list):
-            moments = story_index["moments"]
-            story_index["moments"] = moments[:8]
-            story_index["moments_truncated"] = len(moments) > 8
+            for moment in story_index["moments"]:
+                if not isinstance(moment, dict):
+                    continue
+                for key in ("score_components", "intrinsic_score", "retrieval_score",
+                            "selection_reasons"):
+                    moment.pop(key, None)
+                if moment.get("suggested_roles"):
+                    moment.pop("role_scores", None)
+                if moment.get("kind") == "spoken":
+                    moment.pop("evidence", None)
+    public["analysis_detail"] = "compact_moment_cards; full_dialogue_retained"
     if len(json.dumps(public, ensure_ascii=False, separators=(",", ":"))) <= max_characters:
         return public
+
+    # Apply the same hint budget to every source, keeping the full transcripts
+    # throughout. These are ranked retrieval hints, not the source inventory.
+    # Keep non-spoken cards: unlike spoken cards their evidence is not repeated
+    # in a transcript, and can ground picture-only cutaways.
+    for spoken_limit in (8, 4, 2, 0):
+        for asset in public.get("assets", []):
+            story_index = asset.get("story_index")
+            if not isinstance(story_index, dict) or not isinstance(story_index.get("moments"), list):
+                continue
+            moments = story_index["moments"]
+            spoken_count = 0
+            retained_moments = []
+            for moment in moments:
+                if isinstance(moment, dict) and moment.get("kind") == "spoken":
+                    spoken_count += 1
+                    if spoken_count > spoken_limit:
+                        continue
+                retained_moments.append(moment)
+            if len(retained_moments) < len(moments):
+                story_index["moments_truncated"] = True
+            story_index["moments"] = retained_moments
+        if len(json.dumps(public, ensure_ascii=False, separators=(",", ":"))) <= max_characters:
+            return public
 
     # Share the remaining budget across sources and across each source's
     # beginning, middle and ending. Never silently retain only the first file.
@@ -278,10 +319,11 @@ def _public_context(context: dict[str, Any], max_characters: int) -> dict[str, A
         asset["transcript_truncated"] = True
         asset["transcript_segment_count"] = len(originals[-1])
     public["transcript_coverage"] = "sampled_across_sources_and_time"
+    public["analysis_detail"] = "compact_moment_cards; dialogue_sampled"
     base_size = len(json.dumps(public, ensure_ascii=False, separators=(",", ":")))
     remaining = max_characters - base_size
     if remaining < 0:
-        raise ProviderResponseError("editor inventory exceeds the context limit; use fewer sources")
+        raise ProviderResponseError("editor inventory exceeds the configured context limit after compaction")
     queues = []
     for segments in originals:
         # Endpoints first, then recursively fill the largest temporal gaps.
@@ -365,6 +407,24 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
             "plan, not a patch. Do not repeat overlapping source ranges from the same video asset.\n\n"
         )
     recipe = str(public.get("job", {}).get("recipe") or "talking_head")
+    source_instruction = (
+        "Multi-source story: compare every supplied source before choosing cuts. Multiple files may be "
+        "different subjects or scenes, not just alternate takes. For an open-ended story brief, look for "
+        "a supported common thread and assemble complementary story beats across different recordings; "
+        "do not automatically settle for the easiest single-topic excerpt. Read each source's complete "
+        "dialogue, including its ending. Asset duplicate_of_asset_id means a byte-identical recording, "
+        "not an additional story contribution. Within each passage preserve the speaker's meaning, but "
+        "file upload order does not dictate story order. Keep product introductions and referents clear; "
+        "never transfer a benefit, testimonial, or conclusion from one product to a different product. "
+        "Use several distinct recordings when they contribute to the shared story. Do not force unrelated "
+        "footage into it or add dead air to meet a source-count quota. An explicit focused brief takes "
+        "precedence. In editorial_summary explain the chosen connecting idea, which recordings contribute, "
+        "and why other source groups were omitted. If a shared story is unsupported, say so and explain "
+        "the narrower story chosen. If transcript_coverage indicates sampling, acknowledge that limitation; "
+        "do not claim to have read omitted passages.\n\n"
+        if len([asset for asset in public.get("assets", []) if not asset.get("duplicate_of_asset_id")]) > 1
+        else ""
+    )
     take_instruction = (
         "Story quality takes precedence over humour, music, and effects. A funny tone or meme_heavy "
         "effect level is not a request for a blooper reel. Read every source's take_quality report and "
@@ -424,8 +484,9 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
             "the strongest supported hook instead of routine setup, "
             "then give only the context needed to understand the point, develop it, deliver a payoff, and follow "
             "the requested ending. Assign every clip a story_role and a concise editorial_intent. Preserve the speaker's "
-            "meaning, remove obvious dead air, and keep chronological order unless the brief clearly requires "
-            "otherwise. Treat job.target_duration_seconds as an approximate aim, never a minimum. "
+            "meaning, remove obvious dead air, and preserve meaningful chronology and cause and effect "
+            "within each account. File upload order is not a required story order. "
+            "Treat job.target_duration_seconds as an approximate aim, never a minimum. "
             "A shorter complete story is better than dead air, repeated information, or a blooper added "
             "to fill time. Use the explicit speech_gaps to cut excessive hesitation; a typical retained "
             "pause is 0.3–0.6s and a short comedy beat about 0.8s. Speech gaps can contain laughter or "
@@ -467,6 +528,7 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
             "text": (
                 task_instruction
                 + "\n\n"
+                + source_instruction
                 + take_instruction
                 + learning_instruction
                 + revision_instruction
