@@ -1003,11 +1003,12 @@ def create_job(
                     target_platform, must_include,
                     audience, story_goal, desired_feeling, ending_instruction,
                     editor_model, reasoning_effort, output_aspect, creative_profile_id,
-                    brand_kit_id, publishing_preset, created_by_login, reel_intent, assembly_mode, pacing_mode
+                    brand_kit_id, publishing_preset, created_by_login, reel_intent, assembly_mode, pacing_mode,
+                    duration_mode, max_duration_seconds
                 )
                 VALUES (
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                 )
                 RETURNING *
                 """,
@@ -1036,6 +1037,8 @@ def create_job(
                     payload.reel_intent.value,
                     assembly_mode,
                     payload.pacing_mode,
+                    payload.duration_mode,
+                    payload.max_duration_seconds,
                 ),
             ).fetchone()
     except ForeignKeyViolation as error:
@@ -1050,6 +1053,8 @@ def create_job(
             or row.get("pacing_mode", "manual") != payload.pacing_mode
             or row.get("reel_intent", "auto") != payload.reel_intent.value
             or row["target_duration_seconds"] != payload.target_duration_seconds
+            or row.get("duration_mode", "follow_story") != payload.duration_mode
+            or row.get("max_duration_seconds", 90) != payload.max_duration_seconds
             or (row.get("assembly_decision") or {}).get("requested_edit_style", row["edit_style"]) != payload.edit_style.value
             or row["music_mode"] != payload.music_mode.value
             or row["selected_music_track_id"] != payload.selected_music_track_id

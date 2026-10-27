@@ -26,7 +26,7 @@ const talkingHeadClip = z
 
 const creativeCue = z.object({
   asset_id: z.string().uuid(),
-  start_seconds: z.number().min(0).max(60),
+  start_seconds: z.number().min(0).max(120),
   duration_seconds: z.number().min(0.1).max(8),
   position: z.enum(["top", "center", "bottom", "full_frame"]),
   intensity: z.enum(["subtle", "standard", "strong"]),
@@ -40,7 +40,7 @@ const captionAndEffects = {
   broll: z.array(z.object({
     asset_id: z.string().uuid(), media_kind: z.enum(["video", "image"]),
     source_in: z.number().nonnegative(), source_out: z.number().nonnegative(),
-    start_seconds: z.number().min(0).max(60), duration_seconds: z.number().min(0.5).max(4),
+    start_seconds: z.number().min(0).max(120), duration_seconds: z.number().min(0.5).max(4),
     editorial_intent: z.string().min(1).max(180),
   }).strict()).max(8).default([]),
 };

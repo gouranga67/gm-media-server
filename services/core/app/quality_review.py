@@ -13,7 +13,7 @@ from app.media_analysis import LOUDNESS_JSON_PATTERN, probe_media, run_command, 
 
 
 QUALITY_REVIEW_VERSION = "1.0"
-MAX_REVIEW_SECONDS = 61
+MAX_REVIEW_SECONDS = 121
 REVIEW_TIMEOUT_SECONDS = 30
 
 

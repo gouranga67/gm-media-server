@@ -153,7 +153,7 @@ def _visual_profile(document):
         profile.extend(
             [clip.get("visual_preset", "standard")] * max(1, round(duration * 2))
         )
-    return profile[:120]
+    return profile[:240]
 
 
 def _treatment_changed(before, after):

@@ -315,7 +315,7 @@ function FinishingForm({
                   <input
                     className={control}
                     min={0}
-                    max={60}
+                    max={120}
                     step="0.01"
                     type="number"
                     required
@@ -328,7 +328,7 @@ function FinishingForm({
                   <input
                     className={control}
                     min={0.01}
-                    max={60}
+                    max={120}
                     step="0.01"
                     type="number"
                     required

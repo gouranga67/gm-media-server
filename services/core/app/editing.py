@@ -462,8 +462,8 @@ def rebuild_preview(job_id: UUID) -> dict[str, Any]:
             """
             INSERT INTO edit_runs (
                 job_id, version, edit_plan_id, based_on_run_id, provider, model,
-                reasoning_effort, caption_corrections, locked_elements
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                reasoning_effort, caption_corrections, locked_elements, duration_policy
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING *
             """,
             (
@@ -476,6 +476,7 @@ def rebuild_preview(job_id: UUID) -> dict[str, Any]:
                 based_on.get("reasoning_effort"),
                 Jsonb(based_on.get("caption_corrections") or []),
                 Jsonb(based_on.get("locked_elements") or []),
+                Jsonb(based_on["duration_policy"]) if based_on.get("duration_policy") else None,
             ),
         ).fetchone()
         database.execute(
@@ -755,6 +756,9 @@ def _request_revision(job_id: UUID, payload: RevisionCreate,
                     status_code=404,
                     detail="a ready version with that number was not found",
                 )
+        if not payload.note and not alternative:
+            from app.duration_policy import apply_duration_snapshot
+            apply_duration_snapshot(context, based_on)
         if payload.finishing_settings is not None or adjustments:
             source_plan = database.execute(
                 "SELECT document FROM edit_plans WHERE id=%s",
@@ -843,8 +847,8 @@ def _request_revision(job_id: UUID, payload: RevisionCreate,
             INSERT INTO edit_runs (
                 job_id, version, based_on_run_id, revision_note, caption_corrections,
                 caption_settings, effects_enabled, clip_adjustments, locked_elements, revision_mode, broll_enabled, finishing_settings, evaluation_lesson_id, repair_kind,
-                alternative_kind, alternative_request_id
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                alternative_kind, alternative_request_id, duration_policy
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING *
             """,
             (
@@ -866,6 +870,7 @@ def _request_revision(job_id: UUID, payload: RevisionCreate,
                 payload.repair_kind,
                 alternative.kind if alternative else None,
                 alternative.request_id if alternative else None,
+                Jsonb(based_on["duration_policy"]) if not payload.note and based_on.get("duration_policy") else None,
             ),
         ).fetchone()
         database.execute(

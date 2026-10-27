@@ -245,6 +245,8 @@ def build_editor_context(
             "status": job["status"],
             "revision": job["revision"],
             "target_duration_seconds": job["target_duration_seconds"],
+            "duration_mode": job.get("duration_mode") or "aim",
+            "max_duration_seconds": job.get("max_duration_seconds") or 90,
             "edit_style": job["edit_style"],
             "music_mode": job["music_mode"],
             "selected_music_track_id": (

@@ -37,6 +37,8 @@ The optional [Meta publishing setup](docs/meta-publishing-setup.md) connects Fac
 
 On a completed edit, **Make another version** offers a different cut of the same story or a different supported recorded story. Earlier previews remain available for comparison, download and explicit restoration. Each alternative uses another editing request with stored analysis; local similarity checks report repetition without automatically generating more versions.
 
+Duration separates a preference from a limit. **Follow the story** defaults to a 90-second maximum; **Aim for a length** allows up to 20% flexibility within your maximum; **Strict maximum** holds the chosen limit. All modes can finish sooner, and the supported maximum is 120 seconds. **Duration settings** on a saved job lets you change future attempts without uploading again. Saving does not start an edit; completed versions retain their saved policy for exact re-renders and exports.
+
 ## Requirements
 
 - Linux host with Docker Engine and Docker Compose v2

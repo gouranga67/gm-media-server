@@ -3,6 +3,22 @@ export type EditStyle = "clean" | "energetic" | "calm" | "high_impact";
 export type MusicMode = "none" | "subtle" | "present";
 export type EffectLevel = "off" | "subtle" | "social" | "meme_heavy";
 export type TargetDuration = 15 | 20 | 30 | 45 | 60;
+export type DurationMode = "follow_story" | "aim" | "strict";
+export type DurationSettings = {
+  readonly duration_mode: DurationMode;
+  readonly target_duration_seconds: TargetDuration;
+  readonly max_duration_seconds: number;
+};
+export type DurationAssessment = {
+  readonly mode: DurationMode | "legacy";
+  readonly preferred_seconds: number;
+  readonly maximum_seconds: number;
+  readonly available_speech_seconds?: number;
+  readonly actual_seconds?: number;
+  readonly warning?: string | null;
+  readonly local_repair?: { readonly status: string; readonly before_seconds: number; readonly after_seconds: number } | null;
+};
+export type DurationPreview = { readonly settings: DurationSettings; readonly assessment: DurationAssessment };
 export type Recipe = "talking_head" | "montage";
 export type AssemblyMode = "auto" | Recipe;
 export type PacingMode = "auto" | "manual";
@@ -16,7 +32,7 @@ export type AssemblySettings = {
 };
 export type AssemblyPreview = {
   readonly ready: boolean; readonly locked: boolean; readonly decision: AssemblyDecision | null;
-  readonly error: string | null; readonly settings: AssemblySettings;
+  readonly error: string | null; readonly settings: AssemblySettings; readonly duration?: DurationAssessment;
 };
 export type ReelIntent = "auto" | "story" | "promotion" | "bloopers";
 export type ReasoningEffort = "low" | "medium" | "high";
@@ -45,6 +61,8 @@ export type MediaJob = {
   readonly status: string;
   readonly revision: number;
   readonly target_duration_seconds: TargetDuration | null;
+  readonly duration_mode?: DurationMode;
+  readonly max_duration_seconds?: number;
   readonly edit_style: EditStyle | null;
   readonly music_mode: MusicMode | null;
   readonly selected_music_track_id: string | null;
@@ -287,6 +305,7 @@ export type EditRun = {
   readonly reasoning_effort: ReasoningEffort | null;
   readonly based_on_run_id: string | null;
   readonly revision_note: string | null;
+  readonly duration_policy?: DurationSettings | null;
   readonly alternative_kind?: "different_cut" | "different_story" | null;
   readonly caption_corrections: readonly CaptionCorrection[];
   readonly caption_settings: Readonly<{
@@ -746,6 +765,8 @@ export function createMediaJob(
     readonly pacingMode?: PacingMode;
     readonly reelIntent?: ReelIntent;
     readonly targetDurationSeconds: TargetDuration;
+    readonly durationMode?: DurationMode;
+    readonly maxDurationSeconds?: number;
     readonly editStyle: EditStyle;
     readonly musicMode: MusicMode;
     readonly selectedMusicTrackId?: string | null;
@@ -773,6 +794,8 @@ export function createMediaJob(
       pacing_mode: input.pacingMode,
       reel_intent: input.reelIntent ?? "auto",
       target_duration_seconds: input.targetDurationSeconds,
+      duration_mode: input.durationMode ?? "follow_story",
+      max_duration_seconds: input.maxDurationSeconds ?? 90,
       edit_style: input.editStyle,
       music_mode: input.musicMode,
       selected_music_track_id: input.selectedMusicTrackId ?? null,
@@ -1439,4 +1462,11 @@ export function getJobAssembly(jobId: string) {
 }
 export function updateJobAssembly(jobId: string, settings: AssemblySettings) {
   return apiRequest<AssemblyPreview>(`jobs/${jobId}/assembly`, { method: "PUT", body: JSON.stringify(settings) });
+}
+
+export function getJobDuration(jobId: string) {
+  return apiRequest<DurationPreview>(`jobs/${jobId}/duration`);
+}
+export function updateJobDuration(jobId: string, settings: DurationSettings) {
+  return apiRequest<DurationPreview>(`jobs/${jobId}/duration`, { method: "PUT", body: JSON.stringify(settings) });
 }

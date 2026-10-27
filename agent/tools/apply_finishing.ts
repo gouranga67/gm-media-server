@@ -2,12 +2,12 @@ import { defineTool } from "eve/tools";
 import { z } from "zod";
 import { mediaApi } from "../lib/media-api";
 const time = {
-  start: z.number().min(0).max(60),
-  end: z.number().positive().max(60),
+  start: z.number().min(0).max(120),
+  end: z.number().positive().max(120),
 };
 const point = z
   .object({
-    time: z.number().min(0).max(60),
+    time: z.number().min(0).max(120),
     zoom: z.number().min(1).max(1.35),
     x: z.number().min(0).max(1),
     y: z.number().min(0).max(1),

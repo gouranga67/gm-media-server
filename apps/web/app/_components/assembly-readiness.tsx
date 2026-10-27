@@ -111,6 +111,10 @@ export function AssemblyReadiness({
           review.
         </p>
       </div>
+      {preview?.duration ? <div className="rounded-md bg-white p-3 text-sm">
+        <p>Duration: {preview.duration.mode === "follow_story" ? "follow the story" : preview.duration.mode === "strict" ? "strict maximum" : `aim ${preview.duration.preferred_seconds}s`} · maximum {preview.duration.maximum_seconds}s.</p>
+        {preview.duration.warning ? <p className="mt-2">{preview.duration.warning} <a className="font-bold underline" href={`/jobs/${jobId}#duration`}>Adjust duration on the saved job</a>.</p> : null}
+      </div> : null}
       {preview?.error && preview.error !== "Waiting for source analysis." ? (
         <p className="text-xs">
           You can adjust Advanced below, add suitable device footage, or{" "}

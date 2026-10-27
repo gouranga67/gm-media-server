@@ -948,6 +948,15 @@ def process_one_edit(state: WorkerState) -> bool:
         if not context["ready_for_editing"]:
             raise RuntimeError("source analysis is not ready")
 
+        from app.duration_policy import apply_duration_snapshot, duration_settings, duration_preflight
+        if not isinstance(run.get("duration_policy"), dict) and context["job"].get("duration_mode"):
+            run["duration_policy"] = duration_settings(context["job"])
+            with connection() as database:
+                database.execute("UPDATE edit_runs SET duration_policy=%s WHERE id=%s AND duration_policy IS NULL",
+                                 (Jsonb(run["duration_policy"]), run["id"]))
+        apply_duration_snapshot(context, run)
+        context["duration_guidance"] = duration_preflight(context)
+
         if run.get("alternative_kind"):
             from app.alternative_edits import prepare_alternative
             with connection() as database:
@@ -1109,6 +1118,14 @@ def process_one_edit(state: WorkerState) -> bool:
                 proposed = _guard_generated_broll(context, proposed)
             request_kind = "revision" if run.get("based_on_run_id") else "initial_plan"
             _record_plan_usage(run, provenance, request_kind)
+            if not deterministic_revision:
+                from app.duration_repair import repair_duration_overrun
+                from app.duration_policy import validate_duration, plan_duration
+                repaired_duration, context["duration_repair"] = repair_duration_overrun(proposed.model_dump(mode="json"), context)
+                # Duration conflicts alone must not cause another paid repair
+                # request that silently drops a required ending or point.
+                validate_duration(plan_duration(repaired_duration), context["job"])
+                proposed = type(proposed).model_validate(repaired_duration)
             if run.get("broll_enabled") is False:
                 proposed = proposed.model_copy(update={"broll": []}, deep=True)
             revision_text = str(run.get("revision_note") or "").lower()
@@ -1372,7 +1389,7 @@ def claim_pending_final_export() -> dict[str, Any] | None:
             """
             SELECT final_exports.*, edit_runs.version, edit_runs.edit_plan_id,
                    edit_runs.provider, edit_runs.model, edit_runs.caption_corrections,
-                   edit_runs.approved_at, edit_runs.manifest AS preview_manifest
+                   edit_runs.approved_at, edit_runs.manifest AS preview_manifest, edit_runs.duration_policy
             FROM final_exports
             JOIN edit_runs ON edit_runs.id = final_exports.edit_run_id
             WHERE final_exports.status = 'pending'
@@ -1419,9 +1436,12 @@ def process_one_final_export(state: WorkerState) -> bool:
         if plan_row is None:
             raise RuntimeError("the approved edit plan was not found")
         context = build_editor_context(export["job_id"], include_internal_paths=True)
+        from app.duration_policy import apply_duration_snapshot
+        apply_duration_snapshot(context, export)
         if isinstance(export.get("preview_manifest"), dict):
             for key in ("story_contract_review", "story_finishing"):
                 context[key] = export["preview_manifest"].get(key)
+            context["duration_repair"] = (export["preview_manifest"].get("duration_review") or {}).get("local_repair")
         render_document, _ = repair_predictable_plan_defaults(
             plan_row["document"],
             creative_direction=context["job"],
@@ -1549,7 +1569,7 @@ def claim_pending_delivery_variant() -> dict[str, Any] | None:
             """
             SELECT delivery_variants.*, edit_runs.version, edit_runs.edit_plan_id,
                    edit_runs.provider, edit_runs.model, edit_runs.caption_corrections,
-                   edit_runs.approved_at
+                   edit_runs.approved_at, edit_runs.duration_policy
             FROM delivery_variants
             JOIN edit_runs ON edit_runs.id = delivery_variants.edit_run_id
             WHERE delivery_variants.status = 'pending'
@@ -1591,6 +1611,8 @@ def process_one_delivery_variant(state: WorkerState) -> bool:
         if plan_row is None:
             raise RuntimeError("the approved edit plan was not found")
         context = build_editor_context(variant["job_id"], include_internal_paths=True)
+        from app.duration_policy import apply_duration_snapshot
+        apply_duration_snapshot(context, variant)
         render_document, _ = repair_predictable_plan_defaults(
             plan_row["document"],
             creative_direction=context["job"],
@@ -1610,6 +1632,8 @@ def process_one_delivery_variant(state: WorkerState) -> bool:
             **context["job"],
             "output_aspect": variant["output_aspect"],
             "target_duration_seconds": variant["target_duration_seconds"],
+            "duration_mode": "strict",
+            "max_duration_seconds": variant["target_duration_seconds"],
         }
         approved_at = variant.get("approved_at")
         if approved_at is None:
@@ -1629,6 +1653,8 @@ def process_one_delivery_variant(state: WorkerState) -> bool:
             "derived_without_model_call": True,
             "output_aspect": variant["output_aspect"],
             "target_duration_seconds": variant["target_duration_seconds"],
+            "duration_mode": "strict",
+            "max_duration_seconds": variant["target_duration_seconds"],
         }
         if isinstance(plan, MontageEditPlan):
             with measure_processing("rendering") as timing:

@@ -135,6 +135,8 @@ class JobCreate(BaseModel):
     assembly_mode: Literal["auto", "talking_head", "montage"] | None = None
     pacing_mode: Literal["auto", "manual"] = "manual"
     target_duration_seconds: Literal[15, 20, 30, 45, 60] = 45
+    duration_mode: Literal["follow_story", "aim", "strict"] = "follow_story"
+    max_duration_seconds: int = Field(default=90, ge=5, le=120)
     edit_style: EditStyle = EditStyle.ENERGETIC
     music_mode: MusicMode = MusicMode.NONE
     selected_music_track_id: UUID | None = None
@@ -184,6 +186,8 @@ class JobResponse(BaseModel):
     status: str
     revision: int
     target_duration_seconds: int | None = None
+    duration_mode: Literal["follow_story", "aim", "strict"] = "aim"
+    max_duration_seconds: int = 90
     edit_style: EditStyle | None = None
     music_mode: MusicMode | None = None
     selected_music_track_id: UUID | None = None
@@ -625,6 +629,7 @@ class EditRunResponse(BaseModel):
     revision_note: str | None = None
     revision_mode: Literal["targeted", "rebuild_story"] = "targeted"
     alternative_kind: Literal["different_cut", "different_story"] | None = None
+    duration_policy: dict[str, Any] | None = None
     caption_corrections: list[dict[str, str]] = Field(default_factory=list)
     caption_settings: dict[str, Any] = Field(default_factory=dict)
     effects_enabled: bool | None = None
@@ -816,8 +821,8 @@ class EditFeedbackCreate(BaseModel):
     note: str = Field(default="", max_length=1200)
     would_use_again: bool = False
     scope: Literal["edit", "story", "pacing", "captions", "audio", "colour", "effects"] = "edit"
-    start_seconds: float | None = Field(default=None, ge=0, le=60, allow_inf_nan=False)
-    end_seconds: float | None = Field(default=None, gt=0, le=60, allow_inf_nan=False)
+    start_seconds: float | None = Field(default=None, ge=0, le=120, allow_inf_nan=False)
+    end_seconds: float | None = Field(default=None, gt=0, le=120, allow_inf_nan=False)
 
     @model_validator(mode="after")
     def valid_feedback_range(self):

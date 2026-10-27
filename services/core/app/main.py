@@ -26,6 +26,7 @@ from app.knowledge import router as knowledge_router
 from app.assembly import router as assembly_router
 from app.publishing import router as publishing_router
 from app.publishing_captions import router as publishing_captions_router
+from app.duration_routes import router as duration_router
 
 
 @asynccontextmanager
@@ -60,6 +61,7 @@ app.include_router(creative_assets_router)
 app.include_router(brand_kits_router)
 app.include_router(publishing_router)
 app.include_router(publishing_captions_router)
+app.include_router(duration_router)
 
 
 @app.get("/health/live")

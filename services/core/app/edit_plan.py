@@ -11,19 +11,14 @@ from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_valid
 
 from app.take_quality import validate_story_content
 from app.finishing_tools import FinishingTools, validate_finishing, retime_finishing
+from app.duration_policy import MAX_EDIT_SECONDS, resolve_duration, validate_duration
 
 
 EDIT_PLAN_SCHEMA_VERSION = "1.4"
-MAX_PREVIEW_SECONDS = 60.0
+MAX_PREVIEW_SECONDS = float(MAX_EDIT_SECONDS)
 MAX_CLIPS = 24
 MAX_MONTAGE_CLIPS = 48
-TARGET_DURATION_RANGES = {
-    15: (12.0, 18.0),
-    20: (15.0, 25.0),
-    30: (24.0, 36.0),
-    45: (36.0, 52.0),
-    60: (48.0, 60.0),
-}
+
 
 
 class EditClip(BaseModel):
@@ -65,7 +60,7 @@ class CreativeEffectCue(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     asset_id: UUID
-    start_seconds: float = Field(ge=0, le=60)
+    start_seconds: float = Field(ge=0, le=MAX_EDIT_SECONDS)
     duration_seconds: float = Field(ge=0.1, le=8.0)
     position: Literal["top", "center", "bottom", "full_frame"] = "bottom"
     intensity: Literal["subtle", "standard", "strong"] = "subtle"
@@ -79,7 +74,7 @@ class BrollCue(BaseModel):
     media_kind: Literal["video", "image"]
     source_in: float = Field(ge=0)
     source_out: float = Field(ge=0)
-    start_seconds: float = Field(ge=0, le=60)
+    start_seconds: float = Field(ge=0, le=MAX_EDIT_SECONDS)
     duration_seconds: float = Field(ge=0.5, le=4)
     editorial_intent: str = Field(min_length=1, max_length=180)
 
@@ -488,7 +483,7 @@ EFFECT_CUE_JSON_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
         "asset_id": {"type": "string", "format": "uuid"},
-        "start_seconds": {"type": "number", "minimum": 0, "maximum": 60},
+        "start_seconds": {"type": "number", "minimum": 0, "maximum": MAX_EDIT_SECONDS},
         "duration_seconds": {"type": "number", "minimum": 0.1, "maximum": 8},
         "position": {"type": "string", "enum": ["top", "center", "bottom", "full_frame"]},
         "intensity": {"type": "string", "enum": ["subtle", "standard", "strong"]},
@@ -505,7 +500,7 @@ BROLL_CUE_JSON_SCHEMA: dict[str, Any] = {
         "media_kind": {"type": "string", "enum": ["video", "image"]},
         "source_in": {"type": "number", "minimum": 0},
         "source_out": {"type": "number", "minimum": 0},
-        "start_seconds": {"type": "number", "minimum": 0, "maximum": 60},
+        "start_seconds": {"type": "number", "minimum": 0, "maximum": MAX_EDIT_SECONDS},
         "duration_seconds": {"type": "number", "minimum": 0.5, "maximum": 4},
         "editorial_intent": {"type": "string", "minLength": 1, "maxLength": 180},
     },
@@ -990,18 +985,8 @@ def validate_edit_plan(
         if clip.visual_preset in {"slow_push_in", "slow_pull_out"} and clip_duration < 2.0:
             raise ValueError("animated zoom presets require clips of at least 2 seconds")
 
-    if total_duration > MAX_PREVIEW_SECONDS + 0.01:
-        raise ValueError(f"preview duration {total_duration:.3f}s exceeds 60 seconds")
-
     direction = creative_direction or {}
-    target = direction.get("target_duration_seconds")
-    if target in TARGET_DURATION_RANGES:
-        _preferred_minimum, maximum = TARGET_DURATION_RANGES[target]
-        if total_duration > maximum + 0.01:
-            raise ValueError(
-                f"edit duration {total_duration:.3f}s exceeds the {maximum:.3f}s ceiling "
-                f"for a {target}s target"
-            )
+    validate_duration(total_duration, direction)
 
     style = direction.get("edit_style")
     strong_punches = sum(clip.visual_preset == "strong_punch_in" for clip in plan.clips)
@@ -1142,17 +1127,8 @@ def validate_montage_plan(
             raise ValueError("the first montage clip must begin with a cut")
         total_duration += clip.duration
 
-    if total_duration > MAX_PREVIEW_SECONDS + 0.01:
-        raise ValueError(f"preview duration {total_duration:.3f}s exceeds 60 seconds")
     direction = creative_direction or {}
-    target = direction.get("target_duration_seconds")
-    if target in TARGET_DURATION_RANGES:
-        _preferred_minimum, maximum = TARGET_DURATION_RANGES[target]
-        if total_duration > maximum + 0.01:
-            raise ValueError(
-                f"montage duration {total_duration:.3f}s exceeds the {maximum:.3f}s ceiling "
-                f"for a {target}s target"
-            )
+    validate_duration(total_duration, direction)
     for asset_id, ranges in used_ranges.items():
         ordered = sorted(ranges)
         for previous, current in zip(ordered, ordered[1:], strict=False):
@@ -1196,6 +1172,7 @@ def deterministic_plan(
     edit_style: str = "clean",
     music_mode: str = "none",
     music_tracks: list[dict[str, Any]] | None = None,
+    *, duration_policy: dict[str, Any] | None = None,
 ) -> TalkingHeadEditPlan:
     """Create the fixed local-only recipe without invoking a model."""
 
@@ -1203,7 +1180,7 @@ def deterministic_plan(
     if not candidates:
         raise ValueError("the talking-head recipe needs a video asset with audio")
     asset = candidates[0]
-    requested = float(target_duration_seconds or 45)
+    requested = min(float(target_duration_seconds or 45), resolve_duration(duration_policy or {})["maximum_seconds"])
     duration = min(float(asset.get("duration_seconds") or 0), requested, MAX_PREVIEW_SECONDS)
     if duration < 0.25:
         raise ValueError("the source video is too short to edit")
@@ -1263,6 +1240,7 @@ def deterministic_plan(
         plan.model_dump(mode="json"),
         assets,
         creative_direction={
+            **(duration_policy or {}),
             "target_duration_seconds": target_duration_seconds,
             "edit_style": edit_style,
             "music_mode": music_mode,
@@ -1277,6 +1255,7 @@ def deterministic_montage_plan(
     edit_style: str,
     music_mode: str,
     music_tracks: list[dict[str, Any]] | None,
+    *, duration_policy: dict[str, Any] | None = None,
 ) -> MontageEditPlan:
     eligible = [
         asset
@@ -1285,7 +1264,7 @@ def deterministic_montage_plan(
     ]
     if not eligible:
         raise ValueError("the montage recipe needs at least one video or image")
-    requested_target = float(target_duration_seconds or 30)
+    requested_target = min(float(target_duration_seconds or 30), resolve_duration(duration_policy or {})["maximum_seconds"])
     has_still = any(
         str(asset.get("mime_type") or "").startswith("image/") for asset in eligible
     )
@@ -1383,6 +1362,7 @@ def deterministic_montage_plan(
         plan.model_dump(mode="json"),
         assets,
         creative_direction={
+            **(duration_policy or {}),
             "target_duration_seconds": target_duration_seconds,
             "edit_style": edit_style,
             "music_mode": music_mode,

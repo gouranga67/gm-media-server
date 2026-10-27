@@ -441,6 +441,18 @@ def _public_context(context: dict[str, Any], max_characters: int) -> dict[str, A
 
 def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str, Any]]:
     public = _public_context(context, settings.editor_max_context_characters)
+    from app.duration_policy import resolve_duration
+    duration = resolve_duration(public.get("job", {}))
+    duration_instruction = (
+        f"Duration policy: {duration['mode']}; preferred length {duration['preferred_seconds']:g}s; "
+        f"hard maximum {duration['maximum_seconds']:g}s. Follow-the-story mode means the shortest complete story, "
+        "not a quota to fill: ignore target_duration_seconds in that mode. In aim mode the preferred length is flexible up to this hard maximum; strict mode "
+        "must stay within its maximum. Preserve every explicitly required point, including its complete final "
+        "explanation, and complete words before adding decorative effects. Never pad, speed speech, clip words, "
+        "or silently omit a required point to hit the preferred length. If required content cannot fit the hard "
+        "maximum, explain that conflict in editorial_summary rather than pretending it is complete. "
+        "duration_guidance estimates all available speech including repeated takes, not the required script.\n\n"
+    )
     revision = public.get("revision")
     bloopers = bool(public.get("job", {}).get("editorial_policy", {}).get("bloopers_requested"))
     alternative = public.get("alternative") or {}
@@ -615,7 +627,7 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
             "No role quota or minimum duration applies. Trim empty waiting and noise-only tails while "
             "allowing the earned reaction to land. Explain the chosen gags in editorial_summary. "
             "Use only supplied IDs, valid source bounds, nonoverlapping source ranges, and named presets. "
-            "The reel must remain at most 60 seconds. Select music only from music_library when requested; "
+            "Stay within the supplied duration policy. Select music only from music_library when requested; "
             "otherwise return no music. Creative effects require job.effect_level to be enabled and must "
             "support the actual gag: subtle allows 2 cues, social 4 and meme_heavy 8. Protect speech. "
             + ("Montage video durations equal source_out minus source_in; images use zero source times. "
@@ -635,7 +647,7 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
             "unless the supplied contact sheet supports that conclusion. Video clip "
             "duration must exactly match source_out minus source_in; image clips use zero source timecodes. "
             "Use 1.5–4 second shots for energetic work and 3–6 second shots for calm work. Keep every clip "
-            "between 0.5 and 8 seconds. The requested duration is an approximate aim, never a minimum; "
+            "between 0.5 and 8 seconds. In aim mode the preferred duration is an approximate aim, never a minimum; "
             "end sooner when the story is complete and never pad with dead air or duplicate material. "
             "Use speech_gaps to avoid unintended hesitations in dialogue while preserving supported "
             "laughter and reaction beats. Use only named "
@@ -656,8 +668,8 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
     else:
         task_instruction = (
             "Create one JSON edit plan from this trusted job context. The validator will reject invented "
-            "asset IDs, out-of-range timecodes, overlapping ranges, unsupported effects, and previews longer "
-            "than 60 seconds. Use story_spine and the locally retrieved story_index moments to build a coherent "
+            "asset IDs, out-of-range timecodes, overlapping ranges, unsupported effects, and edits exceeding "
+            "the supplied duration policy. Use story_spine and the locally retrieved story_index moments to build a coherent "
             "short transcript-led story. Read the supplied transcript in source order; moment cards "
             "are retrieval hints. Preserve connecting dialogue, cause and effect, pronoun references, "
             "necessary setup, and the speaker's conclusion. Use story_spine.engagement_assessment to compare hook/payoff/ending "
@@ -667,7 +679,7 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
             "the requested ending. Assign every clip a story_role and a concise editorial_intent. Preserve the speaker's "
             "meaning, remove obvious dead air, and preserve meaningful chronology and cause and effect "
             "within each account. File upload order is not a required story order. "
-            "Treat job.target_duration_seconds as an approximate aim, never a minimum. "
+            "Only in aim mode, treat job.target_duration_seconds as an approximate aim, never a minimum. "
             "A shorter complete story is better than dead air, repeated information, or a blooper added "
             "to fill time. Use the explicit speech_gaps to cut excessive hesitation; a typical retained "
             "pause is 0.3–0.6s and a short comedy beat about 0.8s. Speech gaps can contain laughter or "
@@ -728,6 +740,7 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
             "text": (
                 task_instruction
                 + "\n\n"
+                + duration_instruction
                 + source_instruction
                 + concept_instruction
                 + take_instruction
@@ -948,6 +961,7 @@ def create_edit_plan(
             context.get("job", {}).get("edit_style") or "clean",
             context.get("job", {}).get("music_mode") or "none",
             context.get("music_library", []),
+            duration_policy=context.get("job", {}),
         ), {
             "provider": "local_fixed_recipe",
             "model": f"{recipe}_v1",

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { JobDurationSettings } from "./job-duration-settings";
 import { AssemblyReadiness } from "./assembly-readiness";
 import { EditProgress } from "./edit-progress";
 import { StudioNav } from "./studio-nav";
@@ -20,7 +21,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { getJobReview, rebuildPreview, requestPreview, type JobReview } from "@/lib/media-api";
+import { getJobReview, rebuildPreview, requestPreview, type JobReview, type DurationAssessment } from "@/lib/media-api";
 
 const POLL_INTERVAL_MS = 2_000;
 const PLAN_NOTICE_KEY = "gm-studio:chatgpt-plan-notice-v1";
@@ -133,6 +134,13 @@ export function JobPreview({ jobId }: { readonly jobId: string }) {
   const isSquare = review?.job.output_aspect === "square";
   const failureMessage = run?.status === "ready" && !run.preview_available ? "This preview reached its retention date. Choose Try again to rebuild it from the saved edit plan." : run?.error ?? error ?? "";
   const hasPlanUsageIssue = /subscription_sharing_usage_|chatgpt plan usage is unavailable/i.test(failureMessage);
+  const durationReview = run?.manifest?.duration_review as DurationAssessment | undefined;
+  const durationPolicy = run?.duration_policy;
+  const mode = durationReview?.mode ?? durationPolicy?.duration_mode ?? review?.job.duration_mode ?? "aim";
+  const preferred = durationReview?.preferred_seconds ?? durationPolicy?.target_duration_seconds ?? review?.job.target_duration_seconds ?? 45;
+  const configuredMaximum = durationPolicy?.max_duration_seconds ?? review?.job.max_duration_seconds ?? 90;
+  const maximum = durationReview?.maximum_seconds ?? (mode === "aim" ? Math.min(configuredMaximum, Math.ceil(preferred * 1.2)) : configuredMaximum);
+  const durationLabel = `${durationReview?.actual_seconds !== undefined ? `${durationReview.actual_seconds}s · ` : ""}${mode === "follow_story" ? "follow the story" : mode === "strict" ? "strict limit" : `aim ${preferred}s`} · maximum ${maximum}s`;
   const prompts = review ? (
     <JobPromptHistory activeVersion={run?.version} originalPrompt={review.original_prompt ?? ""} versions={review.versions} />
   ) : null;
@@ -214,7 +222,7 @@ export function JobPreview({ jobId }: { readonly jobId: string }) {
                 Keeps this cut and uses the latest local audio and colour processing · zero AI tokens
               </p>
               <p className="text-center font-mono text-[10px] leading-relaxed text-[#666862]">
-                Version {run?.version} · {review?.job.target_duration_seconds ?? 60}s target · {review?.job.edit_style ?? "legacy"} style · {review?.job.music_mode ?? "none"} music{retainedFinalAvailable ? " · final delivery playback" : ""}
+                Version {run?.version} · {durationLabel} · {review?.job.edit_style ?? "legacy"} style · {review?.job.music_mode ?? "none"} music{retainedFinalAvailable ? " · final delivery playback" : ""}
               </p>
               {review?.job.assembly_decision ? <div className="rounded-md bg-[#EFF6FA] p-4 text-sm text-[#173F5F]">
                 <p className="font-bold">{review.job.assembly_decision.label}</p>
@@ -302,6 +310,8 @@ export function JobPreview({ jobId }: { readonly jobId: string }) {
               </p>
             </div>
           )}
+          {review && (!run || status === "ready" || status === "failed") ? <JobDurationSettings key={jobId} jobId={jobId} failed={status === "failed"} onUpdated={() => setPollGeneration((value) => value + 1)} /> : null}
+          {durationReview?.local_repair?.status === "trimmed_verified_quiet" ? <p className="mt-3 text-sm text-[#215B43]">A small overrun was resolved by trimming measured quiet gaps ({durationReview.local_repair.before_seconds}s → {durationReview.local_repair.after_seconds}s), with no extra model call.</p> : null}
           {status !== "ready" && prompts ? <div className="mt-5">{prompts}</div> : null}
           {review && run && status !== "ready" && review.versions.some((version) => version.status === "ready" && version.preview_available)
             ? <div className="mt-5"><AlternativeVersions key={run.id} jobId={jobId} run={run}

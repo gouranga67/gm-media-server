@@ -4,6 +4,7 @@ import { libraryRoleLabel } from "@/lib/library-organization";
 import { Component, type DragEvent, type ErrorInfo, type FormEvent, type ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { DurationFields } from "./duration-fields";
 import { AssemblyReadiness } from "./assembly-readiness";
 import { StudioNav } from "./studio-nav";
 import { readMediaBasket, writeMediaBasket } from "@/lib/media-basket";
@@ -67,6 +68,7 @@ import {
   type AssemblyMode,
   type PacingMode,
   type TargetDuration,
+  type DurationMode,
   type TargetPlatform,
   type VisualIndexStatus,
 } from "@/lib/media-api";
@@ -669,6 +671,8 @@ function NewJobFormContent() {
   const [assemblyReady, setAssemblyReady] = useState(false);
   const [reelIntent, setReelIntent] = useState<"auto" | "story" | "promotion" | "bloopers">("auto");
   const [targetDuration, setTargetDuration] = useState<TargetDuration>(45);
+  const [durationMode, setDurationMode] = useState<DurationMode>("follow_story");
+  const [maxDuration, setMaxDuration] = useState(90);
   const [editStyle, setEditStyle] = useState<EditStyle>("energetic");
   const [musicMode, setMusicMode] = useState<MusicMode>("none");
   const [selectedMusicTrackId, setSelectedMusicTrackId] = useState<string | null>(null);
@@ -895,7 +899,6 @@ function NewJobFormContent() {
     (asset) => asset.allowed_platforms.includes("all_social")
       || asset.allowed_platforms.includes(targetPlatform),
   ).length;
-  const durationOptions: readonly TargetDuration[] = [15, 20, 30, 45, 60];
   const libraryProjects = Array.from(
     new Map(libraryAssets.map((asset) => [asset.project_id, asset.project_name])).entries(),
   ).sort((left, right) => left[1].localeCompare(right[1]));
@@ -1149,6 +1152,8 @@ function NewJobFormContent() {
           pacingMode,
           reelIntent,
           targetDurationSeconds: targetDuration,
+          durationMode,
+          maxDurationSeconds: maxDuration,
           editStyle,
           musicMode,
           selectedMusicTrackId,
@@ -1690,37 +1695,12 @@ function NewJobFormContent() {
                 </select>
               </div>
               <p className="text-xs leading-relaxed text-[#666862] sm:col-span-2">
-                Presets set the platform, shape and duration. Brand kits apply your caption colours, weight and typeface.
+                Presets set the platform, shape and preferred duration. Your duration mode and maximum below take precedence. Brand kits apply your caption colours, weight and typeface.
               </p>
             </div>
-            <fieldset className="space-y-3" disabled={formLocked}>
-              <legend className="text-xs font-bold text-[#173F5F]">TARGET LENGTH</legend>
-              <div className="grid grid-cols-4 gap-2">
-                {durationOptions.map((duration) => (
-                  <label
-                    className={cn(
-                      "flex min-h-12 cursor-pointer items-center justify-center rounded-md bg-white font-mono text-xs font-bold",
-                      targetDuration === duration
-                        ? "border-2 border-[#173F5F] text-[#173F5F]"
-                        : "border border-[#D7D9D3] text-[#666862]",
-                      formLocked && "cursor-not-allowed opacity-60",
-                    )}
-                    key={duration}
-                  >
-                    <input
-                      checked={targetDuration === duration}
-                      className="sr-only"
-                      name="target-duration"
-                      onChange={() => setTargetDuration(duration)}
-                      type="radio"
-                      value={duration}
-                    />
-                    {duration} sec
-                  </label>
-                ))}
-              </div>
-              <p className="text-xs leading-relaxed text-[#666862]">An approximate aim. The editor can finish sooner when the story is complete, without adding pauses to fill time.</p>
-            </fieldset>
+            <DurationFields disabled={formLocked}
+              settings={{ duration_mode: durationMode, target_duration_seconds: targetDuration, max_duration_seconds: maxDuration }}
+              onChange={(value) => { setDurationMode(value.duration_mode); setTargetDuration(value.target_duration_seconds); setMaxDuration(value.max_duration_seconds); }} />
             <fieldset className="space-y-3" disabled={formLocked}>
               <legend className="text-xs font-bold text-[#173F5F]">OUTPUT SHAPE</legend>
               <div className="grid grid-cols-3 gap-2">

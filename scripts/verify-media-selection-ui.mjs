@@ -24,7 +24,7 @@ const originalLoad = Module._load;
 let lessonProposed = false;
 let assemblySettings, assemblyError, assemblyLocked, profiles, previewFixture;
 function assemblyPreview() { return {ready: !assemblyError, locked: assemblyLocked, error:assemblyError, settings:assemblySettings, decision:assemblyError ? null : {recipe:assemblySettings.assembly_mode === "auto" ? "talking_head" : assemblySettings.assembly_mode,edit_style:assemblySettings.edit_style,purpose:assemblySettings.reel_intent === "auto" ? "story" : assemblySettings.reel_intent,label:"Speech with supporting pictures",reason:"Keep recorded speech continuous.",hosted_model_calls:0}}; }
-let publishingFixture, alternativeFailure;
+let publishingFixture, alternativeFailure, durationFixture, durationFailure;
 let calls = [], transfers = [], navigation = [], readyEvents = 0, analysisStatus = "ready", root, managedAssets = [], batchFailure = false, conceptHistory = [], renderConceptFailure = false, conceptCounter = 0, organizationHistory = [], organizationFailure = false;
 const serverId = "11111111-1111-4111-8111-111111111111";
 const jobId = "22222222-2222-4222-8222-222222222222";
@@ -58,6 +58,7 @@ for (const extension of [".ts", ".tsx"]) Module._extensions[extension] = (module
 const { PublishingPanel } = require(path.join(repo, "apps/web/app/_components/publishing-panel.tsx"));
 const { AlternativeVersions } = require(path.join(repo, "apps/web/app/_components/alternative-versions.tsx"));
 const { MetaConnectResult } = require(path.join(repo, "apps/web/app/_components/meta-connect-result.tsx"));
+const { JobDurationSettings } = require(path.join(repo, "apps/web/app/_components/job-duration-settings.tsx"));
 const { JobPreview } = require(path.join(repo, "apps/web/app/_components/job-preview.tsx"));
 const { EditProgress } = require(path.join(repo, "apps/web/app/_components/edit-progress.tsx"));
 const { RenderQualityCard } = require(path.join(repo, "apps/web/app/_components/render-quality-card.tsx"));
@@ -156,6 +157,13 @@ globalThis.fetch = async (url, options = {}) => {
   else if (/^library\/assets\/[^/?]+$/.test(route)) payload = { asset: managedAssets.find((item) => item.id === route.split("/").at(-1)), collections: [], evidence: [], visual_frames: [] };
   else if (route === "projects") payload = { ...body, id: body.id };
   else if (/^projects\/[^/]+\/jobs$/.test(route)) { assemblySettings={assembly_mode:body.assembly_mode ?? body.recipe,pacing_mode:body.pacing_mode ?? "manual",edit_style:body.edit_style,reel_intent:body.reel_intent}; payload = { ...body, id: jobId }; }
+  else if (route === `jobs/${jobId}/duration`) {
+    if (options.method === "PUT") {
+      if (durationFailure) return {ok:false,status:409,json:async()=>({detail:"Wait for the current edit attempt to finish."})};
+      durationFixture={...durationFixture,settings:body};
+    }
+    payload=durationFixture;
+  }
   else if (route === `jobs/${jobId}/assembly`) {
     if (options.method === "PUT") {
       if (assemblyLocked) return {ok:false,status:409,json:async () => ({detail:"Assembly is frozen after planning starts."})};
@@ -182,6 +190,8 @@ beforeEach(() => {
   calls = []; transfers = []; navigation = []; readyEvents = 0; analysisStatus = "ready"; batchFailure = false; conceptHistory = []; renderConceptFailure = false; conceptCounter = 0;
   organizationHistory = []; organizationFailure = false;
   alternativeFailure=false;
+  durationFailure=false;
+  durationFixture={settings:{duration_mode:"aim",target_duration_seconds:60,max_duration_seconds:90},assessment:{mode:"aim",preferred_seconds:60,maximum_seconds:72,available_speech_seconds:85,warning:"About 85s of speech includes possible repeated takes; this is not a required-script measurement."}};
   publishingFixture={config:{configured:true,redirect_uri:"https://studio.example.invalid/publishing/connect"},accounts:[{id:serverId,platform:"instagram",display_name:"Studio",active:true,token_expires_at:null}],draft:null,failPublish:false};
   managedAssets = [
     { ...serverAsset, id: "talk", source_name: "VID_0001.mp4", display_name: "Product introduction", media_role: "talking", job_references: 2 },
@@ -235,6 +245,8 @@ test("one job combines selected server footage and a device upload, with an expl
   await waitFor(() => transfers.length === 1);
   assert.equal(posts("projects").length, 1);
   assert.equal(posts("/jobs").length, 1);
+  assert.equal(posts("/jobs")[0].body.duration_mode,"follow_story");
+  assert.equal(posts("/jobs")[0].body.max_duration_seconds,90);
   assert.deepEqual(posts(`/jobs/${jobId}/assets`)[0].body.asset_ids, [serverId]);
   const uploadRequests = posts("/assets").filter((call) => call.route.startsWith("projects/"));
   assert.equal(uploadRequests.length, 1);
@@ -867,4 +879,38 @@ test("similar alternatives show an honest report and an earlier edit can be rest
   assert.equal(posts("/revisions")[0].body.restore_version,1);
   assert.equal(posts("/revisions")[0].body.note,"");
   assert.equal(posts("/alternatives").length,0);
+});
+
+
+test("duration settings load on demand and save explicitly without retrying a job", async()=>{
+  let updates=0;
+  await act(async()=>root.render(React.createElement(JobDurationSettings,{jobId,failed:true,onUpdated:()=>{updates++;}})));
+  assert.equal(calls.length,0);
+  await click(button("Duration settings"));
+  await waitFor(()=>document.querySelector('select[id$="-mode"]'));
+  assert.match(document.body.textContent,/72 seconds for this edit/);
+  assert.match(document.body.textContent,/not a required-script measurement/);
+  await chooseOption('select[id$="-mode"]',"strict");
+  await type('input[id$="-maximum"]',"60");
+  assert.equal(calls.filter(c=>c.method==="PUT").length,0);
+  await click(button("Save duration settings"));
+  await waitFor(()=>updates===1);
+  const saved=calls.find(c=>c.method==="PUT");
+  assert.equal(saved.body.duration_mode,"strict"); assert.equal(saved.body.max_duration_seconds,60);
+  assert.match(document.body.textContent,/Press Try again/);
+  assert.equal(posts("/preview").length,0); assert.equal(posts("/jobs").length,0);
+});
+
+test("a failed duration save retains the requested settings and shows the error", async()=>{
+  await act(async()=>root.render(React.createElement(JobDurationSettings,{jobId,failed:true,onUpdated:()=>assert.fail("must not refresh after failed save")})));
+  await click(button("Duration settings"));
+  await waitFor(()=>document.querySelector('select[id$="-mode"]'));
+  await chooseOption('select[id$="-mode"]',"follow_story");
+  await type('input[id$="-maximum"]',"120");
+  durationFailure=true;
+  await click(button("Save duration settings"));
+  await waitFor(()=>document.body.textContent.includes("Wait for the current edit attempt"));
+  assert.equal(document.querySelector('input[id$="-maximum"]').value,"120");
+  assert.equal(document.querySelector('select[id$="-mode"]').value,"follow_story");
+  assert.equal(posts("/preview").length,0);
 });

@@ -189,3 +189,16 @@ Publishing acceptance: follow [Meta publishing setup](meta-publishing-setup.md).
 | A7 | Compare request failure/retry and original controls | Direction text survives a failure, an uncertain retry reuses its request ID, and normal targeted revisions/exact re-render still work. |
 
 Each explicitly generated alternative consumes an editing request and a local render. Analysis is reused; existing invalid-plan repair may add its bounded repair request. Similarity is a local heuristic over up to eight completed versions of this job, not a story-quality guarantee or a cross-job novelty check.
+
+## Adaptive duration
+
+| ID | Test | Pass when |
+| --- | --- | --- |
+| D1 | Create a new edit with Follow the story | The visible maximum defaults to 90s. The result can finish sooner and keeps the full recorded thought without padding. |
+| D2 | Retry the previously failed 60.6s / 60s-preference job after deployment | The migrated flexible policy allows up to 72s. It no longer fails solely because it crossed 60s. Check all five points and the complete final explanation by listening. |
+| D3 | Open Duration settings on that saved job | Changing fields does nothing until Save. Saving creates no edit; press Try again separately. No re-upload is needed. |
+| D4 | Compare Aim for 60s with Strict maximum 60s | Aim permits up to 72s within the configured cap. Strict remains at 60s: measured empty waits may be trimmed, otherwise it asks for an increased cap, condensed version or split. No clipped words or accelerated voice. |
+| D5 | Change a ready job's next-edit cap below the approved version's length | Exact re-render/export of the approved version still uses its saved policy. A new AI revision/alternative uses the new cap. |
+| D6 | Make a story over 60s, within a chosen maximum up to 120s | Late captions, effects, B-roll, finishing windows and timestamped feedback work; actual duration and policy appear below playback. Check the final export too. |
+
+The preflight speech estimate includes repeated takes and is not a verified measurement of the required script. Automatic splitting and semantic proof that every requested point survived are not implemented; use the brief, available duration settings and playback review.

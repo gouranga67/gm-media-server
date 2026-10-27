@@ -13,8 +13,8 @@ class ToolModel(BaseModel):
 
 
 class TimeWindow(ToolModel):
-    start: float = Field(ge=0, le=60)
-    end: float = Field(gt=0, le=60)
+    start: float = Field(ge=0, le=120)
+    end: float = Field(gt=0, le=120)
 
     @model_validator(mode="after")
     def forward(self):
@@ -24,7 +24,7 @@ class TimeWindow(ToolModel):
 
 
 class MotionPoint(ToolModel):
-    time: float = Field(ge=0, le=60)
+    time: float = Field(ge=0, le=120)
     zoom: float = Field(default=1.0, ge=1, le=1.35)
     x: float = Field(default=0.5, ge=0, le=1)
     y: float = Field(default=0.5, ge=0, le=1)

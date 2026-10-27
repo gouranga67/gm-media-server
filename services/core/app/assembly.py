@@ -207,6 +207,8 @@ def inspect_assembly(job_id: UUID):
     except LookupError as error:
         raise HTTPException(status_code=404, detail="job not found") from error
     result = preview_assembly(context)
+    from app.duration_policy import duration_preflight
+    result["duration"] = duration_preflight(context)
     result["settings"] = {
         key: context["job"].get(key)
         for key in ("assembly_mode", "pacing_mode", "edit_style", "reel_intent")
