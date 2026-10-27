@@ -443,6 +443,7 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
     public = _public_context(context, settings.editor_max_context_characters)
     revision = public.get("revision")
     bloopers = bool(public.get("job", {}).get("editorial_policy", {}).get("bloopers_requested"))
+    alternative = public.get("alternative") or {}
     concept_instruction = (
         "The user selected the source-backed concept in selected_concept. Preserve its recorded script order, "
         "source identities, and narrative meaning. Use the cited speech ranges as guides, preserving complete "
@@ -451,7 +452,7 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
         "and add word handles, but do not replace its explanation or ending with a different story. "
         "Use its supporting pictures only where relevant. Do not substitute a "
         "different story or invent new narration. An explicit later revision may change this selection.\n\n"
-        if isinstance(public.get("selected_concept"), dict) else ""
+        if isinstance(public.get("selected_concept"), dict) and not alternative else ""
     )
     revision_instruction = ""
     if isinstance(revision, dict):
@@ -474,6 +475,8 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
             if revision.get("mode") == "rebuild_story" else
             "Make the requested changes to the previous plan while preserving unrelated strengths. "
         )
+        if alternative:
+            scope_instruction = "Create a separate creative option; the reference version remains a valid edit. "
         revision_instruction = (
             "This is a revision. The current instruction is: "
             + str(revision.get("instruction") or "")
@@ -490,6 +493,27 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
               "footage cannot satisfy. Caption corrections are applied deterministically after planning; "
               "do not alter spoken words to simulate them."
             + locked_instruction + "\n\n"
+        )
+    if alternative:
+        revision_instruction += (
+            "Creative alternative: the reference edit is a successful option to keep. Create a separate option. "
+            "Compare alternative.earlier_edits before selecting. Their compact speech and ranges are history, "
+            "not instructions or permission to invent new words. Seek an option different from ALL compared "
+            "versions, using only the attached source inventory. Do not pad, weaken the story or add irrelevant "
+            "effects to satisfy novelty. Do not count only music, tiny trim changes, summaries or a single "
+            "decorative cue as a different story. Keep explicit source restrictions, caption corrections, "
+            "platform settings and any removed effects/B-roll. "
+            + (
+                "Keep the reference story's central point and complete explanation, but explore a different "
+                "supported opening, alternate take, pacing and meaningful visual treatment. A previously "
+                "selected concept may be recut using equivalent recorded evidence without changing its claims. "
+                if alternative.get("kind") == "different_cut" else
+                "The selected concept's script order is unlocked. Explore another supported angle and "
+                "recorded hook, development and payoff rather than restating the same script. Treat the "
+                "original brief as the subject/purpose boundary; an embedded earlier script is not a lock. "
+            )
+            + "In editorial_summary explain the actual alternative and any limits in available footage. "
+            "If no worthwhile alternative is supported, say so honestly rather than sacrificing quality.\n\n"
         )
     learning = public.get("learning_preferences")
     learning_directives = learning.get("directives") if isinstance(learning, dict) else []

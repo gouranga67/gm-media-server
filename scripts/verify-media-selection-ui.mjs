@@ -24,7 +24,7 @@ const originalLoad = Module._load;
 let lessonProposed = false;
 let assemblySettings, assemblyError, assemblyLocked, profiles, previewFixture;
 function assemblyPreview() { return {ready: !assemblyError, locked: assemblyLocked, error:assemblyError, settings:assemblySettings, decision:assemblyError ? null : {recipe:assemblySettings.assembly_mode === "auto" ? "talking_head" : assemblySettings.assembly_mode,edit_style:assemblySettings.edit_style,purpose:assemblySettings.reel_intent === "auto" ? "story" : assemblySettings.reel_intent,label:"Speech with supporting pictures",reason:"Keep recorded speech continuous.",hosted_model_calls:0}}; }
-let publishingFixture;
+let publishingFixture, alternativeFailure;
 let calls = [], transfers = [], navigation = [], readyEvents = 0, analysisStatus = "ready", root, managedAssets = [], batchFailure = false, conceptHistory = [], renderConceptFailure = false, conceptCounter = 0, organizationHistory = [], organizationFailure = false;
 const serverId = "11111111-1111-4111-8111-111111111111";
 const jobId = "22222222-2222-4222-8222-222222222222";
@@ -56,6 +56,7 @@ for (const extension of [".ts", ".tsx"]) Module._extensions[extension] = (module
   module._compile(outputText, filename);
 };
 const { PublishingPanel } = require(path.join(repo, "apps/web/app/_components/publishing-panel.tsx"));
+const { AlternativeVersions } = require(path.join(repo, "apps/web/app/_components/alternative-versions.tsx"));
 const { MetaConnectResult } = require(path.join(repo, "apps/web/app/_components/meta-connect-result.tsx"));
 const { JobPreview } = require(path.join(repo, "apps/web/app/_components/job-preview.tsx"));
 const { EditProgress } = require(path.join(repo, "apps/web/app/_components/edit-progress.tsx"));
@@ -95,6 +96,10 @@ globalThis.fetch = async (url, options = {}) => {
   else if (route.includes("/ranges/") && route.startsWith("library/assets/")) payload = body;
   else if (route === `jobs/${jobId}/review`) payload=previewFixture;
   else if (route === `jobs/${jobId}/revisions`) payload = { id: "revision", version: 3, status: "pending" };
+  else if (route === `jobs/${jobId}/alternatives`) {
+    if (alternativeFailure) return {ok:false,status:409,json:async()=>({detail:"This alternative could not be queued. Your original is unchanged."})};
+    payload={id:"alternative",version:3,status:"pending"};
+  }
   else if (route === `jobs/${jobId}/finishing-tools`) payload = { version: 2, settings: { motions:[],colours:[],audio_regions:[],caption_regions:[],layers:[],music_start_seconds:0,voice_denoise:false,audio_joins:[] }, sources:[{ asset_id:serverId,name:"Review image",media_kind:"image",duration_seconds:0 }] };
   else if (route === "concepts/library-status") payload = { unique_sources: 3, catalogued_sources: 3, spoken_sources: 2, visually_indexed_sources: 3, still_processing: 0 };
   else if (route === "concepts" && (options.method ?? "GET") === "GET") payload = conceptHistory;
@@ -176,6 +181,7 @@ beforeEach(() => {
   window.history.replaceState(null, "", "/jobs/new");
   calls = []; transfers = []; navigation = []; readyEvents = 0; analysisStatus = "ready"; batchFailure = false; conceptHistory = []; renderConceptFailure = false; conceptCounter = 0;
   organizationHistory = []; organizationFailure = false;
+  alternativeFailure=false;
   publishingFixture={config:{configured:true,redirect_uri:"https://studio.example.invalid/publishing/connect"},accounts:[{id:serverId,platform:"instagram",display_name:"Studio",active:true,token_expires_at:null}],draft:null,failPublish:false};
   managedAssets = [
     { ...serverAsset, id: "talk", source_name: "VID_0001.mp4", display_name: "Product introduction", media_role: "talking", job_references: 2 },
@@ -805,4 +811,60 @@ test("Meta callback exchanges the code once under StrictMode and removes it from
   assert.equal(posts("publishing/meta/complete").length,1);
   assert.equal(window.location.search,"");
   assert.equal(document.body.textContent.includes("private-code"),false);
+});
+
+function savedVersions() {
+  return [1,2].map(version=>({id:`saved-${version}`,version,status:"ready",preview_available:true,manifest:{},caption_corrections:[]}));
+}
+
+test("creative alternative options are explicit and preserve the selected kind and direction", async()=>{
+  const versions=savedVersions();let updates=0;
+  await act(async()=>root.render(React.createElement(AlternativeVersions,{jobId,run:versions[1],versions,onUpdated:()=>updates++})));
+  assert.equal(posts("/alternatives").length,0);
+  await click(button("Make another version"));
+  assert.equal(posts("/alternatives").length,0);
+  await click([...document.querySelectorAll('input[type="radio"]')].find(e=>e.parentElement.textContent.includes("Find a different story")));
+  await type("textarea","Explore the family recipe origin.");
+  assert.equal(posts("/alternatives").length,0);
+  await click(button("Create one alternative preview"));
+  assert.equal(updates,1);
+  const request=posts("/alternatives")[0].body;
+  assert.equal(request.kind,"different_story");assert.equal(request.base_version,2);
+  assert.equal(request.direction,"Explore the family recipe origin.");
+  assert.match(request.request_id,/^[0-9a-f-]{36}$/);
+  assert.equal(calls.some(c=>c.route.includes("approval")||c.route.includes("publishing")),false);
+});
+
+test("an alternative request failure retains input and reuses its ID rather than queuing twice", async()=>{
+  const versions=savedVersions();alternativeFailure=true;
+  await act(async()=>root.render(React.createElement(AlternativeVersions,{jobId,run:versions[1],versions,onUpdated:()=>{}})));
+  await click(button("Make another version"));await type("textarea","Try another opening.");
+  await click(button("Create one alternative preview"));
+  assert.match(document.body.textContent,/original is unchanged/);
+  assert.equal(document.querySelector("textarea").value,"Try another opening.");
+  assert.equal(posts("/alternatives").length,1);
+  await click(button("Create one alternative preview"));
+  assert.equal(posts("/alternatives")[0].body.request_id,posts("/alternatives")[1].body.request_id);
+});
+
+test("saved versions remain playable while an alternative is processing, with restore disabled", async()=>{
+  const versions=savedVersions();const run={id:"running",version:3,status:"planning",manifest:{}};
+  await act(async()=>root.render(React.createElement(AlternativeVersions,{jobId,run,versions,onUpdated:()=>{}})));
+  assert.equal([...document.querySelectorAll("button")].some(e=>e.textContent==="Make another version"),false);
+  assert.equal(button("Use version 1 as current · zero AI").disabled,true);
+  await chooseOption("select","2");
+  assert.match(document.querySelector("video").src,/version=2/);
+  assert.match(document.querySelector("a").href,/download=true&version=2/);
+  assert.equal(calls.length,0);
+});
+
+test("similar alternatives show an honest report and an earlier edit can be restored explicitly", async()=>{
+  const versions=savedVersions();versions[1].manifest={revision_report:{alternative:{kind:"different_story",status:"similar",notice:"Still close to version 1. No automatic novelty retry was made.",compared_versions:[1]}}};
+  await act(async()=>root.render(React.createElement(AlternativeVersions,{jobId,run:versions[1],versions,onUpdated:()=>{}})));
+  assert.match(document.body.textContent,/Still similar to an earlier edit/);
+  assert.equal(calls.length,0);
+  await click(button("Use version 1 as current · zero AI"));
+  assert.equal(posts("/revisions")[0].body.restore_version,1);
+  assert.equal(posts("/revisions")[0].body.note,"");
+  assert.equal(posts("/alternatives").length,0);
 });

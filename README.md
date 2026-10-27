@@ -35,6 +35,8 @@ The companion [agent editing toolkit](docs/agent-editing-toolkit.md) ([PDF](docs
 
 The optional [Meta publishing setup](docs/meta-publishing-setup.md) connects Facebook Pages and linked professional Instagram accounts. Prepare captions from an approved final export, then explicitly approve immediate or scheduled posting. Edit approval alone never publishes a reel.
 
+On a completed edit, **Make another version** offers a different cut of the same story or a different supported recorded story. Earlier previews remain available for comparison, download and explicit restoration. Each alternative uses another editing request with stored analysis; local similarity checks report repetition without automatically generating more versions.
+
 ## Requirements
 
 - Linux host with Docker Engine and Docker Compose v2

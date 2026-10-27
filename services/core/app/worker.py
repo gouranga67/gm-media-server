@@ -948,6 +948,22 @@ def process_one_edit(state: WorkerState) -> bool:
         if not context["ready_for_editing"]:
             raise RuntimeError("source analysis is not ready")
 
+        if run.get("alternative_kind"):
+            from app.alternative_edits import prepare_alternative
+            with connection() as database:
+                earlier_edits = list(database.execute(
+                    """SELECT r.id,r.version,ep.document FROM edit_runs r
+                    JOIN edit_plans ep ON ep.id=r.edit_plan_id
+                    WHERE r.job_id=%s AND r.status='ready' AND r.version<%s
+                    ORDER BY (r.id=%s) DESC,r.version DESC LIMIT 8""",
+                    (run["job_id"], run["version"], run["based_on_run_id"]),
+                ).fetchall())
+            if not earlier_edits or str(earlier_edits[0]["id"]) != str(run["based_on_run_id"]):
+                raise RuntimeError("the alternative's reference edit is unavailable")
+            prepare_alternative(context, run, earlier_edits)
+            if run.get("effects_enabled") is False:
+                context["job"]["effect_level"] = "off"
+
         if run["edit_plan_id"]:
             with connection() as database:
                 plan_row = database.execute(
@@ -1208,7 +1224,7 @@ def process_one_edit(state: WorkerState) -> bool:
                         allow_post_copy=bool(context["project"]["ai_copy_allowed"]),
                         creative_direction=context["job"], music_tracks=context["music_library"],
                         creative_effects=context["creative_effect_library"])
-            if not run.get("based_on_run_id"):
+            if not run.get("based_on_run_id") or run.get("alternative_kind"):
                 from app.story_finishing import finish_new_story
                 previous_plan = plan
                 try:
@@ -1220,6 +1236,18 @@ def process_one_edit(state: WorkerState) -> bool:
                     plan = previous_plan
                     context["story_finishing"] = {"version": 1, "status": "attention", "changes": [],
                         "findings": ["Optional story cleanup could not complete safely; the validated edit was preserved."], "hosted_model_calls": 0}
+            if run.get("alternative_kind"):
+                changes = {}
+                if run.get("effects_enabled") is False:
+                    changes["effects"] = []
+                if run.get("broll_enabled") is False:
+                    changes["broll"] = []
+                if run.get("caption_settings"):
+                    changes["caption_position"] = run["caption_settings"].get("position", plan.caption_position)
+                    changes["caption_timing_offset_seconds"] = run["caption_settings"].get("timing_offset_seconds", plan.caption_timing_offset_seconds)
+                plan = validate_edit_plan(plan.model_copy(update=changes, deep=True).model_dump(mode="json"), context["assets"],
+                    allow_post_copy=bool(context["project"]["ai_copy_allowed"]), creative_direction=context["job"],
+                    music_tracks=context["music_library"], creative_effects=context["creative_effect_library"])
             _persist_generated_plan(run, plan, provenance)
 
         from app.story_contract import check_story_contract
@@ -1239,6 +1267,12 @@ def process_one_edit(state: WorkerState) -> bool:
                 )
                 context["revision_report"]["mode"] = run.get("revision_mode") or "targeted"
                 context["revision_report"]["instruction"] = run.get("revision_note") or ""
+                if run.get("alternative_kind"):
+                    from app.alternative_edits import assess_alternative
+                    context["revision_report"]["alternative"] = assess_alternative(
+                        run["alternative_kind"], plan.model_dump(mode="json"),
+                        context["_alternative_history"], context["assets"],
+                    )
                 if (run.get("caption_corrections") or []) != (prior.get("caption_corrections") or []):
                     context["revision_report"]["changes"].append("Caption text corrections changed.")
                     context["revision_report"]["changed"] = True

@@ -175,3 +175,17 @@ Progress check: after pressing Start editing, the screen should show Queued, Pla
 Story consistency acceptance: generate fresh ordinary story ideas after deploying this increment. In each script, check that a condition such as “If your skin gets dry…” stays connected to its recorded recommendation. Choose one concept and verify that its opening, explanation and ending survive in the rendered order, without an unrelated spoken claim replacing them. A complete shorter story is acceptable. In Local quality review, expand Story selection and cleanup to inspect passage/order checks, measured audio coverage and exact cleanup changes; these are not an automatic story-quality score. Compare a normal story containing a genuine empty wait and quiet closing take, then a calm/intentional-reaction edit that should keep its pacing. Finally reopen an older excellent edit and make a targeted revision: its saved cut should remain accessible and explicit revisions should retain their existing freedom.
 
 Publishing acceptance: follow [Meta publishing setup](meta-publishing-setup.md). Open a ready approved final export, prepare a draft and verify that choosing caption options, editing copy and saving do not publish. Confirm the export version, exact wording and named account before one explicit Post now action. Check the actual post on Instagram, then Facebook separately before combined posting. A scheduled-post test must show the correct device timezone and stay queued until due. An expired connection should request reconnection. After a lost response, use the existing remote-status check rather than submitting another post. Owner-only access and non-public media delivery remain in force; automated tests do not replace a first authorized real Meta post.
+
+## Creative alternatives
+
+| ID | Test | Pass when |
+| --- | --- | --- |
+| A1 | Open Make another version on a good completed edit | Opening options and changing the choice/direction create no job or model request. |
+| A2 | Choose Different cut, same story, then Create one alternative preview | One new version appears; the core message remains coherent and its opening/takes/pacing/treatment provide a worthwhile alternative. Watch and compare both versions. |
+| A3 | Choose Find a different story on footage with several recorded subjects/angles | The editor explores another supported recorded angle rather than changing music on the old script. A library concept's earlier script is unlocked, while factual/source restrictions remain. |
+| A4 | Use a narrowly constrained recording without worthwhile alternatives | A repeated result is reported honestly as similar; the studio does not keep spending requests automatically. |
+| A5 | While an alternative runs, open saved versions | Earlier retained previews play and download; restoring is disabled while another run is active. |
+| A6 | Choose an earlier version as current after completion | A new version uses its saved plan with zero AI calls; existing approvals and exports remain recorded. |
+| A7 | Compare request failure/retry and original controls | Direction text survives a failure, an uncertain retry reuses its request ID, and normal targeted revisions/exact re-render still work. |
+
+Each explicitly generated alternative consumes an editing request and a local render. Analysis is reused; existing invalid-plan repair may add its bounded repair request. Similarity is a local heuristic over up to eight completed versions of this job, not a story-quality guarantee or a cross-job novelty check.

@@ -24,6 +24,7 @@ from app.editor_context import build_editor_context
 from app.media_analysis import resolve_source
 from app.productization import assert_job_capacity
 from app.schemas import (
+    AlternativeCreate,
     ApprovalCreate,
     CoverFrameUpdate,
     DeliveryVariantCreate,
@@ -646,6 +647,21 @@ def _validate_caption_corrections(
     status_code=status.HTTP_202_ACCEPTED,
 )
 def request_revision(job_id: UUID, payload: RevisionCreate) -> dict[str, Any]:
+    return _request_revision(job_id, payload)
+
+
+@router.post("/jobs/{job_id}/alternatives", response_model=EditRunResponse,
+             status_code=status.HTTP_202_ACCEPTED)
+def request_alternative(job_id: UUID, payload: AlternativeCreate) -> dict[str, Any]:
+    from app.alternative_edits import alternative_instruction
+    return _request_revision(job_id, RevisionCreate(
+        note=alternative_instruction(payload.kind, payload.direction),
+        revision_mode="rebuild_story" if payload.kind == "different_story" else "targeted",
+    ), alternative=payload)
+
+
+def _request_revision(job_id: UUID, payload: RevisionCreate,
+                      *, alternative: AlternativeCreate | None = None) -> dict[str, Any]:
     context = _context_or_http(job_id)
     if not context["ready_for_editing"]:
         raise HTTPException(status_code=409, detail="source analysis is not ready")
@@ -669,6 +685,17 @@ def request_revision(job_id: UUID, payload: RevisionCreate) -> dict[str, Any]:
         ).fetchone()
         if job is None:
             raise HTTPException(status_code=404, detail="job not found")
+        if alternative:
+            existing = database.execute(
+                "SELECT r.*,b.version AS base_version FROM edit_runs r JOIN edit_runs b ON b.id=r.based_on_run_id WHERE r.job_id=%s AND r.alternative_request_id=%s",
+                (job_id, alternative.request_id),
+            ).fetchone()
+            if existing:
+                if (existing["alternative_kind"] != alternative.kind
+                        or existing["base_version"] != alternative.base_version
+                        or existing["revision_note"] != payload.note):
+                    raise HTTPException(409, "This alternative request was already used for a different choice. Refresh before trying again.")
+                return _response(existing)
         assert_job_capacity(database, job_id)
         active = database.execute(
             """
@@ -694,6 +721,17 @@ def request_revision(job_id: UUID, payload: RevisionCreate) -> dict[str, Any]:
             raise HTTPException(
                 status_code=409, detail="a ready preview is required before revision"
             )
+        if alternative:
+            based_on = database.execute(
+                "SELECT * FROM edit_runs WHERE job_id=%s AND version=%s AND status='ready' AND edit_plan_id IS NOT NULL",
+                (job_id, alternative.base_version),
+            ).fetchone()
+            if not based_on:
+                raise HTTPException(409, "The chosen source version is not ready. Select a completed version.")
+            # Keep explicit local removals and caption settings. The alternative
+            # planner may reconsider footage/treatment, never reverse a removal.
+            payload.effects_enabled = based_on.get("effects_enabled")
+            payload.broll_enabled = based_on.get("broll_enabled")
         if (
             payload.base_version is not None
             and payload.base_version != based_on["version"]
@@ -804,8 +842,9 @@ def request_revision(job_id: UUID, payload: RevisionCreate) -> dict[str, Any]:
             """
             INSERT INTO edit_runs (
                 job_id, version, based_on_run_id, revision_note, caption_corrections,
-                caption_settings, effects_enabled, clip_adjustments, locked_elements, revision_mode, broll_enabled, finishing_settings, evaluation_lesson_id, repair_kind
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                caption_settings, effects_enabled, clip_adjustments, locked_elements, revision_mode, broll_enabled, finishing_settings, evaluation_lesson_id, repair_kind,
+                alternative_kind, alternative_request_id
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING *
             """,
             (
@@ -825,6 +864,8 @@ def request_revision(job_id: UUID, payload: RevisionCreate) -> dict[str, Any]:
                 else None,
                 payload.evaluation_lesson_id,
                 payload.repair_kind,
+                alternative.kind if alternative else None,
+                alternative.request_id if alternative else None,
             ),
         ).fetchone()
         database.execute(
@@ -844,6 +885,7 @@ def request_revision(job_id: UUID, payload: RevisionCreate) -> dict[str, Any]:
                         "based_on_version": based_on["version"],
                         "note": payload.note,
                         "revision_mode": payload.revision_mode,
+                        "alternative_kind": alternative.kind if alternative else None,
                         "caption_correction_count": len(effective_corrections),
                         "caption_settings": effective_caption_settings,
                         "effects_enabled": payload.effects_enabled,

@@ -10,6 +10,7 @@ import { CheckIcon, DownloadIcon, LoaderCircleIcon, RefreshCwIcon } from "lucide
 import { Button } from "@/components/ui/button";
 import { JobReviewControls } from "@/app/_components/job-review-controls";
 import { JobPromptHistory } from "@/app/_components/job-prompt-history";
+import { AlternativeVersions } from "./alternative-versions";
 import {
   Dialog,
   DialogClose,
@@ -221,6 +222,8 @@ export function JobPreview({ jobId }: { readonly jobId: string }) {
                 <p className="mt-1 text-xs">Purpose: {review.job.assembly_decision.purpose === "auto" ? "Follow the brief" : review.job.assembly_decision.purpose}. Pacing: {(review.job.assembly_decision.edit_style ?? "legacy").replaceAll("_", " ")}.</p>
               </div> : null}
               {prompts}
+              {review && run ? <AlternativeVersions key={run.id} jobId={jobId} run={run}
+                versions={review.versions} onUpdated={() => setPollGeneration((current) => current + 1)} /> : null}
               {run ? (
                 <JobReviewControls
                   finalExport={currentFinalExport}
@@ -300,6 +303,9 @@ export function JobPreview({ jobId }: { readonly jobId: string }) {
             </div>
           )}
           {status !== "ready" && prompts ? <div className="mt-5">{prompts}</div> : null}
+          {review && run && status !== "ready" && review.versions.some((version) => version.status === "ready" && version.preview_available)
+            ? <div className="mt-5"><AlternativeVersions key={run.id} jobId={jobId} run={run}
+                versions={review.versions} onUpdated={() => setPollGeneration((current) => current + 1)} /></div> : null}
           {usesChatGptPlan && !hasPlanUsageIssue ? (
             <div className="mt-5 flex items-center justify-between gap-4 rounded-md border border-[#D7D9D3] bg-white px-4 py-3 text-xs">
               <span className="font-mono font-bold text-[#173F5F]">Using ChatGPT plan</span>

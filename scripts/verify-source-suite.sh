@@ -29,7 +29,7 @@ run_check "Agent tool TypeScript" \
   npx tsc --noEmit --module esnext --moduleResolution bundler --target es2022 --skipLibCheck \
   agent/tools/search_library.ts agent/tools/attach_library_assets.ts \
   agent/tools/submit_edit_plan.ts agent/tools/apply_finishing.ts \
-  agent/tools/apply_precise_edit.ts agent/tools/inspect_edit_tools.ts
+  agent/tools/apply_precise_edit.ts agent/tools/inspect_edit_tools.ts agent/tools/request_alternative.ts
 run_check "Production web build" npm run build:web
 run_check "Whitespace and patch integrity" git diff --check
 

@@ -287,6 +287,7 @@ export type EditRun = {
   readonly reasoning_effort: ReasoningEffort | null;
   readonly based_on_run_id: string | null;
   readonly revision_note: string | null;
+  readonly alternative_kind?: "different_cut" | "different_story" | null;
   readonly caption_corrections: readonly CaptionCorrection[];
   readonly caption_settings: Readonly<{
     position?: "lower_safe" | "middle" | "upper";
@@ -1162,6 +1163,18 @@ export function getPreview(jobId: string) {
 
 export function getJobReview(jobId: string) {
   return apiRequest<JobReview>(`jobs/${jobId}/review`, { cache: "no-store" });
+}
+
+export function requestAlternative(
+  jobId: string,
+  input: { readonly requestId: string; readonly baseVersion: number;
+    readonly kind: "different_cut" | "different_story"; readonly direction: string },
+) {
+  return apiRequest<EditRun>(`jobs/${jobId}/alternatives`, {
+    method: "POST",
+    body: JSON.stringify({ request_id: input.requestId, base_version: input.baseVersion,
+      kind: input.kind, direction: input.direction }),
+  });
 }
 
 export function requestRevision(

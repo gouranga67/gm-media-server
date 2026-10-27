@@ -624,6 +624,7 @@ class EditRunResponse(BaseModel):
     based_on_run_id: UUID | None = None
     revision_note: str | None = None
     revision_mode: Literal["targeted", "rebuild_story"] = "targeted"
+    alternative_kind: Literal["different_cut", "different_story"] | None = None
     caption_corrections: list[dict[str, str]] = Field(default_factory=list)
     caption_settings: dict[str, Any] = Field(default_factory=dict)
     effects_enabled: bool | None = None
@@ -692,6 +693,20 @@ class CaptionSettings(BaseModel):
 
     position: Literal["lower_safe", "middle", "upper"] = "lower_safe"
     timing_offset_seconds: float = Field(default=0.0, ge=-0.5, le=0.5)
+
+
+class AlternativeCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    request_id: UUID
+    base_version: int = Field(gt=0)
+    kind: Literal["different_cut", "different_story"]
+    direction: str = Field(default="", max_length=600)
+
+    @field_validator("direction")
+    @classmethod
+    def normalize_direction(cls, value: str) -> str:
+        return " ".join(value.split())
 
 
 class RevisionCreate(BaseModel):
