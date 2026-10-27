@@ -21,6 +21,13 @@ x-core-environment: &core-environment
   APPLIANCE_STATUS_PATH: /host-status/appliance-health.json
   TAILSCALE_OWNER_LOGIN: ${TAILSCALE_ALLOWED_LOGIN:-}
   ACCESS_INTERNAL_SECRET: ${UPLOAD_HOOK_SECRET:?Set UPLOAD_HOOK_SECRET in .env}
+  META_PUBLISHING_ENABLED: ${META_PUBLISHING_ENABLED:-false}
+  META_APP_ID: ${META_APP_ID:-}
+  META_APP_SECRET: ${META_APP_SECRET:-}
+  META_TOKEN_ENCRYPTION_KEY: ${META_TOKEN_ENCRYPTION_KEY:-}
+  META_APP_ORIGIN: ${APP_ORIGIN:-}
+  META_LOGIN_CONFIG_ID: ${META_LOGIN_CONFIG_ID:-}
+  META_GRAPH_VERSION: ${META_GRAPH_VERSION:-v24.0}
 
 services:
   postgres:
@@ -119,6 +126,7 @@ services:
         condition: service_healthy
     networks:
       - backend
+      - edge
     healthcheck:
       test:
         [

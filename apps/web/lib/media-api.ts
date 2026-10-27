@@ -554,6 +554,8 @@ export type JobUsage = {
 export type UsageDashboard = {
   readonly organization_requests?: number;
   readonly organization_tokens?: number;
+  readonly posting_caption_requests?: number;
+  readonly posting_caption_tokens?: number;
   readonly concept_requests?: number;
   readonly concept_tokens?: number;
   readonly days: number;

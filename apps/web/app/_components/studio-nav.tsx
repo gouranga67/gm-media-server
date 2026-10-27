@@ -26,6 +26,7 @@ const groups = [
     links: [
       ["Edits", "/jobs"],
       ["Prompt history", "/prompts"],
+      ["Publishing", "/publishing"],
     ],
   },
   {

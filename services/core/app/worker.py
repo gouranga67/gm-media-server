@@ -13,6 +13,8 @@ from redis import Redis
 from app.config import get_settings
 from app.concepts import process_one_concept, recover_interrupted_concepts
 from app.library_organization import process_one_organization, recover_interrupted_organization
+from app.publishing import process_one_post, recover_interrupted_publishing
+from app.publishing_captions import process_one_caption
 from app.content_catalog import CATALOG_VERSION, build_catalog_segments
 from app.database import connection
 from app.duplicate_storage import share_exact_duplicate_storage
@@ -54,6 +56,8 @@ class WorkerState:
     stopping: bool = False
     active_concept_request_id: str | None = None
     active_organization_request_id: str | None = None
+    active_publishing_post_id: str | None = None
+    active_publishing_caption_id: str | None = None
     active_ingest_id: str | None = None
     active_catalog_id: str | None = None
     active_visual_index_id: str | None = None
@@ -1738,6 +1742,10 @@ def heartbeat_loop(state: WorkerState, stop_event: threading.Event) -> None:
                 if state.active_concept_request_id
                 else "organizing-library"
                 if state.active_organization_request_id
+                else "publishing"
+                if state.active_publishing_post_id
+                else "writing-post-copy"
+                if state.active_publishing_caption_id
                 else "idle"
             )
             client.set(
@@ -1748,6 +1756,8 @@ def heartbeat_loop(state: WorkerState, stop_event: threading.Event) -> None:
                         "status": status,
                         "concept_request_id": state.active_concept_request_id,
                         "organization_request_id": state.active_organization_request_id,
+                        "publishing_post_id": state.active_publishing_post_id,
+                        "publishing_caption_id": state.active_publishing_caption_id,
                         "asset_id": state.active_ingest_id,
                         "catalog_asset_id": state.active_catalog_id,
                         "visual_index_asset_id": state.active_visual_index_id,
@@ -1772,6 +1782,18 @@ def heartbeat_loop(state: WorkerState, stop_event: threading.Event) -> None:
                                          (settings.edit_lease_seconds, state.active_organization_request_id))
                 except Exception as error:
                     print(f"auto-sort lease heartbeat failed: {error}", flush=True)
+            if state.active_publishing_caption_id:
+                try:
+                    with connection() as database:
+                        database.execute("UPDATE publishing_caption_requests SET lease_expires_at=now()+(%s*interval '1 second'),updated_at=now() WHERE id=%s AND status='generating'",(settings.edit_lease_seconds,state.active_publishing_caption_id))
+                except Exception:
+                    print("posting caption lease heartbeat unavailable", flush=True)
+            if state.active_publishing_post_id:
+                try:
+                    with connection() as database:
+                        database.execute("UPDATE publishing_posts SET lease_expires_at=now()+interval '20 minutes',updated_at=now() WHERE id=%s AND status IN ('uploading','processing','publishing')",(state.active_publishing_post_id,))
+                except Exception:
+                    print("publishing lease heartbeat unavailable", flush=True)
             if state.active_ingest_id:
                 try:
                     with connection() as database:
@@ -1874,10 +1896,12 @@ def run_work_cycle(state: WorkerState) -> bool:
     seed_pending_catalogs()
     recover_interrupted_concepts()
     recover_interrupted_organization()
+    recover_interrupted_publishing()
     for name, task in (
         ("catalog", catalog_one_asset), ("preview", process_one_edit),
         ("export", process_one_final_export), ("variant", process_one_delivery_variant),
         ("concept", process_one_concept), ("organization", process_one_organization),
+        ("publishing", process_one_post), ("post_caption", process_one_caption),
         ("ingest", analyze_one_asset),
     ):
         if state.stopping:

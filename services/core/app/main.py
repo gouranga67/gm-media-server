@@ -24,6 +24,8 @@ from app.upload_hooks import router as upload_hooks_router
 from app.runtime_metrics import performance_snapshot
 from app.knowledge import router as knowledge_router
 from app.assembly import router as assembly_router
+from app.publishing import router as publishing_router
+from app.publishing_captions import router as publishing_captions_router
 
 
 @asynccontextmanager
@@ -56,6 +58,8 @@ app.include_router(upload_hooks_router)
 app.include_router(creative_profiles_router)
 app.include_router(creative_assets_router)
 app.include_router(brand_kits_router)
+app.include_router(publishing_router)
+app.include_router(publishing_captions_router)
 
 
 @app.get("/health/live")

@@ -75,7 +75,7 @@ check_migration_runner() {
 }
 
 run_check "Service and container health" timeout --foreground --kill-after=10s 120s ./scripts/verify-phase2.sh
-run_check "Database migrations through 033" check_migration_runner
+run_check "Database migrations through 034" check_migration_runner
 run_check "Brief-first assembly readiness" timeout --foreground --kill-after=10s 120s python3 scripts/verify-brief-first.py
 run_check "Continuous studio sprint readiness (19–25)" timeout --foreground --kill-after=10s 120s python3 scripts/verify-phase19-25.py
 run_check "Backend unit and local render tests" timeout --foreground --kill-after=10s 300s docker compose run --rm --no-deps \
@@ -85,6 +85,7 @@ run_check "Existing media analysis" timeout --foreground --kill-after=10s 300s p
 run_check "Reusable server-library references" timeout --foreground --kill-after=10s 300s python3 scripts/verify-phase6c.py
 run_check "Library concept discovery readiness" timeout --foreground --kill-after=10s 120s python3 scripts/verify-library-concepts.py
 run_check "Photo categories and auto-sort readiness" timeout --foreground --kill-after=10s 120s python3 scripts/verify-library-organization.py
+run_check "Approved publishing and account readiness (read-only)" timeout --foreground --kill-after=10s 120s python3 scripts/verify-publishing.py
 run_check "Non-destructive exact-duplicate audit" timeout --foreground --kill-after=10s 300s python3 scripts/verify-phase6c2.py
 run_check "Source-evidence catalogue and search" timeout --foreground --kill-after=10s 300s python3 scripts/verify-phase6d.py
 run_check "Local semantic visual index and search" timeout --foreground --kill-after=10s 300s python3 scripts/verify-phase6e.py

@@ -49,6 +49,8 @@ class EfficiencyTests(unittest.TestCase):
             "process_one_delivery_variant",
             "process_one_concept",
             "process_one_organization",
+            "process_one_post",
+            "process_one_caption",
             "analyze_one_asset",
         ]
         with tempfile.TemporaryDirectory() as directory:
@@ -66,6 +68,7 @@ class EfficiencyTests(unittest.TestCase):
                         "seed_pending_catalogs",
                         "recover_interrupted_concepts",
                         "recover_interrupted_organization",
+                        "recover_interrupted_publishing",
                         "seed_pending_visual_indexes",
                         "index_one_asset_visually",
                     ]

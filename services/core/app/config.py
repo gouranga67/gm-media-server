@@ -1,7 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -41,6 +41,24 @@ class Settings(BaseSettings):
     appliance_status_path: Path = Path("/host-status/appliance-health.json")
     tailscale_owner_login: str = ""
     access_internal_secret: str = Field(default="development-access-secret-change-me", min_length=16)
+    meta_publishing_enabled: bool = False
+    meta_app_id: str = ""
+    meta_app_secret: SecretStr = SecretStr("")
+    meta_token_encryption_key: SecretStr = SecretStr("")
+    meta_app_origin: str = ""
+    meta_login_config_id: str = ""
+    meta_graph_version: str = Field(default="v24.0", pattern=r"^v[0-9]{2}\.0$")
+
+    @field_validator("meta_app_origin")
+    @classmethod
+    def meta_origin(cls, value, info):
+        from urllib.parse import urlsplit
+        if not value or not info.data.get("meta_publishing_enabled"):
+            return value
+        url = urlsplit(value)
+        if url.scheme != "https" or not url.netloc or url.username or url.password or url.query or url.fragment or url.path not in ("", "/"):
+            raise ValueError("Meta app origin must be an HTTPS origin without a path")
+        return value.rstrip("/")
 
 
 @lru_cache

@@ -21,6 +21,7 @@ import { FinishingWorkspace } from "./finishing-workspace";
 import { PreciseClipEditor } from "./precise-clip-editor";
 import { EditFeedbackCard } from "@/app/_components/edit-feedback-card";
 import { RenderQualityCard } from "@/app/_components/render-quality-card";
+import { PublishingPanel } from "@/app/_components/publishing-panel";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -296,6 +297,7 @@ export function JobReviewControls({
     const deliverable = recipe === "montage" ? "montage" : "reel";
     return (
       <div className="space-y-4">
+      <PublishingPanel key={currentFinal.id} exportId={currentFinal.id} version={currentFinal.version} />
       <RenderQualityCard review={currentFinal.manifest.quality_review} storyContract={currentFinal.manifest.story_contract_review} storyFinishing={currentFinal.manifest.story_finishing} />
       <section className="space-y-4 rounded-md border border-[#BFE3FF] bg-white p-5">
         <div>
@@ -343,12 +345,12 @@ export function JobReviewControls({
           <p className="font-mono text-xs font-bold tracking-wide text-[#173F5F] uppercase">Create another format</p>
           <p className="mt-2 text-sm text-[#666862]">Uses this approved edit locally with zero additional model calls.</p>
           <div className="mt-3 grid grid-cols-2 gap-2">
-            <select className="h-12 rounded-md border border-[#D7D9D3] bg-white px-3 text-sm" onChange={(event) => setVariantAspect(event.target.value as OutputAspect)} value={variantAspect}>
+            <select aria-label="Delivery variant aspect ratio" className="h-12 rounded-md border border-[#D7D9D3] bg-white px-3 text-sm" onChange={(event) => setVariantAspect(event.target.value as OutputAspect)} value={variantAspect}>
               <option value="vertical">Vertical 9:16</option>
               <option value="landscape">Landscape 16:9</option>
               <option value="square">Square 1:1</option>
             </select>
-            <select className="h-12 rounded-md border border-[#D7D9D3] bg-white px-3 text-sm" onChange={(event) => setVariantDuration(Number(event.target.value) as TargetDuration)} value={variantDuration}>
+            <select aria-label="Delivery variant duration" className="h-12 rounded-md border border-[#D7D9D3] bg-white px-3 text-sm" onChange={(event) => setVariantDuration(Number(event.target.value) as TargetDuration)} value={variantDuration}>
               {[15, 20, 30, 45, 60].filter((seconds) => seconds <= targetDuration).map((seconds) => (
                 <option key={seconds} value={seconds}>{seconds} seconds</option>
               ))}

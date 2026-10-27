@@ -33,6 +33,8 @@ The [26 October system audit and roadmap](docs/system-audit-and-roadmap.md) revi
 
 The companion [agent editing toolkit](docs/agent-editing-toolkit.md) ([PDF](docs/GM-Studio-Agent-Editing-Toolkit.pdf)) selects useful CapCut-style capabilities for our agent, with examples, compute tradeoffs and a focused build order.
 
+The optional [Meta publishing setup](docs/meta-publishing-setup.md) connects Facebook Pages and linked professional Instagram accounts. Prepare captions from an approved final export, then explicitly approve immediate or scheduled posting. Edit approval alone never publishes a reel.
+
 ## Requirements
 
 - Linux host with Docker Engine and Docker Compose v2

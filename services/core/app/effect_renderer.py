@@ -137,6 +137,7 @@ def public_effect_manifest(effects: list[dict[str, Any]]) -> list[dict[str, Any]
             "purpose": item["purpose"],
             "license_name": item["license_name"],
             "license_source_url": item["license_source_url"],
+            "allowed_platforms": item.get("allowed_platforms") or [],
             "attribution": item.get("attribution") or "",
             "start_seconds": item["cue"].start_seconds,
             "duration_seconds": item["cue"].duration_seconds,

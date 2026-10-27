@@ -470,7 +470,9 @@ def apply_retention(payload: dict[str, str], x_gm_user_login: str | None = Heade
             )
         for table in ("final_exports", "delivery_variants"):
             rows = database.execute(
-                f"SELECT id, video_path, captions_path, cover_path, post_copy_path, package_path, manifest_path FROM {table} WHERE package_path IS NOT NULL AND completed_at < now() - (%s * interval '1 day') FOR UPDATE",
+                f"SELECT id, video_path, captions_path, cover_path, post_copy_path, package_path, manifest_path FROM {table} WHERE package_path IS NOT NULL AND completed_at < now() - (%s * interval '1 day') "
+                + ("AND NOT EXISTS (SELECT 1 FROM publishing_drafts d JOIN publishing_posts p ON p.draft_id=d.id WHERE d.final_export_id=final_exports.id AND p.status IN ('queued','uploading','processing','publishing','unknown')) " if table == "final_exports" else "")
+                + "FOR UPDATE",
                 (settings["delivery_retention_days"],),
             ).fetchall()
             for row in rows:

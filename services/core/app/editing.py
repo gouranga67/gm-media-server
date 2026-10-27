@@ -135,6 +135,8 @@ def usage_dashboard(days: int = Query(default=0, ge=0, le=3650)) -> dict[str, An
                    COALESCE(sum(total_tokens) FILTER (WHERE request_kind='concepts'),0) AS concept_tokens,
                    count(*) FILTER (WHERE request_kind='organization') AS organization_requests,
                    COALESCE(sum(total_tokens) FILTER (WHERE request_kind='organization'),0) AS organization_tokens,
+                   count(*) FILTER (WHERE request_kind='post_caption') AS posting_caption_requests,
+                   COALESCE(sum(total_tokens) FILTER (WHERE request_kind='post_caption'),0) AS posting_caption_tokens,
                    COALESCE(sum(input_tokens), 0) AS input_tokens,
                    COALESCE(sum(cached_input_tokens), 0) AS cached_input_tokens,
                    COALESCE(sum(output_tokens), 0) AS output_tokens,

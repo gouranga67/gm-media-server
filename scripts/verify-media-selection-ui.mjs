@@ -24,6 +24,7 @@ const originalLoad = Module._load;
 let lessonProposed = false;
 let assemblySettings, assemblyError, assemblyLocked, profiles, previewFixture;
 function assemblyPreview() { return {ready: !assemblyError, locked: assemblyLocked, error:assemblyError, settings:assemblySettings, decision:assemblyError ? null : {recipe:assemblySettings.assembly_mode === "auto" ? "talking_head" : assemblySettings.assembly_mode,edit_style:assemblySettings.edit_style,purpose:assemblySettings.reel_intent === "auto" ? "story" : assemblySettings.reel_intent,label:"Speech with supporting pictures",reason:"Keep recorded speech continuous.",hosted_model_calls:0}}; }
+let publishingFixture;
 let calls = [], transfers = [], navigation = [], readyEvents = 0, analysisStatus = "ready", root, managedAssets = [], batchFailure = false, conceptHistory = [], renderConceptFailure = false, conceptCounter = 0, organizationHistory = [], organizationFailure = false;
 const serverId = "11111111-1111-4111-8111-111111111111";
 const jobId = "22222222-2222-4222-8222-222222222222";
@@ -54,6 +55,8 @@ for (const extension of [".ts", ".tsx"]) Module._extensions[extension] = (module
   assert.equal(errors.length, 0, errors.map((diagnostic) => ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n")).join("\n"));
   module._compile(outputText, filename);
 };
+const { PublishingPanel } = require(path.join(repo, "apps/web/app/_components/publishing-panel.tsx"));
+const { MetaConnectResult } = require(path.join(repo, "apps/web/app/_components/meta-connect-result.tsx"));
 const { JobPreview } = require(path.join(repo, "apps/web/app/_components/job-preview.tsx"));
 const { EditProgress } = require(path.join(repo, "apps/web/app/_components/edit-progress.tsx"));
 const { RenderQualityCard } = require(path.join(repo, "apps/web/app/_components/render-quality-card.tsx"));
@@ -73,7 +76,18 @@ globalThis.fetch = async (url, options = {}) => {
   const body = options.body ? JSON.parse(options.body) : undefined;
   calls.push({ route, method: options.method ?? "GET", body });
   let payload;
-  if (route === "learning/lab") payload = { lessons: lessonProposed ? [{ id:serverId,recipe:"talking_head",edit_style:"high_impact",status:"proposed",directive:"Keep complete clean speech.",training_job_ids:[jobId,"training-b","training-c"],evaluation:{held_out_jobs:0,can_promote:false,rating_delta:null,regressions:0} }] : [],trials:[],jobs:[] };
+  if (route === "publishing/status") payload = publishingFixture.config;
+  else if (route === "publishing/connections") payload = publishingFixture.accounts;
+  else if (route.startsWith("publishing/drafts?") || (route === "publishing/drafts" && (options.method ?? "GET") === "GET")) payload = publishingFixture.draft ? [publishingFixture.draft] : [];
+  else if (route === "publishing/drafts") { publishingFixture.draft = {id:body.id,final_export_id:body.final_export_id,job_id:jobId,version:4,revision:1,caption:"",posts:[],caption_request:null};payload=publishingFixture.draft; }
+  else if (/^publishing\/drafts\/[^/]+\/publish$/.test(route)) {
+    if(publishingFixture.failPublish) return {ok:false,status:409,json:async()=>({detail:"The export changed. Review it before posting."})};
+    publishingFixture.draft.posts=body.connection_ids.map((id,index)=>({id:`post-${index}`,connection_id:id,platform:index?"facebook":"instagram",account_name:"Studio",status:"queued",publish_at:body.publish_at??new Date().toISOString(),permalink:null,error:null,remote_container_id:null}));payload=publishingFixture.draft;
+  }
+  else if (/^publishing\/drafts\/[^/]+\/captions$/.test(route)) { publishingFixture.draft.caption_request={id:body.id,status:"ready",options:[{label:"Concise",text:"A reviewed source story."},{label:"Story",text:"A family recipe story."},{label:"Question",text:"What would you choose?"}],total_tokens:100,error:null};payload=publishingFixture.draft.caption_request; }
+  else if (/^publishing\/drafts\/[^/?]+$/.test(route)) { if(options.method==="PATCH"){publishingFixture.draft.caption=body.caption;publishingFixture.draft.revision+=1;}payload=publishingFixture.draft; }
+  else if (route === "publishing/meta/complete") payload={connected:2};
+  else if (route === "learning/lab") payload = { lessons: lessonProposed ? [{ id:serverId,recipe:"talking_head",edit_style:"high_impact",status:"proposed",directive:"Keep complete clean speech.",training_job_ids:[jobId,"training-b","training-c"],evaluation:{held_out_jobs:0,can_promote:false,rating_delta:null,regressions:0} }] : [],trials:[],jobs:[] };
   else if (route === "learning/lab/propose") { lessonProposed=true;payload={matched_proposals:1,hosted_model_calls:0}; }
   else if (route === "library/knowledge") payload = { products: [], evidence_version: "1.0" };
   else if (/^library\/products\//.test(route)) payload = { ...body, id: route.split("/").at(-1) };
@@ -162,6 +176,7 @@ beforeEach(() => {
   window.history.replaceState(null, "", "/jobs/new");
   calls = []; transfers = []; navigation = []; readyEvents = 0; analysisStatus = "ready"; batchFailure = false; conceptHistory = []; renderConceptFailure = false; conceptCounter = 0;
   organizationHistory = []; organizationFailure = false;
+  publishingFixture={config:{configured:true,redirect_uri:"https://studio.example.invalid/publishing/connect"},accounts:[{id:serverId,platform:"instagram",display_name:"Studio",active:true,token_expires_at:null}],draft:null,failPublish:false};
   managedAssets = [
     { ...serverAsset, id: "talk", source_name: "VID_0001.mp4", display_name: "Product introduction", media_role: "talking", job_references: 2 },
     { ...serverAsset, id: "broll", source_name: "VID_0002.mp4", display_name: "Cream close-up", media_role: "broll", job_references: 0 },
@@ -735,4 +750,59 @@ test("story review distinguishes recorded script coverage, automatic cleanup and
   assert.equal(calls.length,0);
   await act(async () => root.render(React.createElement(RenderQualityCard,{review})));
   assert.equal(document.body.textContent.includes("Story selection and cleanup"),false);
+});
+
+
+test("publishing opens without side effects and posts only the saved caption after an explicit click", async () => {
+  await act(async()=>root.render(React.createElement(PublishingPanel,{exportId:serverId,version:4})));
+  assert.equal(calls.filter(c=>c.route.startsWith("publishing/")).length,0);
+  await click(button("Prepare a post"));
+  await waitFor(()=>document.body.textContent.includes("Instagram · Studio"));
+  assert.equal(calls.some(c=>c.route.startsWith("publishing/")&&c.method!=="GET"),false);
+  assert.equal(button("Generate 3 caption options").disabled,true);
+  await type('textarea',"My exact reviewed caption");
+  const account=[...document.querySelectorAll('input[type="checkbox"]')].find(e=>e.parentElement.textContent.includes("Instagram"));
+  await click(account);
+  assert.equal(posts(`publishing/drafts/${publishingFixture.draft?.id}/publish`).length,0);
+  await click(button("Save posting draft"));
+  await waitFor(()=>document.body.textContent.includes("Posting draft saved"));
+  assert.equal(publishingFixture.draft.caption,"My exact reviewed caption");
+  assert.equal(calls.some(c=>c.route.endsWith("/publish")),false);
+  await click(button("Post now"));
+  await waitFor(()=>document.body.textContent.includes("This caption and export are frozen"));
+  const approval=calls.find(c=>c.route.endsWith("/publish"));
+  assert.equal(approval.body.revision,2);assert.deepEqual(approval.body.connection_ids,[serverId]);
+  assert.equal(calls.some(c=>c.route.endsWith("/captions")),false);
+});
+
+test("caption choices require opt-in, stay editable and never trigger publication", async () => {
+  await act(async()=>root.render(React.createElement(PublishingPanel,{exportId:serverId,version:4})));
+  await click(button("Prepare a post"));await waitFor(()=>document.body.textContent.includes("Instagram · Studio"));
+  await click([...document.querySelectorAll('input[type="checkbox"]')].find(e=>e.parentElement.textContent.includes("AI-written")));
+  await click(button("Generate 3 caption options"));
+  await waitFor(()=>document.body.textContent.includes("A reviewed source story."));
+  await click([...document.querySelectorAll("button")].find(e=>e.textContent.includes("A reviewed source story.")));
+  assert.equal(document.querySelector("textarea").value,"A reviewed source story.");
+  assert.equal(publishingFixture.draft.caption,"");
+  assert.equal(calls.some(c=>c.route.endsWith("/publish")),false);
+});
+
+test("rejected publication preserves the editable caption and does not automatically retry", async () => {
+  publishingFixture.failPublish=true;
+  await act(async()=>root.render(React.createElement(PublishingPanel,{exportId:serverId,version:4})));
+  await click(button("Prepare a post"));await waitFor(()=>document.body.textContent.includes("Instagram · Studio"));
+  await type('textarea',"Keep this caption");
+  await click([...document.querySelectorAll('input[type="checkbox"]')].find(e=>e.parentElement.textContent.includes("Instagram")));
+  await click(button("Post now"));await waitFor(()=>document.body.textContent.includes("The export changed"));
+  assert.equal(document.querySelector("textarea").value,"Keep this caption");
+  assert.equal(calls.filter(c=>c.route.endsWith("/publish")).length,1);
+});
+
+test("Meta callback exchanges the code once under StrictMode and removes it from the address", async () => {
+  window.history.replaceState(null,"","/publishing/connect?code=private-code&state=private-state");
+  await act(async()=>root.render(React.createElement(React.StrictMode,null,React.createElement(MetaConnectResult))));
+  await waitFor(()=>document.body.textContent.includes("2 publishing accounts connected"));
+  assert.equal(posts("publishing/meta/complete").length,1);
+  assert.equal(window.location.search,"");
+  assert.equal(document.body.textContent.includes("private-code"),false);
 });
