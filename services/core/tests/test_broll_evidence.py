@@ -64,7 +64,45 @@ class BrollEvidenceTests(unittest.TestCase):
         self.assertEqual(guide["kind"], "no_transcribed_speech")
         self.assertEqual(guide["speech_free_windows"], [{"source_in": 0, "source_out": 2.5}])
         self.assertIn("not a face detector", guide["note"])
+        self.assertFalse(guide["visual_speaking_verified"])
         self.assertEqual(broll_guidance(self.assets[2])["kind"], "still_candidate")
+
+    def test_empty_transcript_does_not_override_an_explicit_talking_label(self):
+        self.assets[1].update(transcript_segments=[], library_role="talking")
+        before = self.plan.model_dump(mode="json")
+        guarded, removed = guard_broll(self.plan, self.assets)
+        self.assertEqual(guarded.broll, self.plan.broll[1:])
+        self.assertEqual(removed[0]["reason"], "talking_source_without_transcript_or_marked_cutaway")
+        self.assertEqual(guarded.clips, self.plan.clips)
+        self.assertEqual(self.plan.model_dump(mode="json"), before)
+        self.assertTrue(broll_guidance(self.assets[1])["talking_label_without_transcript"])
+
+    def test_unlabelled_action_cutaways_remain_eligible_without_inventing_visual_certainty(self):
+        self.assets[1]["transcript_segments"] = []
+        guarded, removed = guard_broll(self.plan, self.assets)
+        self.assertEqual(guarded.broll, self.plan.broll)
+        self.assertEqual(removed, [])
+        self.assertFalse(broll_guidance(self.assets[1])["visual_speaking_verified"])
+
+    def test_human_cutaway_range_must_cover_the_entire_cue_and_cannot_override_known_speech(self):
+        asset = self.assets[1]
+        asset.update(transcript_segments=[], source_evidence={"library": {"role": "talking"},
+            "user_ranges": [{"start_seconds": 1, "end_seconds": 3, "role": "broll"}]})
+        self.assertEqual(len(guard_broll(self.plan, self.assets)[0].broll), 2)
+        asset["source_evidence"]["user_ranges"][0]["end_seconds"] = 2.9
+        self.assertEqual(len(guard_broll(self.plan, self.assets)[0].broll), 1)
+        asset["source_evidence"]["user_ranges"][0]["end_seconds"] = 3
+        asset["transcript_segments"] = [{"start": 1, "end": 3, "text": "Recognized speaking."}]
+        self.assertEqual(guard_broll(self.plan, self.assets)[1][0]["reason"], "source_speech_overlaps_silent_cutaway")
+
+    def test_human_talking_and_avoid_ranges_exclude_silent_video_cutaways(self):
+        self.assets[1]["transcript_segments"] = []
+        for role in ("talking", "avoid"):
+            self.assets[1]["source_evidence"] = {"user_ranges": [
+                {"start_seconds": 2, "end_seconds": 4, "role": role}]}
+            guarded, removed = guard_broll(self.plan, self.assets)
+            self.assertEqual(guarded.broll, self.plan.broll[1:])
+            self.assertEqual(removed[0]["reason"], "human_marked_talking_or_avoid_range")
 
     def test_guard_does_not_hide_unknown_source_ids_from_the_validator(self):
         self.plan.broll[0].asset_id = uuid4()

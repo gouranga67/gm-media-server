@@ -141,6 +141,7 @@ def finishing_manifest(context: dict[str, Any], plan: EditPlan) -> dict[str, Any
                        "source_audio_used": False}
                       for layer in plan.finishing.layers] if plan.finishing else []
     return {"mode": context["job"].get("edit_style"), "target_visual_beat_seconds": 2.5,
+            "video_timing_pipeline": "source_timestamps_before_camera_effects_v1",
             "rhythmic_punch_beats": beats, "broll_count": len(plan.broll),
             "image_broll_framing": "contain_card_v1",
             "creative_effect_count": len(plan.effects), "picture_timeline_preserved": True,

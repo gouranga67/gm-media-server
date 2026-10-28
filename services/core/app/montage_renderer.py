@@ -128,16 +128,19 @@ def _video_filter(
     if is_image and zoom:
         # A still image is one decoded frame. zoompan expands that frame into
         # the whole clip, avoiding repeated decoding of a large JPEG.
+        # Establish frame durations before tpad; zoompan can emit duration=0.
         chain += (
             f",zoompan=z='{zoom}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
-            f":d={frame_count}:s={width}x{height}:fps={fps}"
+            f":d={frame_count}:s={width}x{height}:fps={fps},fps={fps}"
         )
     elif is_image:
         chain += f",tpad=stop_mode=clone:stop_duration={duration:.3f},fps={fps}"
     elif zoom:
         chain += (
             ",setpts=PTS-STARTPTS"
-            f",zoompan=z='{zoom}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
+            # Video must advance by source time, not by decoded frame count.
+            # Keep the single-image expansion above separate from this path.
+            f",fps={fps},zoompan=z='{zoom}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
             f":d=1:s={width}x{height}:fps={fps}"
         )
     else:

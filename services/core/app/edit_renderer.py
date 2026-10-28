@@ -360,8 +360,11 @@ def _clip_video_filter(
     else:
         zoom = ""
     if zoom:
+        # zoompan(d=1) emits one output frame for each input frame. Convert
+        # timestamps to the output cadence first; otherwise 60fps footage
+        # becomes half-speed picture over unchanged 30fps speech timing.
         chain += (
-            f",zoompan=z='{zoom}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
+            f",fps={frames_per_second},zoompan=z='{zoom}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
             f":d=1:s={width}x{height}:fps={frames_per_second}"
         )
     else:
