@@ -1,6 +1,7 @@
 import { defineTool } from "eve/tools";
 import { z } from "zod";
 
+import { finishingToolsSchema } from "../lib/finishing-schema";
 import { mediaApi } from "../lib/media-api";
 
 const talkingHeadClip = z
@@ -18,36 +19,65 @@ const talkingHeadClip = z
       "slow_pull_out",
       "rhythmic_punch",
     ]),
-    story_role: z.enum(["hook", "context", "development", "payoff", "reaction", "ending"]),
+    story_role: z.enum([
+      "hook",
+      "context",
+      "development",
+      "payoff",
+      "reaction",
+      "ending",
+    ]),
     editorial_intent: z.string().max(180),
     source_audio_gain_db: z.number().min(-12).max(12).default(0),
   })
   .strict();
 
-const creativeCue = z.object({
-  asset_id: z.string().uuid(),
-  start_seconds: z.number().min(0).max(120),
-  duration_seconds: z.number().min(0.1).max(8),
-  position: z.enum(["top", "center", "bottom", "full_frame"]),
-  intensity: z.enum(["subtle", "standard", "strong"]),
-  purpose: z.enum(["hook", "transition", "emphasis", "reveal", "reaction", "payoff"]),
-}).strict();
+const creativeCue = z
+  .object({
+    asset_id: z.string().uuid(),
+    start_seconds: z.number().min(0).max(120),
+    duration_seconds: z.number().min(0.1).max(8),
+    position: z.enum(["top", "center", "bottom", "full_frame"]),
+    intensity: z.enum(["subtle", "standard", "strong"]),
+    purpose: z.enum([
+      "hook",
+      "transition",
+      "emphasis",
+      "reveal",
+      "reaction",
+      "payoff",
+    ]),
+  })
+  .strict();
 
 const captionAndEffects = {
-  caption_position: z.enum(["lower_safe", "middle", "upper"]).default("lower_safe"),
+  finishing: finishingToolsSchema.nullable().optional(),
+  caption_position: z
+    .enum(["lower_safe", "middle", "upper"])
+    .default("lower_safe"),
   caption_timing_offset_seconds: z.number().min(-0.5).max(0.5).default(0),
   effects: z.array(creativeCue).max(8).default([]),
-  broll: z.array(z.object({
-    asset_id: z.string().uuid(), media_kind: z.enum(["video", "image"]),
-    source_in: z.number().nonnegative(), source_out: z.number().nonnegative(),
-    start_seconds: z.number().min(0).max(120), duration_seconds: z.number().min(0.5).max(4),
-    editorial_intent: z.string().min(1).max(180),
-  }).strict()).max(8).default([]),
+  broll: z
+    .array(
+      z
+        .object({
+          asset_id: z.string().uuid(),
+          media_kind: z.enum(["video", "image"]),
+          source_in: z.number().nonnegative(),
+          source_out: z.number().nonnegative(),
+          start_seconds: z.number().min(0).max(120),
+          duration_seconds: z.number().min(0.5).max(4),
+          editorial_intent: z.string().min(1).max(180),
+        })
+        .strict(),
+    )
+    .max(8)
+    .default([]),
 };
 
 const talkingHeadPlan = z
   .object({
-    schema_version: z.enum(["1.2", "1.3", "1.4"]),
+    schema_version: z.enum(["1.2", "1.3", "1.4", "1.5"]),
     recipe: z.literal("talking_head"),
     clips: z.array(talkingHeadClip).min(1).max(24),
     caption_style: z.literal("clean_blue_v1"),
@@ -70,17 +100,30 @@ const montageClip = z
     duration: z.number().min(0.5).max(8),
     crop: z.literal("center_fill"),
     transition: z.enum(["cut", "dip_to_black"]),
-    visual_preset: z.enum(["standard", "punch_in", "slow_push_in", "slow_pull_out", "rhythmic_punch"]),
+    visual_preset: z.enum([
+      "standard",
+      "punch_in",
+      "slow_push_in",
+      "slow_pull_out",
+      "rhythmic_punch",
+    ]),
     include_source_audio: z.boolean(),
     source_audio_gain_db: z.number().min(-12).max(12),
-    story_role: z.enum(["hook", "context", "development", "payoff", "reaction", "ending"]),
+    story_role: z.enum([
+      "hook",
+      "context",
+      "development",
+      "payoff",
+      "reaction",
+      "ending",
+    ]),
     editorial_intent: z.string().max(180),
   })
   .strict();
 
 const montagePlan = z
   .object({
-    schema_version: z.enum(["1.2", "1.3", "1.4"]),
+    schema_version: z.enum(["1.2", "1.3", "1.4", "1.5"]),
     recipe: z.literal("montage"),
     clips: z.array(montageClip).min(2).max(48),
     audio_preset: z.literal("montage_mix_v1"),

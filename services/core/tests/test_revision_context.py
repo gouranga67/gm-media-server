@@ -163,8 +163,10 @@ class RevisionContextTests(unittest.TestCase):
         public = _public_context(context, 120_000)
         self.assertEqual(context, original)
         for name in ("music_library", "creative_effect_library"):
-            self.assertEqual(len(public[name]), len(context[name]))
-            for actual, source in zip(public[name], context[name]):
+            self.assertEqual(len(public[name]), min(18, len(context[name])) if name == "creative_effect_library" else len(context[name]))
+            source_by_id = {item.get("asset_id", item.get("track_id")): item for item in context[name]}
+            for actual in public[name]:
+                source = source_by_id[actual.get("asset_id", actual.get("track_id"))]
                 for key, value in source.items():
                     if key not in {"license_source_url", "allowed_platforms", "attribution", "_storage_key"}:
                         self.assertEqual(actual[key], value)

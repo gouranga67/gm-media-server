@@ -328,6 +328,8 @@ def _public_context(context: dict[str, Any], max_characters: int) -> dict[str, A
     if direction.get("effect_level") == "off":
         public["creative_effect_library"] = []
 
+    from app.creative_selection import shortlist
+    public["creative_effect_library"] = shortlist(public)
     encoded = json.dumps(public, ensure_ascii=False, separators=(",", ":"))
     if len(encoded) <= max_characters:
         return public
@@ -708,7 +710,21 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
         "reveals or emphasis, whooshes for movement, and comedic sounds only for earned reactions. Respect cue limits. "
         if public.get("job", {}).get("edit_style") == "high_impact" else ""
     )
-    finishing_instruction = rhythmic_instruction + (
+    creative_tools_instruction = (
+        "Creative treatments are optional finishing.callouts, finishing.pointers and finishing.music_regions. "
+        "Return finishing=null when unused. A callout is up to 64 plain-text characters: use a short source-backed "
+        "phrase, a faithful thought label, or a list counter only when its number is supported. Never invent facts, "
+        "quotes, attempt counts or product claims. Place callouts above dialogue captions and away from faces/products. "
+        "Pointers are fixed arrows/circles at normalized frame coordinates: use only if the shown object location is clear; "
+        "they do not track moving objects. Music regions briefly reduce/mute only the selected music, then restore it, "
+        "for a real reaction; never mute or stretch dialogue. Use sparingly around evidence-backed moments, not to meet a quota. "
+        "An audio and visual effect may share a beat within 50ms; both count towards the effect limit. "
+        "Respect use_when/avoid_when and energy. Keep effects shorter than important speech; do not reuse one gag throughout a reel. "
+        "Do not fabricate laughter or reactions. Use existing silent picture-layer freeze/reaction tools only when a user requests them. "
+        if public.get("job", {}).get("effect_level", "off") != "off" else
+        "Return finishing=null: creative treatments are disabled for this job. "
+    )
+    finishing_instruction = creative_tools_instruction + rhythmic_instruction + (
         "Use broll for 0.5–4s picture-only cutaways to relevant uploaded video or image assets. Main speech continues "
         "unchanged under broll; never replace dialogue clips just to show a product close-up. Give each overlay a "
         "source-backed editorial_intent. Do not infer an object from a generic visual_window or invent relevant footage. "

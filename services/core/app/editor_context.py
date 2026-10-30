@@ -227,6 +227,7 @@ def build_editor_context(
             "asset_id": str(row["id"]), "kind": row["kind"], "title": row["title"],
             "creator": row["creator"], "duration_seconds": row["duration_seconds"],
             "tags": row["tags"], "purpose": row["purpose"],
+            **{key: row.get(key) or "" for key in ("mood", "energy", "use_when", "avoid_when")},
             "allowed_platforms": allowed_platforms, "attribution": row["attribution"],
             "license_name": row["license_name"], "license_source_url": row["license_source_url"],
         }

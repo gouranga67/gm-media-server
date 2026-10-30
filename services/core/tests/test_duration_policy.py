@@ -289,6 +289,30 @@ class LocalDurationRepairTests(unittest.TestCase):
         self.assertAlmostEqual(changed["broll"][0]["start_seconds"], 57.4)
         self.assertEqual(self.document["clips"][0]["source_out"], 60.6)
 
+    def test_creative_callouts_allow_safe_duration_repair_and_are_retimed(self):
+        self.document["finishing"] = {
+            "callouts": [{"start": 59, "end": 60, "text": "Complete ending"}]
+        }
+        with patch(
+            "app.story_finishing._measure",
+            return_value={"silence_intervals": [{"start": 0, "end": 2}]},
+        ):
+            changed, report = repair_duration_overrun(self.document, self.context)
+        self.assertEqual(report["status"], "trimmed_verified_quiet")
+        self.assertEqual(report["hosted_model_calls"], 0)
+        self.assertLessEqual(plan_duration(changed), 60)
+        cue = changed["finishing"]["callouts"][0]
+        self.assertAlmostEqual(cue["start"], 57.4)
+        self.assertAlmostEqual(cue["end"], 58.4)
+        self.assertEqual(self.document["finishing"]["callouts"][0]["start"], 59)
+        for word in self.words:
+            self.assertTrue(
+                any(
+                    c["source_in"] <= word["start"] and c["source_out"] >= word["end"]
+                    for c in changed["clips"]
+                )
+            )
+
     def test_noise_reactions_missing_word_timing_and_large_overruns_are_never_blindly_trimmed(
         self,
     ):

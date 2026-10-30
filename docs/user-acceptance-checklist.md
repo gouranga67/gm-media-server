@@ -203,3 +203,16 @@ Each explicitly generated alternative consumes an editing request and a local re
 | D6 | Make a story over 60s, within a chosen maximum up to 120s | Late captions, effects, B-roll, finishing windows and timestamped feedback work; actual duration and policy appear below playback. Check the final export too. |
 
 The preflight speech estimate includes repeated takes and is not a verified measurement of the required script. Automatic splitting and semantic proof that every requested point survived are not implemented; use the brief, available duration settings and playback review.
+
+## Creative toolkit
+
+| ID | Test | Pass when |
+| --- | --- | --- |
+| FX1 | Open Library → Music & effects | The sounds/graphics appear with previews; searches and type filters find the expected assets. |
+| FX2 | Select several licensed files | Nothing uploads until Import unfinished files is pressed. Each file has its own editable title/source link. |
+| FX3 | Import one duplicate and retry an unfinished file | Completed imports stay in place, the duplicate is skipped, and only unfinished files are sent again. |
+| FX4 | Edit one effect’s guidance | Mood, energy and use/avoid notes persist without re-uploading or changing its file. |
+| FX5 | Make a fresh Social/Meme-heavy edit with a real reveal/reaction | Relevant accents appear at earned moments, speech stays clear and the story stays coherent. A sound and graphic can share one beat. Effects are not compulsory decoration. |
+| FX6 | Add a short callout or list counter in Finishing tools | Only explicit submission creates a local preview; the words appear at the chosen reel time, clear of dialogue captions. |
+| FX7 | Add a fixed arrow/circle | It points at the intended detail during its interval. It does not claim to follow moving objects. |
+| FX8 | Add a one-second music pause on a reel with music | Music fades down and returns, speech continues normally, and the exported MP4 matches the preview. |

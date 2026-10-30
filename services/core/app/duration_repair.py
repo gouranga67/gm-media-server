@@ -48,7 +48,11 @@ def repair_duration_overrun(document, context):
         original = model.model_validate(document)
     except ValueError:
         return document, report
-    if original.finishing is not None:
+    from app.creative_selection import only_creative_treatments
+
+    if original.finishing is not None and not only_creative_treatments(
+        original.finishing
+    ):
         return document, report
     inventory = {str(a["asset_id"]): a for a in context["assets"]}
     candidate = original

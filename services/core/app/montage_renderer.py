@@ -569,11 +569,13 @@ def render_montage_preview(
         float(plan.caption_timing_offset_seconds),
     )
     events = finish_caption_events(events, plan.finishing)
-    if events:
+    has_overlays = bool(events or (plan.finishing and (plan.finishing.callouts or plan.finishing.pointers)))
+    if has_overlays:
         _atomic_text(
             captions_ass,
             render_ass(
-                events, width=width, height=height,
+                treatments=plan.finishing,
+                events=events, width=width, height=height,
                 brand_kit=context.get("brand_kit"), position=plan.caption_position,
                 target_platform=str(context["job"].get("target_platform") or "all_social"),
             ),
@@ -586,7 +588,7 @@ def render_montage_preview(
         height=height,
         final=False,
         settings=settings,
-        captions_path=captions_ass if events else None,
+        captions_path=captions_ass if has_overlays else None,
     )
     manifest = _manifest(
         context,
@@ -650,11 +652,13 @@ def render_montage_delivery(
     )
     events = finish_caption_events(events, plan.finishing)
     _atomic_text(captions, render_webvtt(events))
-    if events:
+    has_overlays = bool(events or (plan.finishing and (plan.finishing.callouts or plan.finishing.pointers)))
+    if has_overlays:
         _atomic_text(
             captions_ass,
             render_ass(
-                events, width=width, height=height,
+                treatments=plan.finishing,
+                events=events, width=width, height=height,
                 brand_kit=context.get("brand_kit"), position=plan.caption_position,
                 target_platform=str(context["job"].get("target_platform") or "all_social"),
             ),
@@ -667,7 +671,7 @@ def render_montage_delivery(
         height=height,
         final=True,
         settings=settings,
-        captions_path=captions_ass if events else None,
+        captions_path=captions_ass if has_overlays else None,
     )
     probe = probe_media(video, settings.analysis_command_timeout_seconds)
     video_stream = next((stream for stream in probe["streams"] if stream.get("type") == "video"), None)

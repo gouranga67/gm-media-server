@@ -17,7 +17,10 @@ type Tool =
   | "colour"
   | "layer"
   | "music"
-  | "join";
+  | "join"
+  | "callout"
+  | "pointer"
+  | "music_pause";
 export function FinishingWorkspace({
   jobId,
   version,
@@ -66,6 +69,16 @@ function FinishingForm({
   readonly clips: readonly EditorialClip[];
   readonly onUpdated: () => void;
 }) {
+  const [callout, setCallout] = useState("");
+  const [calloutStyle, setCalloutStyle] = useState<
+    "label" | "thought" | "counter"
+  >("label");
+  const [pointerShape, setPointerShape] = useState<"arrow" | "circle">(
+    "circle",
+  );
+  const [pointerDirection, setPointerDirection] = useState<
+    "left" | "right" | "up" | "down"
+  >("right");
   const [inspection, setInspection] = useState<FinishingInspection>();
   const [tool, setTool] = useState<Tool>("motion");
   const [clipIndex, setClipIndex] = useState(0);
@@ -232,6 +245,46 @@ function FinishingForm({
         ],
       };
     }
+    const window = { start: Number(start), end: Number(end) };
+    const outside = (r: { start: number; end: number }) =>
+      r.end <= window.start || r.start >= window.end;
+    if (tool === "callout")
+      next = {
+        ...next,
+        callouts: [
+          ...(next.callouts ?? []).filter(outside),
+          {
+            ...window,
+            text: callout,
+            style: calloutStyle,
+            position: "upper",
+            animation: "pop",
+          },
+        ],
+      };
+    if (tool === "pointer")
+      next = {
+        ...next,
+        pointers: [
+          ...(next.pointers ?? []).filter(outside),
+          {
+            ...window,
+            x: Number(anchorX),
+            y: Number(anchorY),
+            size: 0.14,
+            shape: pointerShape,
+            direction: pointerDirection,
+          },
+        ],
+      };
+    if (tool === "music_pause")
+      next = {
+        ...next,
+        music_regions: [
+          ...(next.music_regions ?? []).filter(outside),
+          { ...window, gain_db: -60 },
+        ],
+      };
     await apply(next);
   }
   async function restoreVersion() {
@@ -289,6 +342,9 @@ function FinishingForm({
                 <option value="colour">Selected clip colour</option>
                 <option value="layer">Picture layer / green screen</option>
                 <option value="music">Music excerpt</option>
+                <option value="callout">Text callout / list counter</option>
+                <option value="pointer">Arrow / circle pointer</option>
+                <option value="music_pause">Pause music, keep speech</option>
                 <option value="join">Independent audio / picture join</option>
               </select>
             </label>
@@ -308,7 +364,14 @@ function FinishingForm({
                 </select>
               </label>
             ) : null}
-            {tool === "audio" || tool === "captions" || tool === "layer" ? (
+            {[
+              "audio",
+              "captions",
+              "layer",
+              "callout",
+              "pointer",
+              "music_pause",
+            ].includes(tool) ? (
               <div className="grid grid-cols-2 gap-3">
                 <label className="text-xs">
                   Reel start seconds
@@ -390,7 +453,7 @@ function FinishingForm({
                 />
               </label>
             ) : null}
-            {tool === "motion" || tool === "layer" ? (
+            {tool === "motion" || tool === "layer" || tool === "pointer" ? (
               <div className="grid grid-cols-2 gap-3">
                 <label className="text-xs">
                   Horizontal anchor · 0 left / 1 right
@@ -451,6 +514,85 @@ function FinishingForm({
                   <option value="hidden">Hide during this range</option>
                 </select>
               </label>
+            ) : null}
+            {tool === "callout" ? (
+              <div className="space-y-3">
+                <label className="block text-xs">
+                  Callout text
+                  <input
+                    className={control}
+                    maxLength={64}
+                    required
+                    value={callout}
+                    onChange={(e) => setCallout(e.target.value)}
+                    placeholder="A short label or 2 / 5"
+                  />
+                </label>
+                <label className="block text-xs">
+                  Style
+                  <select
+                    className={control}
+                    value={calloutStyle}
+                    onChange={(e) =>
+                      setCalloutStyle(e.target.value as typeof calloutStyle)
+                    }
+                  >
+                    <option value="label">Label</option>
+                    <option value="thought">Thought</option>
+                    <option value="counter">Counter</option>
+                  </select>
+                </label>
+                <p className="text-xs text-[#666862]">
+                  Appears in the upper safe area. Keep factual labels faithful
+                  to the footage; no subtitle commands. Maximum eight seconds.
+                </p>
+              </div>
+            ) : null}
+            {tool === "pointer" ? (
+              <div className="grid grid-cols-2 gap-3">
+                <label className="text-xs">
+                  Shape
+                  <select
+                    className={control}
+                    value={pointerShape}
+                    onChange={(e) =>
+                      setPointerShape(e.target.value as typeof pointerShape)
+                    }
+                  >
+                    <option value="circle">Circle</option>
+                    <option value="arrow">Arrow</option>
+                  </select>
+                </label>
+                <label className="text-xs">
+                  Direction
+                  <select
+                    className={control}
+                    value={pointerDirection}
+                    onChange={(e) =>
+                      setPointerDirection(
+                        e.target.value as typeof pointerDirection,
+                      )
+                    }
+                  >
+                    {["right", "left", "up", "down"].map((value) => (
+                      <option key={value} value={value}>
+                        {value}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <p className="col-span-2 text-xs text-[#666862]">
+                  Fixed position in the frame; this pointer does not follow
+                  moving objects. Maximum eight seconds.
+                </p>
+              </div>
+            ) : null}
+            {tool === "music_pause" ? (
+              <p className="text-xs text-[#666862]">
+                Fades the selected music down for this interval, then restores
+                it. Dialogue keeps playing normally. Requires a music track;
+                maximum eight seconds.
+              </p>
             ) : null}
             {tool === "colour" ? (
               <div className="grid grid-cols-2 gap-3">
@@ -624,7 +766,8 @@ function FinishingForm({
                 busy ||
                 ((tool === "audio" ||
                   tool === "captions" ||
-                  tool === "layer") &&
+                  tool === "layer" ||
+                  ["callout", "pointer", "music_pause"].includes(tool)) &&
                   Number(end) <= Number(start))
               }
             >
@@ -672,7 +815,10 @@ function FinishingForm({
               Active finishing &amp; version recovery
             </summary>
             <p className="my-3 text-xs text-[#666862]">
-              {regions?.motions.length ?? 0} camera moves ·{" "}
+              {(regions?.callouts?.length ?? 0) +
+                (regions?.pointers?.length ?? 0)}{" "}
+              visual accents · {regions?.music_regions?.length ?? 0} music
+              pauses · {regions?.motions.length ?? 0} camera moves ·{" "}
               {regions?.audio_regions.length ?? 0} audio ranges ·{" "}
               {regions?.caption_regions.length ?? 0} caption ranges ·{" "}
               {regions?.layers.length ?? 0} picture layers

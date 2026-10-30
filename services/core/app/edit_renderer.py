@@ -247,6 +247,7 @@ def render_ass(
     brand_kit: dict[str, Any] | None = None,
     position: str = "lower_safe",
     target_platform: str = "all_social",
+    treatments: Any = None,
 ) -> str:
     # Scale from frame height so the same caption style remains proportional
     # for both vertical reels and landscape montages.
@@ -308,7 +309,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             f"{_ass_timestamp(float(event['start']))},{_ass_timestamp(float(event['end']))},"
             f"GMBlue,,0,0,0,,{override}{_ass_text(str(event['text']))}\n"
         )
-    return "".join(lines)
+    from app.creative_treatments import treatment_events
+    return "".join(lines) + treatment_events(treatments, width, height, events, position)
 
 
 def _atomic_text(path: Path, content: str) -> None:
@@ -679,7 +681,8 @@ def render_edit_preview(
     _atomic_text(
         captions_path,
         render_ass(
-            events,
+            treatments=plan.finishing,
+            events=events,
             width=width,
             height=height,
             brand_kit=context.get("brand_kit"),
@@ -896,7 +899,8 @@ def render_final_delivery(
     _atomic_text(
         captions_ass_path,
         render_ass(
-            events,
+            treatments=plan.finishing,
+            events=events,
             width=width,
             height=height,
             brand_kit=context.get("brand_kit"),

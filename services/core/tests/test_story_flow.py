@@ -393,6 +393,26 @@ class StoryFinishingTests(unittest.TestCase):
             preserved, _ = finish_new_story(self.context, plan)
         self.assertEqual(preserved.model_dump(), plan.model_dump())
 
+    def test_creative_callouts_do_not_disable_existing_story_cleanup(self):
+        from app.finishing_tools import FinishingTools
+
+        self.asset["transcript_segments"][0]["words"] = [
+            {"start": 0, "end": 0.2, "text": "All"},
+            {"start": 0.2, "end": 0.4, "text": "right,"},
+            {"start": 1, "end": 2, "text": "Useful sentence."},
+        ]
+        plan = plan_for(self.identity, [(0, 0.6), (0.9, 2.1)])
+        plan.finishing = FinishingTools(
+            callouts=[dict(start=0.9, end=1.5, text="Useful sentence")]
+        )
+        with patch("app.story_finishing._measure", side_effect=TimeoutError):
+            finished, report = finish_new_story(self.context, plan)
+        self.assertEqual(len(finished.clips), 1)
+        self.assertAlmostEqual(finished.finishing.callouts[0].start, 0.3)
+        self.assertAlmostEqual(finished.finishing.callouts[0].end, 0.9)
+        self.assertEqual(plan.finishing.callouts[0].start, 0.9)
+        self.assertEqual(report["hosted_model_calls"], 0)
+
     def test_audio_inspection_stops_at_the_shared_budget(self):
         plan = plan_for(self.identity, [(0, 1.2)] * 10)
         clock = [0.0]

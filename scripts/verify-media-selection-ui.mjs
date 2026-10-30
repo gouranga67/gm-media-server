@@ -10,7 +10,7 @@ import { Window } from "happy-dom";
 const require = createRequire(import.meta.url);
 const repo = path.resolve(import.meta.dirname, "..");
 const dom = new Window({ url: "http://localhost/jobs/new" });
-for (const name of ["window", "document", "navigator", "HTMLElement", "HTMLInputElement", "HTMLTextAreaElement", "File"]) {
+for (const name of ["window", "document", "navigator", "HTMLElement", "HTMLInputElement", "HTMLTextAreaElement", "File", "FormData"]) {
   Object.defineProperty(globalThis, name, { configurable: true, value: name === "window" ? dom : dom[name] });
 }
 const { Event } = dom;
@@ -25,6 +25,9 @@ let lessonProposed = false;
 let assemblySettings, assemblyError, assemblyLocked, profiles, previewFixture;
 function assemblyPreview() { return {ready: !assemblyError, locked: assemblyLocked, error:assemblyError, settings:assemblySettings, decision:assemblyError ? null : {recipe:assemblySettings.assembly_mode === "auto" ? "talking_head" : assemblySettings.assembly_mode,edit_style:assemblySettings.edit_style,purpose:assemblySettings.reel_intent === "auto" ? "story" : assemblySettings.reel_intent,label:"Speech with supporting pictures",reason:"Keep recorded speech continuous.",hosted_model_calls:0}}; }
 let publishingFixture, alternativeFailure, durationFixture, durationFailure;
+let creativeImportAttempts = new Map();
+URL.createObjectURL = () => "blob:synthetic-preview";
+URL.revokeObjectURL = () => {};
 let calls = [], transfers = [], navigation = [], readyEvents = 0, analysisStatus = "ready", root, managedAssets = [], batchFailure = false, conceptHistory = [], renderConceptFailure = false, conceptCounter = 0, organizationHistory = [], organizationFailure = false;
 const serverId = "11111111-1111-4111-8111-111111111111";
 const jobId = "22222222-2222-4222-8222-222222222222";
@@ -55,6 +58,8 @@ for (const extension of [".ts", ".tsx"]) Module._extensions[extension] = (module
   assert.equal(errors.length, 0, errors.map((diagnostic) => ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n")).join("\n"));
   module._compile(outputText, filename);
 };
+const { CreativeBatchImport } = require(path.join(repo, "apps/web/app/_components/creative-batch-import.tsx"));
+const { CreativeAssetsManager } = require(path.join(repo, "apps/web/app/_components/creative-assets-manager.tsx"));
 const { PublishingPanel } = require(path.join(repo, "apps/web/app/_components/publishing-panel.tsx"));
 const { AlternativeVersions } = require(path.join(repo, "apps/web/app/_components/alternative-versions.tsx"));
 const { MetaConnectResult } = require(path.join(repo, "apps/web/app/_components/meta-connect-result.tsx"));
@@ -75,10 +80,18 @@ const { LibraryUpload } = require(path.join(repo, "apps/web/app/_components/libr
 
 globalThis.fetch = async (url, options = {}) => {
   const route = String(url).replace("/api/media/", "");
-  const body = options.body ? JSON.parse(options.body) : undefined;
+  const body = options.body instanceof File ? options.body : options.body ? JSON.parse(options.body) : undefined;
   calls.push({ route, method: options.method ?? "GET", body });
   let payload;
-  if (route === "publishing/status") payload = publishingFixture.config;
+  if (route.startsWith("creative-assets/import?")) {
+    const filename = new URLSearchParams(route.split("?")[1]).get("filename");
+    const attempts = (creativeImportAttempts.get(filename) ?? 0) + 1; creativeImportAttempts.set(filename, attempts);
+    if (filename === "existing.ogg") return { ok: false, status: 409, json: async () => ({ detail: "this exact creative file is already in the library" }) };
+    if (filename === "retry.ogg" && attempts === 1) return { ok: false, status: 422, json: async () => ({ detail: "Synthetic import failure" }) };
+    payload = { kind: "sound_effect", asset: { id: crypto.randomUUID() } };
+  }
+  else if (route === "creative-assets?active=false" || route === "music-tracks?active=true" || route === "music-tracks?active=false" || route === "music-tracks?active=all") payload = [];
+  else if (route === "publishing/status") payload = publishingFixture.config;
   else if (route === "publishing/connections") payload = publishingFixture.accounts;
   else if (route.startsWith("publishing/drafts?") || (route === "publishing/drafts" && (options.method ?? "GET") === "GET")) payload = publishingFixture.draft ? [publishingFixture.draft] : [];
   else if (route === "publishing/drafts") { publishingFixture.draft = {id:body.id,final_export_id:body.final_export_id,job_id:jobId,version:4,revision:1,caption:"",posts:[],caption_request:null};payload=publishingFixture.draft; }
@@ -189,6 +202,7 @@ beforeEach(() => {
   window.history.replaceState(null, "", "/jobs/new");
   calls = []; transfers = []; navigation = []; readyEvents = 0; analysisStatus = "ready"; batchFailure = false; conceptHistory = []; renderConceptFailure = false; conceptCounter = 0;
   organizationHistory = []; organizationFailure = false;
+  creativeImportAttempts = new Map();
   alternativeFailure=false;
   durationFailure=false;
   durationFixture={settings:{duration_mode:"aim",target_duration_seconds:60,max_duration_seconds:90},assessment:{mode:"aim",preferred_seconds:60,maximum_seconds:72,available_speech_seconds:85,warning:"About 85s of speech includes possible repeated takes; this is not a required-script measurement."}};
@@ -913,4 +927,50 @@ test("a failed duration save retains the requested settings and shows the error"
   assert.equal(document.querySelector('input[id$="-maximum"]').value,"120");
   assert.equal(document.querySelector('select[id$="-mode"]').value,"follow_story");
   assert.equal(posts("/preview").length,0);
+});
+
+
+test("batch creative import is explicit, skips duplicates, and retries only failed files", async () => {
+  let loaded = 0;
+  await act(async () => root.render(React.createElement(CreativeBatchImport, { onImported: async () => { loaded++; } })));
+  await selectFiles('input[aria-label="Batch files"]', ["good.ogg", "existing.ogg", "retry.ogg"].map(name => new File(["synthetic sound"], name, { type: "audio/ogg" })));
+  assert.equal(creativeImportAttempts.size, 0);
+  for (const name of ["good.ogg", "existing.ogg", "retry.ogg"]) await type(`input[aria-label="Source for ${name}"]`, "https://example.org/sound-pack");
+  await type('input[name="license_name"]', "CC0-1.0");
+  await click(document.querySelector('input[name="commercial_use_confirmed"]'));
+  await act(async () => document.querySelector("form").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+  await waitFor(() => document.body.textContent.includes("1 imported · 1 already in library · 1 failed"));
+  assert.equal(loaded, 1);
+  assert.equal(creativeImportAttempts.get("good.ogg"), 1);
+  assert.equal(creativeImportAttempts.get("existing.ogg"), 1);
+  await act(async () => document.querySelector("form").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+  await waitFor(() => document.body.textContent.includes("1 imported · 0 already in library · 0 failed"));
+  assert.equal(creativeImportAttempts.get("retry.ogg"), 2);
+  assert.equal(creativeImportAttempts.get("good.ogg"), 1);
+  assert.equal(creativeImportAttempts.get("existing.ogg"), 1);
+  assert.equal(loaded, 2);
+});
+
+test("creative import validates all source pages before sending any files", async () => {
+  await act(async () => root.render(React.createElement(CreativeBatchImport, { onImported: async () => {} })));
+  await selectFiles('input[aria-label="Batch files"]', [new File(["fixture"], "sound.ogg", { type: "audio/ogg" })]);
+  await act(async () => document.querySelector("form").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+  assert.equal(creativeImportAttempts.size, 0);
+  assert.match(document.body.textContent, /every file a title and its HTTPS source/);
+});
+
+test("a local callout queues only after submit and preserves the inspected settings", async () => {
+  await act(async () => root.render(React.createElement(FinishingWorkspace, { jobId, version: 2, clips: [{ duration: 3, source_in: 0, source_out: 3 }], onUpdated: () => {} })));
+  await click(document.querySelector("summary"));
+  await waitFor(() => document.querySelector("select"));
+  await chooseOption("select", "callout");
+  await type('input[placeholder="A short label or 2 / 5"]', "A real reaction");
+  assert.equal(posts(`jobs/${jobId}/revisions`).length, 0);
+  await act(async () => document.querySelector("form").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+  const request = posts(`jobs/${jobId}/revisions`).at(-1).body;
+  assert.equal(request.base_version, 2);
+  assert.equal(request.note, "");
+  assert.equal(request.finishing_settings.callouts[0].text, "A real reaction");
+  assert.deepEqual(request.finishing_settings.layers, []);
+  assert.deepEqual(request.finishing_settings.motions, []);
 });

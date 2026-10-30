@@ -14,9 +14,14 @@ from psycopg.errors import UniqueViolation
 
 from app.config import get_settings
 from app.database import connection
-from app.media_analysis import READ_ONLY_MODE, ensure_capacity, probe_media, resolve_source
+from app.media_analysis import (
+    READ_ONLY_MODE,
+    ensure_capacity,
+    probe_media,
+    resolve_source,
+)
 from app.productization import actor_login, require_owner
-from app.schemas import CreativeAssetResponse, MusicTrackResponse
+from app.schemas import CreativeAssetResponse, MusicTrackResponse, CreativeDescription
 
 
 router = APIRouter(prefix="/api/v1", tags=["creative-assets"])
@@ -28,16 +33,22 @@ IMAGE_EXTENSIONS = {".gif", ".jpeg", ".jpg", ".png", ".webp"}
 
 
 def _csv(value: str, *, allowed: set[str] | None = None) -> list[str]:
-    items = list(dict.fromkeys(part.strip().lower() for part in value.split(",") if part.strip()))
+    items = list(
+        dict.fromkeys(part.strip().lower() for part in value.split(",") if part.strip())
+    )
     if allowed is not None and any(item not in allowed for item in items):
-        raise HTTPException(status_code=422, detail="one or more values are unsupported")
+        raise HTTPException(
+            status_code=422, detail="one or more values are unsupported"
+        )
     return items
 
 
 def _https_url(value: str) -> str:
     parsed = urlparse(value.strip())
     if parsed.scheme != "https" or not parsed.netloc:
-        raise HTTPException(status_code=422, detail="license source URL must be a public https URL")
+        raise HTTPException(
+            status_code=422, detail="license source URL must be a public https URL"
+        )
     return value.strip()
 
 
@@ -53,15 +64,25 @@ def _validate_probe(kind: str, suffix: str, probe: dict[str, Any]) -> float | No
     streams = {str(stream.get("type")) for stream in probe.get("streams", [])}
     if kind in {"music", "sound_effect", "meme_sound"}:
         if suffix not in AUDIO_EXTENSIONS or "audio" not in streams:
-            raise HTTPException(status_code=422, detail="this creative asset must be a supported audio file")
+            raise HTTPException(
+                status_code=422,
+                detail="this creative asset must be a supported audio file",
+            )
     elif suffix not in IMAGE_EXTENSIONS or "video" not in streams:
-        raise HTTPException(status_code=422, detail="this creative asset must be a PNG, JPEG, WebP, or GIF")
+        raise HTTPException(
+            status_code=422,
+            detail="this creative asset must be a PNG, JPEG, WebP, or GIF",
+        )
     duration = probe.get("format", {}).get("duration_seconds")
-    return float(duration) if isinstance(duration, (int, float)) and duration > 0 else None
+    return (
+        float(duration) if isinstance(duration, (int, float)) and duration > 0 else None
+    )
 
 
 @router.get("/creative-assets", response_model=list[CreativeAssetResponse])
-def list_creative_assets(active: bool | None = Query(default=True)) -> list[dict[str, Any]]:
+def list_creative_assets(
+    active: bool | None = Query(default=True),
+) -> list[dict[str, Any]]:
     clauses = ["commercial_use = true", "synthetic_media = false"]
     parameters: list[Any] = []
     if active is not None:
@@ -70,11 +91,11 @@ def list_creative_assets(active: bool | None = Query(default=True)) -> list[dict
     with connection() as database:
         rows = database.execute(
             f"""SELECT id, kind, title, creator, source_name, mime_type, byte_size,
-                       duration_seconds, tags, purpose, license_name, license_source_url,
+                       duration_seconds, tags, purpose, mood, energy, use_when, avoid_when, license_name, license_source_url,
                        allowed_platforms, attribution, synthetic_media, active,
                        created_at, updated_at
                 FROM creative_assets
-                WHERE {' AND '.join(clauses)}
+                WHERE {" AND ".join(clauses)}
                 ORDER BY kind, purpose, title""",
             tuple(parameters),
         ).fetchall()
@@ -92,8 +113,12 @@ def creative_asset_media(asset_id: UUID) -> FileResponse:
         raise HTTPException(status_code=404, detail="creative asset not found")
     source = resolve_source(get_settings().media_root, str(row["storage_key"]))
     if not source.is_file():
-        raise HTTPException(status_code=404, detail="creative asset file is unavailable")
-    return FileResponse(source, media_type=row["mime_type"], filename=row["source_name"])
+        raise HTTPException(
+            status_code=404, detail="creative asset file is unavailable"
+        )
+    return FileResponse(
+        source, media_type=row["mime_type"], filename=row["source_name"]
+    )
 
 
 @router.get("/music-tracks/{track_id}/media")
@@ -107,7 +132,9 @@ def music_track_media(track_id: UUID) -> FileResponse:
     source = resolve_source(get_settings().media_root, str(row["storage_key"]))
     if not source.is_file():
         raise HTTPException(status_code=404, detail="music track file is unavailable")
-    return FileResponse(source, filename=source.name, media_type=mimetypes.guess_type(source.name)[0])
+    return FileResponse(
+        source, filename=source.name, media_type=mimetypes.guess_type(source.name)[0]
+    )
 
 
 @router.patch("/music-tracks/{track_id}", response_model=MusicTrackResponse)
@@ -150,13 +177,19 @@ def set_creative_asset_state(
 @router.post("/creative-assets/import", status_code=status.HTTP_201_CREATED)
 async def import_creative_asset(
     request: Request,
-    kind: Literal["music", "sound_effect", "meme_sound", "sticker", "gif", "meme_image"] = Query(...),
+    kind: Literal[
+        "music", "sound_effect", "meme_sound", "sticker", "gif", "meme_image"
+    ] = Query(...),
     filename: str = Query(...),
     title: str = Query(..., min_length=1, max_length=200),
     creator: str = Query(default="", max_length=200),
     tags: str = Query(default="", max_length=600),
-    purpose: Literal["hook", "transition", "emphasis", "reveal", "reaction", "payoff"] = Query(default="emphasis"),
+    purpose: Literal[
+        "hook", "transition", "emphasis", "reveal", "reaction", "payoff"
+    ] = Query(default="emphasis"),
     mood: str = Query(default="uplifting", min_length=1, max_length=80),
+    use_when: str = Query(default="", max_length=240),
+    avoid_when: str = Query(default="", max_length=240),
     energy: Literal["low", "medium", "high"] = Query(default="medium"),
     license_name: str = Query(..., min_length=1, max_length=200),
     license_source_url: str = Query(..., min_length=8, max_length=1000),
@@ -168,18 +201,21 @@ async def import_creative_asset(
 ) -> dict[str, Any]:
     require_owner(actor_login(x_gm_user_login))
     if not commercial_use_confirmed:
-        raise HTTPException(status_code=422, detail="commercial-use rights must be confirmed before import")
+        raise HTTPException(
+            status_code=422,
+            detail="commercial-use rights must be confirmed before import",
+        )
     ensure_capacity(get_settings())
     clean_filename = _safe_filename(filename)
     source_url = _https_url(license_source_url)
     platforms = _csv(allowed_platforms, allowed=PLATFORMS)
     if not platforms:
-        raise HTTPException(status_code=422, detail="choose at least one allowed platform")
+        raise HTTPException(
+            status_code=422, detail="choose at least one allowed platform"
+        )
+    if not title.strip() or not license_name.strip():
+        raise HTTPException(status_code=422, detail="title and licence cannot be blank")
     tag_values = _csv(tags)[:20]
-    body = await request.body()
-    if not body or len(body) > MAX_UPLOAD_BYTES:
-        raise HTTPException(status_code=413, detail="creative asset must be between 1 byte and 200 MB")
-
     settings = get_settings()
     asset_id = uuid4()
     suffix = Path(clean_filename).suffix.lower()
@@ -189,13 +225,31 @@ async def import_creative_asset(
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = destination.with_name(f".{destination.name}.part")
     try:
-        temporary.write_bytes(body)
+        size, digest = 0, hashlib.sha256()
+        with temporary.open("xb") as output:
+            async for chunk in request.stream():
+                size += len(chunk)
+                if size > MAX_UPLOAD_BYTES:
+                    raise HTTPException(
+                        status_code=413, detail="creative asset exceeds 200 MB"
+                    )
+                output.write(chunk)
+                digest.update(chunk)
+        if not size:
+            raise HTTPException(
+                status_code=413,
+                detail="creative asset must be between 1 byte and 200 MB",
+            )
         probe = probe_media(temporary, settings.analysis_command_timeout_seconds)
         duration = _validate_probe(kind, suffix, probe)
-        sha256 = hashlib.sha256(body).hexdigest()
-        mime_type = request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+        sha256 = digest.hexdigest()
+        mime_type = (
+            request.headers.get("content-type", "").split(";", 1)[0].strip().lower()
+        )
         if not mime_type.startswith(("audio/", "image/")):
-            mime_type = mimetypes.guess_type(clean_filename)[0] or "application/octet-stream"
+            mime_type = (
+                mimetypes.guess_type(clean_filename)[0] or "application/octet-stream"
+            )
         temporary.chmod(READ_ONLY_MODE)
         os.replace(temporary, destination)
         destination.chmod(READ_ONLY_MODE)
@@ -211,33 +265,99 @@ async def import_creative_asset(
                            RETURNING id, title, artist, duration_seconds, mood, energy, bpm,
                                      beat_grid_seconds, license_name, license_source_url,
                                      allowed_platforms, attribution, active, created_at""",
-                        (asset_id, title.strip(), creator.strip(), relative.as_posix(), sha256,
-                         duration or 0.001, mood.strip(), energy, license_name.strip(), source_url,
-                         license_proof.strip(), json.dumps(platforms), attribution.strip()),
+                        (
+                            asset_id,
+                            title.strip(),
+                            creator.strip(),
+                            relative.as_posix(),
+                            sha256,
+                            duration or 0.001,
+                            mood.strip(),
+                            energy,
+                            license_name.strip(),
+                            source_url,
+                            license_proof.strip(),
+                            json.dumps(platforms),
+                            attribution.strip(),
+                        ),
                     ).fetchone()
                 else:
                     row = database.execute(
                         """INSERT INTO creative_assets (
                                id, kind, title, creator, source_name, storage_key, sha256,
-                               mime_type, byte_size, duration_seconds, tags, purpose,
+                               mime_type, byte_size, duration_seconds, tags, purpose, mood, energy, use_when, avoid_when,
                                license_name, license_source_url, license_proof, commercial_use,
                                synthetic_media, allowed_platforms, attribution
-                           ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s,%s,true,false,%s::jsonb,%s)
+                           ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s,%s,%s,%s,%s,%s,%s,%s,true,false,%s::jsonb,%s)
                            RETURNING *""",
-                        (asset_id, kind, title.strip(), creator.strip(), clean_filename,
-                         relative.as_posix(), sha256, mime_type, len(body), duration,
-                         json.dumps(tag_values), purpose, license_name.strip(), source_url,
-                         license_proof.strip(), json.dumps(platforms), attribution.strip()),
+                        (
+                            asset_id,
+                            kind,
+                            title.strip(),
+                            creator.strip(),
+                            clean_filename,
+                            relative.as_posix(),
+                            sha256,
+                            mime_type,
+                            size,
+                            duration,
+                            json.dumps(tag_values),
+                            purpose,
+                            mood.strip(),
+                            energy,
+                            use_when.strip(),
+                            avoid_when.strip(),
+                            license_name.strip(),
+                            source_url,
+                            license_proof.strip(),
+                            json.dumps(platforms),
+                            attribution.strip(),
+                        ),
                     ).fetchone()
         except UniqueViolation as error:
             destination.unlink(missing_ok=True)
-            raise HTTPException(status_code=409, detail="this exact creative file is already in the library") from error
+            raise HTTPException(
+                status_code=409,
+                detail="this exact creative file is already in the library",
+            ) from error
     except HTTPException:
         temporary.unlink(missing_ok=True)
+        destination.unlink(missing_ok=True)
         raise
     except Exception:
         temporary.unlink(missing_ok=True)
         destination.unlink(missing_ok=True)
         raise
+    finally:
+        if destination.parent.exists() and not any(destination.parent.iterdir()):
+            destination.parent.rmdir()
     assert row is not None
     return {"kind": kind, "asset": dict(row)}
+
+
+@router.patch(
+    "/creative-assets/{asset_id}/description", response_model=CreativeAssetResponse
+)
+def describe_creative_asset(
+    asset_id: UUID,
+    payload: "CreativeDescription",
+    x_gm_user_login: str | None = Header(default=None),
+):
+    require_owner(actor_login(x_gm_user_login))
+    with connection() as database:
+        row = database.execute(
+            """UPDATE creative_assets SET title=%s, tags=%s::jsonb, mood=%s, energy=%s,
+            use_when=%s, avoid_when=%s, updated_at=now() WHERE id=%s RETURNING *""",
+            (
+                payload.title.strip(),
+                json.dumps(_csv(payload.tags)[:20]),
+                payload.mood.strip(),
+                payload.energy,
+                payload.use_when.strip(),
+                payload.avoid_when.strip(),
+                asset_id,
+            ),
+        ).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="creative asset not found")
+    return row

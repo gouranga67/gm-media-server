@@ -14,7 +14,7 @@ from app.finishing_tools import FinishingTools, validate_finishing, retime_finis
 from app.duration_policy import MAX_EDIT_SECONDS, resolve_duration, validate_duration
 
 
-EDIT_PLAN_SCHEMA_VERSION = "1.4"
+EDIT_PLAN_SCHEMA_VERSION = "1.5"
 MAX_PREVIEW_SECONDS = float(MAX_EDIT_SECONDS)
 MAX_CLIPS = 24
 MAX_MONTAGE_CLIPS = 48
@@ -671,9 +671,23 @@ MONTAGE_EDIT_PLAN_JSON_SCHEMA: dict[str, Any] = {
 
 
 def schema_for_recipe(recipe: str) -> dict[str, Any]:
-    if recipe == "montage":
-        return MONTAGE_EDIT_PLAN_JSON_SCHEMA
-    return EDIT_PLAN_JSON_SCHEMA
+    from copy import deepcopy
+    from app.creative_treatments import Callout, Pointer, MusicRegion
+    schema = deepcopy(MONTAGE_EDIT_PLAN_JSON_SCHEMA if recipe == "montage" else EDIT_PLAN_JSON_SCHEMA)
+    properties = {}
+    for name, model in (("callouts", Callout), ("pointers", Pointer), ("music_regions", MusicRegion)):
+        item = model.model_json_schema()
+        # Strict structured output requires every field, including defaults.
+        item.pop("title", None)
+        for field in item["properties"].values():
+            field.pop("default", None)
+            field.pop("title", None)
+        item["required"] = list(item["properties"])
+        properties[name] = {"type": "array", "maxItems": 8, "items": item}
+    schema["properties"]["finishing"] = {"anyOf": [{"type": "null"}, {
+        "type": "object", "properties": properties, "required": list(properties), "additionalProperties": False}]}
+    schema["required"].append("finishing")
+    return schema
 
 
 def document_sha256(document: dict[str, Any]) -> str:
@@ -742,10 +756,12 @@ def repair_predictable_plan_defaults(
         ):
             # An FX collision is not a reason to pay for a new story/cut list.
             # Keep the first approved cue at each beat; never invent a new cue.
+            from app.creative_selection import collision
+            effect_inventory = {str(item["asset_id"]): item for item in creative_effects or []}
             spaced: list[dict[str, Any]] = []
             for cue in sorted(cues, key=lambda item: item["start_seconds"]):
                 if len(spaced) < maximum and (
-                    not spaced or cue["start_seconds"] - spaced[-1]["start_seconds"] >= 0.5
+                    not collision(cue, spaced, effect_inventory)
                 ):
                     spaced.append(cue)
             if len(spaced) != len(cues):
@@ -910,7 +926,8 @@ def _validate_effect_cues(
     if len(plan.effects) > maximum:
         raise ValueError(f"the {level} effect level permits at most {maximum} cues")
     inventory = {str(item["asset_id"]): item for item in creative_effects}
-    previous_start = -10.0
+    from app.creative_selection import collision
+    accepted = []
     for cue in sorted(plan.effects, key=lambda item: item.start_seconds):
         item = inventory.get(str(cue.asset_id))
         if item is None:
@@ -919,11 +936,11 @@ def _validate_effect_cues(
             raise ValueError("a creative effect extends beyond the edit timeline")
         if cue.purpose != item.get("purpose"):
             raise ValueError("a creative effect cue must preserve its reviewed purpose")
-        if cue.start_seconds - previous_start < 0.5:
-            raise ValueError("creative effect cues must be at least 0.5 seconds apart")
+        if collision(cue.model_dump(mode="json"), accepted, inventory):
+            raise ValueError("creative effect cues must be at least 0.5 seconds apart, except one audio/visual pair on the same beat")
         if level == "subtle" and cue.intensity == "strong":
             raise ValueError("strong creative effects are not allowed in subtle mode")
-        previous_start = cue.start_seconds
+        accepted.append(cue.model_dump(mode="json"))
 
 
 def validate_edit_plan(

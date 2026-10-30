@@ -11,6 +11,7 @@ from app.edit_plan import (
     source_word_gaps,
     _tighten_clip_pauses,
 )
+from app.creative_selection import only_creative_treatments
 from app.media_analysis import resolve_source, run_command
 from app.quality_review import parse_render_measurements
 
@@ -101,7 +102,7 @@ def finish_new_story(context: dict, plan) -> tuple:
         or policy.get("bloopers_requested")
         or policy.get("preserve_pauses_requested")
         or job.get("edit_style") == "calm"
-        or plan.finishing is not None
+        or (plan.finishing is not None and not only_creative_treatments(plan.finishing))
     ):
         return plan, report
     started = time.monotonic()

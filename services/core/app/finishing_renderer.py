@@ -148,5 +148,6 @@ def finishing_manifest(context: dict[str, Any], plan: EditPlan) -> dict[str, Any
             "dialogue_timeline_preserved": not bool(plan.finishing and plan.finishing.audio_joins),
             "picture_layers": picture_layers, "speech_playback_rate": 1.0,
             "broll_selection_review": context.get("broll_selection_review", []),
+            "creative_treatment_review": context.get("creative_treatment_review"),
             "local_tools": plan.finishing.model_dump(mode="json") if plan.finishing else None,
             "additional_model_calls": 0}

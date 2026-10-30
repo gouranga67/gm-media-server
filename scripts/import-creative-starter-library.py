@@ -45,9 +45,16 @@ def asset_bytes(item, cache):
         raise ValueError("starter downloads require HTTPS")
     path = cache / hashlib.sha256(url.encode()).hexdigest()
     if not path.exists():
-        request = urllib.request.Request(url, headers={"User-Agent": "GM-Studio-starter-library/1.0"})
-        with urllib.request.urlopen(request, timeout=120) as response:
-            data = response.read(MAX_DOWNLOAD_BYTES + 1)
+        request = urllib.request.Request(url, headers={"User-Agent": "GM-Studio/1.0", **({"Referer": item["license_source_url"]} if url.startswith("https://kenney.nl/download-link/") else {})})
+        with urllib.request.urlopen(request, timeout=30) as response:
+            if url.startswith("https://kenney.nl/download-link/"):
+                link = json.loads(response.read(16384))["url"]
+                if urllib.parse.urlparse(link).scheme != "https":
+                    raise ValueError("resolved starter download requires HTTPS")
+                with urllib.request.urlopen(link, timeout=45) as media:
+                    data = media.read(MAX_DOWNLOAD_BYTES + 1)
+            else:
+                data = response.read(MAX_DOWNLOAD_BYTES + 1)
         if len(data) > MAX_DOWNLOAD_BYTES:
             raise ValueError("starter download exceeds its size limit")
         checked_bytes(data, item["download_sha256"])
@@ -68,7 +75,7 @@ def asset_bytes(item, cache):
 def import_asset(base_url, item, data):
     metadata = {key: item[key] for key in (
         "kind", "filename", "title", "creator", "purpose", "tags", "license_name",
-        "license_source_url", "license_proof", "attribution", "mood", "energy",
+        "license_source_url", "license_proof", "attribution", "mood", "energy", "use_when", "avoid_when",
     ) if key in item}
     metadata.update(allowed_platforms="all_social", commercial_use_confirmed="true")
     request = urllib.request.Request(
@@ -92,11 +99,14 @@ def main():
     parser.add_argument("--base-url", default=default_base_url())
     parser.add_argument("--cache-dir", type=Path, default=Path(tempfile.gettempdir()) / "gm-studio-starter-library")
     parser.add_argument("--download-only", action="store_true", help="Verify downloads without changing the server")
+    parser.add_argument("--kind", action="append", choices=["music", "sound_effect", "sticker", "gif", "meme_image", "meme_sound"], help="Import only these asset types; repeat to combine")
     args = parser.parse_args()
     args.cache_dir.mkdir(parents=True, exist_ok=True)
     catalogue = json.loads((ROOT / "docs/creative-starter-library.json").read_text())
     counts = {"imported": 0, "already_imported": 0, "downloaded": 0}
     for item in catalogue["assets"]:
+        if args.kind and item["kind"] not in args.kind:
+            continue
         data = asset_bytes(item, args.cache_dir)
         if args.download_only:
             state = "downloaded"

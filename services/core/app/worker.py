@@ -881,6 +881,8 @@ def _persist_generated_plan(
 
 
 def _guard_generated_broll(context: dict[str, Any], plan: EditPlan) -> EditPlan:
+    from app.creative_selection import bound_generated_treatments
+    plan = bound_generated_treatments(context, plan)
     guarded, removed = guard_broll(plan, context["assets"])
     if removed:
         context.setdefault("broll_selection_review", []).extend(removed)

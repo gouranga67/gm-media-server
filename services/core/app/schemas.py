@@ -591,6 +591,23 @@ class MusicTrackResponse(BaseModel):
     created_at: datetime
 
 
+class CreativeDescription(BaseModel):
+    @field_validator("title")
+    @classmethod
+    def nonblank_title(cls, value):
+        if not value.strip():
+            raise ValueError("title cannot be blank")
+        return value.strip()
+
+    model_config = ConfigDict(extra="forbid")
+    title: str = Field(min_length=1, max_length=200)
+    tags: str = Field(default="", max_length=600)
+    mood: str = Field(default="", max_length=80)
+    energy: Literal["low", "medium", "high"] = "low"
+    use_when: str = Field(default="", max_length=240)
+    avoid_when: str = Field(default="", max_length=240)
+
+
 class CreativeAssetResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -602,6 +619,10 @@ class CreativeAssetResponse(BaseModel):
     mime_type: str
     byte_size: int
     duration_seconds: float | None = None
+    mood: str = ""
+    energy: Literal["low", "medium", "high"] = "low"
+    use_when: str = ""
+    avoid_when: str = ""
     tags: list[str] = Field(default_factory=list)
     purpose: Literal["hook", "transition", "emphasis", "reveal", "reaction", "payoff"]
     license_name: str

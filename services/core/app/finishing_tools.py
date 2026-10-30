@@ -5,7 +5,10 @@ from __future__ import annotations
 import re
 from typing import Any, Literal
 from uuid import UUID
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator, model_serializer
+
+
+from app.creative_treatments import Callout, Pointer, MusicRegion, music_region_filters
 
 
 class ToolModel(BaseModel):
@@ -83,6 +86,18 @@ class AudioJoin(ToolModel):
 
 
 class FinishingTools(ToolModel):
+    callouts: list[Callout] = Field(default_factory=list, max_length=8)
+    pointers: list[Pointer] = Field(default_factory=list, max_length=8)
+    music_regions: list[MusicRegion] = Field(default_factory=list, max_length=8)
+
+    @model_serializer(mode="wrap")
+    def preserve_saved_tools(self, handler):
+        data = handler(self)
+        for name in ("callouts", "pointers", "music_regions"):
+            if not data.get(name):
+                data.pop(name, None)
+        return data
+
     motions: list[ClipMotion] = Field(default_factory=list, max_length=24)
     audio_regions: list[AudioRegion] = Field(default_factory=list, max_length=40)
     caption_regions: list[CaptionRegion] = Field(default_factory=list, max_length=40)
@@ -134,12 +149,14 @@ def validate_finishing(
     for motion in tools.motions:
         if motion.points[-1].time > durations[motion.clip_index] + 0.01:
             raise ValueError("camera move extends beyond its clip")
-    for name in ("audio_regions", "caption_regions"):
+    for name in ("audio_regions", "caption_regions", "callouts", "pointers", "music_regions"):
         previous = 0.0
         for region in sorted(getattr(tools, name), key=lambda item: item.start):
             if region.start < previous - 0.001 or region.end > total + 0.01:
                 raise ValueError(f"{name} cannot overlap or extend beyond this edit")
             previous = region.end
+    if tools.music_regions and (not plan.music_track_id or plan.music_mix == "none"):
+        raise ValueError("music pauses require a selected music track")
     inventory = {str(asset["asset_id"]): asset for asset in assets}
     join_indexes = [j.clip_index for j in tools.audio_joins]
     if len(join_indexes) != len(set(join_indexes)) or any(
@@ -338,6 +355,9 @@ def apply_graph_finishing(
                     parts[i] = part[: -len(suffix)] + f"[toolv{index}]"
                     appended.append(f"[toolv{index}]{chain}[v{index}]")
                     break
+    if plan.finishing.music_regions:
+        music_filters = music_region_filters(plan.finishing.music_regions)
+        parts = [part[:-7] + "," + music_filters + "[music]" if part.endswith("[music]") else part for part in parts]
     joins = join_sources or []
     if joins:
         parts = [
@@ -508,15 +528,15 @@ def retime_finishing(
             "clear independent audio joins before changing timeline lengths or source ranges"
         )
     data = tools.model_dump(mode="json")
-    for name in ("audio_regions", "caption_regions", "layers"):
+    for name in ("audio_regions", "caption_regions", "layers", "callouts", "pointers", "music_regions"):
         result = []
-        for region in data[name]:
+        for region in data.get(name, []):
             for old_start, old_end, new_start in mapping:
                 start, end = (
                     max(region["start"], old_start),
                     min(region["end"], old_end),
                 )
-                if end - start < 0.02:
+                if end - start < (0.1 if name in {"callouts", "pointers", "music_regions"} else 0.02):
                     continue
                 item = {
                     **region,

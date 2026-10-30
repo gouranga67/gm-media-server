@@ -283,6 +283,10 @@ export type CreativeAsset = {
   readonly mime_type: string;
   readonly byte_size: number;
   readonly duration_seconds: number | null;
+  readonly mood?: string;
+  readonly energy?: "low" | "medium" | "high";
+  readonly use_when?: string;
+  readonly avoid_when?: string;
   readonly tags: readonly string[];
   readonly purpose: "hook" | "transition" | "emphasis" | "reveal" | "reaction" | "payoff";
   readonly license_name: string;
@@ -1088,6 +1092,14 @@ export function setCreativeAssetActive(assetId: string, active: boolean) {
   });
 }
 
+export class CreativeImportError extends Error {
+  constructor(message: string, public readonly status: number) { super(message); }
+}
+
+export function describeCreativeAsset(id: string, description: { title: string; tags: string; mood: string; energy: string; use_when: string; avoid_when: string }) {
+  return apiRequest<CreativeAsset>(`creative-assets/${id}/description`, { method: "PATCH", body: JSON.stringify(description) });
+}
+
 export async function importCreativeAsset(file: File, metadata: Readonly<Record<string, string | boolean>>) {
   const query = new URLSearchParams();
   query.set("filename", file.name);
@@ -1099,7 +1111,7 @@ export async function importCreativeAsset(file: File, metadata: Readonly<Record<
   });
   if (!response.ok) {
     const detail = await response.json().catch(() => null) as { detail?: string } | null;
-    throw new Error(detail?.detail ?? `Import failed with status ${response.status}`);
+    throw new CreativeImportError(detail?.detail ?? `Import failed with status ${response.status}`, response.status);
   }
   return await response.json() as { readonly kind: string; readonly asset: MusicTrack | CreativeAsset };
 }
@@ -1428,6 +1440,9 @@ export const saveSourceRange = (id: string, range: SourceRange) => apiRequest<So
 export const removeSourceRange = (assetId: string, id: string) => apiRequest(`library/assets/${assetId}/ranges/${id}`, { method: "DELETE" });
 
 export type FinishingTools = {
+  readonly callouts?: readonly { readonly start: number; readonly end: number; readonly text: string; readonly position: "upper" | "middle" | "lower_safe"; readonly style: "label" | "thought" | "counter"; readonly animation: "fade" | "pop" | "slide_up" }[];
+  readonly pointers?: readonly { readonly start: number; readonly end: number; readonly x: number; readonly y: number; readonly size: number; readonly shape: "arrow" | "circle"; readonly direction: "right" | "left" | "up" | "down" }[];
+  readonly music_regions?: readonly { readonly start: number; readonly end: number; readonly gain_db: number }[];
   readonly audio_joins?: readonly { readonly clip_index: number; readonly lead_seconds: number; readonly tail_seconds: number }[];
   readonly motions: readonly { readonly clip_index: number; readonly points: readonly { readonly time: number; readonly zoom: number; readonly x?: number; readonly y?: number }[] }[];
   readonly audio_regions: readonly { readonly start: number; readonly end: number; readonly gain_db: number }[];
