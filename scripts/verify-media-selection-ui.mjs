@@ -974,3 +974,26 @@ test("a local callout queues only after submit and preserves the inspected setti
   assert.deepEqual(request.finishing_settings.layers, []);
   assert.deepEqual(request.finishing_settings.motions, []);
 });
+
+
+test("AI music approval is explicit per file and is never sent for effects", async () => {
+  await act(async () => root.render(React.createElement(CreativeBatchImport, { onImported: async () => {} })));
+  await selectFiles('input[aria-label="Batch files"]', [new File(["fixture"], "approved.mp3", { type: "audio/mpeg" })]);
+  await type('input[aria-label="Source for approved.mp3"]', "https://pixabay.com/music/example-123/");
+  await type('input[name="license_name"]', "Pixabay Content License");
+  assert.equal(document.querySelector('input[aria-label="Approve AI-generated music for approved.mp3"]').checked, false);
+  await click(document.querySelector('input[aria-label="Approve AI-generated music for approved.mp3"]'));
+  assert.equal(creativeImportAttempts.size, 0);
+  await act(async () => document.querySelector("form").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+  await waitFor(() => creativeImportAttempts.get("approved.mp3") === 1);
+  const query = new URLSearchParams(calls.find(c => c.route.startsWith("creative-assets/import?")).route.split("?")[1]);
+  assert.equal(query.get("ai_generated_music"), "true");
+  await chooseOption('select', "sound_effect");
+  await selectFiles('input[aria-label="Batch files"]', [new File(["fixture"], "effect.ogg", { type: "audio/ogg" })]);
+  await type('input[aria-label="Source for effect.ogg"]', "https://example.org/pack");
+  assert.equal(document.querySelector('input[aria-label="Approve AI-generated music for effect.ogg"]'), null);
+  await act(async () => document.querySelector("form").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+  await waitFor(() => creativeImportAttempts.get("effect.ogg") === 1);
+  const effect = new URLSearchParams(calls.filter(c => c.route.startsWith("creative-assets/import?")).at(-1).route.split("?")[1]);
+  assert.equal(effect.get("ai_generated_music"), "false");
+});

@@ -787,7 +787,7 @@ def render_edit_preview(
             "synthetic_image": False,
             "synthetic_video": False,
             "synthetic_voice": False,
-            "synthetic_music": False,
+            "synthetic_music": bool((music_metadata or {}).get("synthetic_media", False)),
         },
     }
     manifest["manifest_path"] = manifest_path.relative_to(settings.media_root).as_posix()
@@ -1064,7 +1064,7 @@ def render_final_delivery(
             "synthetic_image": False,
             "synthetic_video": False,
             "synthetic_voice": False,
-            "synthetic_music": False,
+            "synthetic_music": bool((music_metadata or {}).get("synthetic_media", False)),
         },
     }
     if plan.post_copy:

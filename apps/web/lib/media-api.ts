@@ -261,6 +261,8 @@ export type MusicTrack = {
   readonly id: string;
   readonly title: string;
   readonly artist: string;
+  readonly synthetic_media?: boolean;
+  readonly synthetic_music_approved?: boolean;
   readonly duration_seconds: number;
   readonly mood: string;
   readonly energy: "low" | "medium" | "high";

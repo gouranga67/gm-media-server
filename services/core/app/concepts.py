@@ -17,7 +17,7 @@ router = APIRouter(prefix="/api/v1/concepts", tags=["concepts"])
 
 
 def compatible_concept_music(database: Any, platform: str) -> bool:
-    return database.execute("""SELECT 1 FROM music_tracks WHERE active=true AND commercial_use=true AND synthetic_media=false
+    return database.execute("""SELECT 1 FROM music_tracks WHERE active=true AND commercial_use=true AND (synthetic_media=false OR synthetic_music_approved=true)
         AND (allowed_platforms ? 'all_social' OR allowed_platforms ? %s) LIMIT 1""", (platform,)).fetchone() is not None
 
 

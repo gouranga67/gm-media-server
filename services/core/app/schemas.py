@@ -578,6 +578,8 @@ class MusicTrackResponse(BaseModel):
     id: UUID
     title: str
     artist: str
+    synthetic_media: bool = False
+    synthetic_music_approved: bool = False
     duration_seconds: float
     mood: str
     energy: str

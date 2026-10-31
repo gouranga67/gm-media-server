@@ -543,7 +543,7 @@ def _manifest(
             "synthetic_image": False,
             "synthetic_video": False,
             "synthetic_voice": False,
-            "synthetic_music": False,
+            "synthetic_music": bool((music or {}).get("synthetic_media", False)),
         },
     }
 

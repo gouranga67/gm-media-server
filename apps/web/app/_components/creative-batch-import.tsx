@@ -8,6 +8,7 @@ type Entry = {
   file: File;
   title: string;
   source: string;
+  aiGeneratedMusic?: boolean;
   state: "pending" | "uploading" | "imported" | "duplicate" | "failed";
   error?: string;
 };
@@ -118,6 +119,7 @@ export function CreativeBatchImport({
         await importCreativeAsset(row.file, {
           ...metadata,
           kind,
+          ai_generated_music: kind === "music" && row.aiGeneratedMusic === true,
           title: row.title.trim(),
           license_source_url: row.source.trim(),
           commercial_use_confirmed:
@@ -374,6 +376,24 @@ export function CreativeBatchImport({
                   </label>
                 </div>
                 <LocalPreview file={row.file} />
+                {kind === "music" ? (
+                  <label className="mt-3 flex min-h-11 items-start gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      aria-label={`Approve AI-generated music for ${row.file.name}`}
+                      checked={row.aiGeneratedMusic === true}
+                      disabled={
+                        row.state === "imported" || row.state === "duplicate"
+                      }
+                      onChange={(event) =>
+                        update(row.id, {
+                          aiGeneratedMusic: event.target.checked,
+                        })
+                      }
+                    />
+                    This track is AI-generated; I approve it for my edits.
+                  </label>
+                ) : null}
                 {row.error ? (
                   <p className="mt-2 text-sm text-[#A23B2A]" role="alert">
                     {row.error}

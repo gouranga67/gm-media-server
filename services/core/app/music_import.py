@@ -35,7 +35,7 @@ def _https_url(value: str) -> str:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Import one explicitly licensed, non-synthetic music track into GM Studio."
+        description="Import one explicitly licensed music track into GM Studio."
     )
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--title", required=True)
@@ -51,6 +51,8 @@ def _parser() -> argparse.ArgumentParser:
         help="Receipt, licence file reference, or other evidence retained by the operator.",
     )
     parser.add_argument("--attribution", default="")
+    parser.add_argument("--ai-generated-music", action="store_true",
+                        help="Record this music as AI-generated and explicitly approve it for editing.")
     parser.add_argument(
         "--platform",
         action="append",
@@ -114,15 +116,15 @@ def main() -> None:
                 INSERT INTO music_tracks (
                     id, title, artist, storage_key, sha256, duration_seconds,
                     mood, energy, bpm, license_name, license_source_url,
-                    license_proof, commercial_use, synthetic_media,
+                    license_proof, commercial_use, synthetic_media, synthetic_music_approved,
                     allowed_platforms, attribution
                 ) VALUES (
                     %s, %s, %s, %s, %s, %s,
                     %s, %s, %s, %s, %s,
-                    %s, true, false, %s, %s
+                    %s, true, %s, %s, %s, %s
                 )
                 RETURNING id, title, artist, duration_seconds, mood, energy,
-                          license_name, allowed_platforms, attribution
+                          license_name, allowed_platforms, attribution, synthetic_media, synthetic_music_approved
                 """,
                 (
                     track_id,
@@ -137,6 +139,8 @@ def main() -> None:
                     arguments.license_name.strip(),
                     arguments.license_source_url,
                     arguments.license_proof.strip(),
+                    arguments.ai_generated_music,
+                    arguments.ai_generated_music,
                     Jsonb(sorted(set(arguments.platforms))),
                     arguments.attribution.strip(),
                 ),

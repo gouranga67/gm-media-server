@@ -131,7 +131,7 @@ These are possible outtakes, not verified mistakes or factual error detection. R
 
 ## Import rights-approved music
 
-GM Studio can install the reviewed starter catalogue or accept your own non-synthetic audio files with recorded licence, commercial-use confirmation, attribution, and permitted platforms.
+GM Studio can install the reviewed starter catalogue or accept your own audio files with recorded licence, commercial-use confirmation, attribution, and permitted platforms.
 
 To install the curated starter library without uploading files individually:
 
@@ -144,6 +144,8 @@ It imports 36 Kenney CC0 sound effects, 32 Google Noto emoji PNGs under Apache-2
 The normal workflow is **Library → Music & effects** at `/creative`. **Import several files** accepts up to 50 selected files, with per-file titles, previews and source links, shared pack metadata, explicit commercial-use confirmation and sequential uploads. Exact duplicates are skipped; a retry sends only unfinished files. Keep the page open while importing. Search/filter the collection and use **Edit agent guidance** to set mood, energy, when to use an effect and when to avoid it.
 
 For music, download a track from its official Pixabay page, upload the file here, and paste that track’s page URL into its source field. Keep its download/licence record. The page also accepts licensed sound effects, meme sounds, PNG/JPEG/WebP stickers, GIFs, and meme images. The command below remains available for server-side music imports.
+
+For a source-labelled AI music track, tick **This track is AI-generated; I approve it for my edits** for that file. The library and export provenance retain its AI label. The server-side equivalent is `--ai-generated-music`. This approval applies only to the imported music; it does not allow synthetic effects, footage or dialogue. Existing records are not bulk-approved.
 
 ```bash
 ./scripts/import-music.sh /absolute/path/to/track.mp3 --help
@@ -164,7 +166,7 @@ Example metadata shape:
   --commercial-use-confirmed
 ```
 
-Importing confirms only what you record; it does not independently grant or verify rights. Tracks remain unavailable to the agent unless they are active, marked for commercial use, non-synthetic, and compatible with the job's selected platform.
+Importing confirms only what you record; it does not independently grant or verify rights. Tracks remain unavailable to the agent unless they are active, marked for commercial use, compatible with the job's selected platform, and either non-synthetic or explicitly approved AI-generated music.
 
 ## Recovery operations
 

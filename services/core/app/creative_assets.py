@@ -4,7 +4,7 @@ import mimetypes
 import os
 import re
 from pathlib import Path
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 from urllib.parse import urlparse
 from uuid import UUID, uuid4
 
@@ -149,7 +149,7 @@ def set_music_track_state(
             """UPDATE music_tracks SET active=%s, updated_at=now() WHERE id=%s
                RETURNING id, title, artist, duration_seconds, mood, energy, bpm,
                          beat_grid_seconds, license_name, license_source_url,
-                         allowed_platforms, attribution, active, created_at""",
+                         allowed_platforms, attribution, synthetic_media, synthetic_music_approved, active, created_at""",
             (active, track_id),
         ).fetchone()
     if row is None:
@@ -197,9 +197,12 @@ async def import_creative_asset(
     attribution: str = Query(default="", max_length=1000),
     allowed_platforms: str = Query(default="all_social", max_length=200),
     commercial_use_confirmed: bool = Query(default=False),
+    ai_generated_music: Annotated[bool, Query()] = False,
     x_gm_user_login: str | None = Header(default=None),
 ) -> dict[str, Any]:
     require_owner(actor_login(x_gm_user_login))
+    if ai_generated_music and kind != "music":
+        raise HTTPException(status_code=422, detail="AI-generated approval is for music tracks only")
     if not commercial_use_confirmed:
         raise HTTPException(
             status_code=422,
@@ -260,11 +263,11 @@ async def import_creative_asset(
                         """INSERT INTO music_tracks (
                                id, title, artist, storage_key, sha256, duration_seconds,
                                mood, energy, license_name, license_source_url, license_proof,
-                               commercial_use, synthetic_media, allowed_platforms, attribution
-                           ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,true,false,%s::jsonb,%s)
+                               commercial_use, synthetic_media, synthetic_music_approved, allowed_platforms, attribution
+                           ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,true,%s,%s,%s::jsonb,%s)
                            RETURNING id, title, artist, duration_seconds, mood, energy, bpm,
                                      beat_grid_seconds, license_name, license_source_url,
-                                     allowed_platforms, attribution, active, created_at""",
+                                     allowed_platforms, attribution, synthetic_media, synthetic_music_approved, active, created_at""",
                         (
                             asset_id,
                             title.strip(),
@@ -277,6 +280,8 @@ async def import_creative_asset(
                             license_name.strip(),
                             source_url,
                             license_proof.strip(),
+                            ai_generated_music,
+                            ai_generated_music,
                             json.dumps(platforms),
                             attribution.strip(),
                         ),

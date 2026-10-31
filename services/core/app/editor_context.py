@@ -85,6 +85,7 @@ def build_editor_context(
             """
             SELECT * FROM music_tracks
             WHERE active = true AND commercial_use = true
+              AND (synthetic_media = false OR synthetic_music_approved = true)
             ORDER BY (id = %s) DESC, mood, energy, title
             """,
             (job.get("selected_music_track_id"),),
@@ -203,6 +204,8 @@ def build_editor_context(
             "track_id": str(row["id"]),
             "title": row["title"],
             "artist": row["artist"],
+            "synthetic_media": bool(row.get("synthetic_media", False)),
+            "synthetic_music_approved": bool(row.get("synthetic_music_approved", False)),
             "duration_seconds": row["duration_seconds"],
             "mood": row["mood"],
             "energy": row["energy"],

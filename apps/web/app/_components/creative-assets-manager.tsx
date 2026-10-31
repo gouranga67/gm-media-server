@@ -81,6 +81,7 @@ export function CreativeAssetsManager() {
         use_when: String(form.get("use_when")),
         avoid_when: String(form.get("avoid_when")),
         kind: String(form.get("kind")),
+        ai_generated_music: form.get("ai_generated_music") === "on",
         title: String(form.get("title")),
         creator: String(form.get("creator")),
         tags: String(form.get("tags")),
@@ -345,6 +346,11 @@ export function CreativeAssetsManager() {
                 I reviewed the source licence and confirm this file may be used
                 commercially on the selected platforms.
               </label>
+              <label className="mt-3 flex min-h-11 items-start gap-3 text-xs leading-5">
+                <input name="ai_generated_music" type="checkbox" />
+                Music only: this track is AI-generated; I approve it for my
+                edits.
+              </label>
               <button
                 className="mt-5 flex min-h-12 w-full items-center justify-center gap-2 rounded-md bg-[#173F5F] text-sm font-bold text-white disabled:opacity-50"
                 disabled={saving}
@@ -380,6 +386,11 @@ export function CreativeAssetsManager() {
                           {track.energy} energy ·{" "}
                           {Math.round(track.duration_seconds)}s
                         </p>
+                        {track.synthetic_media ? (
+                          <p className="mt-1 text-xs font-bold text-[#53646F]">
+                            AI-generated music · approved by owner
+                          </p>
+                        ) : null}
                         <a
                           className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-[#174D73] underline"
                           href={track.license_source_url}

@@ -199,9 +199,9 @@ def list_music_tracks(active: bool | None = Query(default=True)) -> list[dict[st
             SELECT id, title, artist, duration_seconds, mood, energy, bpm,
                    beat_grid_seconds,
                    license_name, license_source_url, allowed_platforms,
-                   attribution, active, created_at
+                   attribution, synthetic_media, synthetic_music_approved, active, created_at
             FROM music_tracks
-            WHERE commercial_use = true AND synthetic_media = false {active_clause}
+            WHERE commercial_use = true AND (synthetic_media = false OR synthetic_music_approved = true) {active_clause}
             ORDER BY mood, energy, title
             """,
             parameters,
@@ -974,7 +974,7 @@ def create_job(
             if payload.selected_music_track_id is not None:
                 selected_track = database.execute(
                     """SELECT allowed_platforms FROM music_tracks
-                       WHERE id=%s AND active=true AND commercial_use=true AND synthetic_media=false""",
+                       WHERE id=%s AND active=true AND commercial_use=true AND (synthetic_media=false OR synthetic_music_approved=true)""",
                     (payload.selected_music_track_id,),
                 ).fetchone()
                 if selected_track is None:
