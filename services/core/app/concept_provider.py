@@ -60,7 +60,8 @@ def generate_concepts(inventory: dict, privacy_mode: str, settings: Settings) ->
             transcript = [dict(start=item["start"], end=item["end"], text=item["text"])
                           for item in inventory["evidence"] if item["asset_id"] == source["asset_id"]]
             assets.append({**source, "transcript_segments": transcript})
-        content += high_impact_visuals({"assets": assets}, settings.media_root, image_limit=4)
+        content += high_impact_visuals({"assets": assets, "focus": inventory.get("focus", ""),
+            "_retrieval_products": inventory.get("_retrieval_products", [])}, settings.media_root, image_limit=4)
     credentials = usable_chatgpt_credentials(settings)
     document, usage = _request_plan(
         endpoint=OPENAI_RESPONSES_URL, token=str(credentials["access_token"]),

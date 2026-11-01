@@ -1,6 +1,6 @@
 # Build phases and live status
 
-Updated: 2026-11-01 (Australia/Brisbane)
+Updated: 2026-11-02 (Australia/Brisbane)
 
 This is the working plan for turning the Lenovo into a private media-editing appliance. A phase is complete only when its exit checks pass. Discussion, generated files, and installed packages do not count as a completed phase by themselves.
 
@@ -44,11 +44,11 @@ Verification passed: 478 backend tests with no skips, including real CPU FFmpeg 
 
 The 2026-10-26 [system audit and roadmap](system-audit-and-roadmap.md) reviews the live interface, source-context pipeline, compute use and next build phases. A [PDF edition](GM-Studio-System-Audit-and-Roadmap.pdf) is available for reading away from the server. The audit is planning work. Implementation of phases 19–25 has started; see the [continuous sprint report](phase-reports/phase-19-25-sprint.md) for tested checkpoints and remaining acceptance.
 
-The current improvement-loop increment is Phase 17A: inspect the rendered file and retain a versioned report without changing the edit. Its remaining repair/evaluation ambitions are carried into proposed Phase 24. Preserve the current successful model and deterministic render path while measuring changes.
+Phase 17A provides the existing report-only quality layer. The active follow-up sequence is reliability/efficiency → precise revisions/story protection → shared retrieval → purposeful finishing → evaluated learning → combined acceptance. Preserve the current successful model and deterministic render path while measuring each change. Passing source checks does not close the real-footage or pilot gates.
 
 ## Continuous sprint status
 
-The next proposed increment is [brief-first editing and recipe simplification](brief-led-editing-plan.md): make technical assembly automatic, retain a visible Advanced override, and preserve the working engines before a separate shared-plan refactor. The [hands-on acceptance checklist](user-acceptance-checklist.md) covers the currently deployed tools. Application recipe behaviour has not been changed by this planning update.
+The [brief-first editing increment](brief-led-editing-plan.md) is implemented in source (migration 033), with an Advanced assembly override and the existing render engines retained. The [hands-on acceptance checklist](user-acceptance-checklist.md) covers real-footage acceptance. Follow-up phases are being built separately with focused regression checks; the broad deployment, playback and pilot testing pass follows the build sequence.
 
 | Phase | Outcome | Status |
 |---|---|---|
@@ -567,3 +567,16 @@ Server validation now independently enforces the requested AI-revision protectio
 Planning receives at most 12 balanced, same-source continuation/reference hints, capped at 1,800 serialized characters and fitted inside the existing context limit without dropping dialogue. Hints are fallible text/timing evidence, not semantic scoring. The review screen adds **Local quality review → Recorded story outline**, derived from actual selected source ranges and recorded words, plus bounded advisories about repeated passages, word boundaries and connecting references. The outline never rewrites the cut or triggers a critic request. Audio lead/tail overlaps are disclosed separately. Preview and final manifests retain the report.
 
 Fresh selected blooper concepts with modern focused incident evidence now protect the entire chosen recorded setup–incident–reaction script and its order, using the existing story-contract checks without an advertising shape. Concept guidance asks why the specific recorded incident is worth watching. Legacy unfocused concepts do not acquire this hard constraint. This protects the chosen joke's evidence; whether it is funny remains a playback judgement. No migration, new media analysis, public upload, automatic publication or routine additional hosted model request is introduced.
+
+
+### Shared retrieval follow-up (Phase 20B) — 2026-11-02
+
+Source implemented; combined live acceptance pending. Concept discovery now searches the existing indexed transcript text across the already eligible collection/library scope before applying its 60-unique-source cap. Camera filenames no longer prevent stored speech from contributing to relevance. OCR and editable labels/notes/tags contribute separately through a shared lexical matcher, with the approved product dictionary providing aliases. Exact word boundaries avoid substring matches; generic creation instructions contribute no query terms. This is lexical retrieval, not a new visual classifier or semantic factual check.
+
+Matching sources take priority over unrelated groups; within each partition the allowance remains balanced across upload groups. Up to two matching recorded-speech sources are reserved before picture ranking so a strongly labelled image batch cannot consume the whole script allowance. Exact-hash duplicates contribute ranking clues while retaining the preferred canonical source identity. Human Avoid ranges cannot contribute transcript ranking evidence and remain excluded from selected speech. Existing active/readiness/collection constraints apply before retrieval. Focused ordinary concept sampling prioritises up to two matching passages and close same-source neighbours, retains opening/ending orientation, and fills the remaining per-source allowance with matching/progressive samples. Blank or unmatched directions preserve progressive sampling. Blooper incident sampling retains its dedicated policy.
+
+The same vocabulary prioritises stored preview panels against the edit brief or concept direction, including OCR and known aliases. Preview image counts and thumbnail limits remain unchanged. B-roll speech/annotation safeguards remain in force: text matches do not prove pictured product identity or make a different speaking take safe to overlay.
+
+Saved concept coverage now distinguishes available/considered matching sources, eligible/shared passages, matching speech, videos without eligible speech and bounded sampling. Opening a saved session makes no new model request. Detailed alias data stays local; the existing public concept inventory keeps its 36,000-character cap, while full edit dialogue and saved plans remain intact. This increment adds one local indexed query when a usable focus exists; no new migration, recognition pass, hosted request, default-model change or autonomous critique loop is introduced.
+
+Next follow-up: purposeful finishing, concentrating on usable agent controls and visible treatment outcomes. Learning/evaluation refinements and the final combined acceptance pass follow; automatic subject tracking and learned segmentation remain separately gated.

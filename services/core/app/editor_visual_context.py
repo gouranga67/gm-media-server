@@ -7,17 +7,21 @@ from typing import Any
 
 from app.broll_evidence import speech_ranges
 from app.media_analysis import resolve_source
+from app.source_retrieval import focus_query, source_score
 
 
-def _candidate_order(assets: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _candidate_order(assets: list[dict[str, Any]], focus: str = "", products=()) -> list[dict[str, Any]]:
     # Keep dialogue orientation, then alternate pictures and cutaway recordings.
     # Source order otherwise hides late-added product footage behind early takes.
+    query = focus_query(focus, products)
     spoken, stills, videos = [], [], []
     for asset in assets:
         if str(asset.get("mime_type") or "").startswith("image/"):
             stills.append(asset)
         elif asset.get("has_video"):
             (spoken if speech_ranges(asset) else videos).append(asset)
+    for group in (spoken, stills, videos):
+        group.sort(key=lambda asset: source_score(asset, query), reverse=True)
     ordered = spoken[:1]
     for index in range(max(len(videos), len(stills))):
         if index < len(videos):
@@ -36,7 +40,8 @@ def high_impact_visuals(context: dict[str, Any], media_root: Path, image_limit: 
     from PIL import Image, ImageDraw, ImageOps, UnidentifiedImageError
 
     pictures = []
-    for asset in _candidate_order(context.get("assets", [])):
+    focus = context.get("focus") or (context.get("project") or {}).get("brief") or ""
+    for asset in _candidate_order(context.get("assets", []), focus, context.get("_retrieval_products", [])):
         key = asset.get("_preview_key") or asset.get("_contact_sheet_key")
         if not isinstance(key, str):
             continue

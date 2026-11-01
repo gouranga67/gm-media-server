@@ -320,6 +320,8 @@ def build_editor_context(
         },
     }
 
+    if include_internal_paths:
+        context["_retrieval_products"] = [{"name":p["name"],"aliases":p.get("aliases") or []} for p in products]
     if concept_selection:
         selected = next((item for item in concept_selection["concepts"] if item["id"] == str(concept_selection["concept_id"])), None)
         if selected:

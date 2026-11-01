@@ -1400,7 +1400,19 @@ export type ConceptSession = {
   readonly id: string; readonly focus: string; readonly audience: string; readonly privacy_mode: "hybrid" | "text_only";
   readonly status: "pending" | "generating" | "ready" | "failed";
   readonly concepts: readonly ReelConcept[]; readonly jobs: readonly ConceptJob[];
-  readonly coverage: { readonly unique_sources_available: number; readonly sources_considered: number; readonly speech_passages: number; readonly possible_blooper_passages?: number };
+  readonly coverage: {
+    readonly unique_sources_available: number; readonly sources_considered: number;
+    readonly speech_passages: number; readonly possible_blooper_passages?: number;
+    readonly retrieval?: {
+      readonly focus_applied: boolean;
+      readonly focus_matching_sources_available: number;
+      readonly focus_matching_sources_considered: number;
+      readonly speech_passages_available: number;
+      readonly focus_matching_passages_included: number;
+      readonly speech_sources_without_passages: number;
+      readonly sampling_limited: boolean;
+    };
+  };
   readonly total_tokens: number; readonly model: string | null; readonly error: string | null; readonly created_at: string;
 };
 export type ConceptLibraryStatus = { readonly analysis_failed?: number; readonly unique_sources: number; readonly catalogued_sources: number; readonly spoken_sources: number; readonly visually_indexed_sources: number; readonly still_processing: number };

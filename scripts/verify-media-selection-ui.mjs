@@ -515,6 +515,24 @@ test("saved concepts reopen without a model call and a failed render retains the
   assert.equal(conceptHistory[0].jobs.length, 0);
 });
 
+test("saved concept retrieval coverage shows focus and sampling limits without starting work", async () => {
+  const session=conceptSession();
+  session.coverage.retrieval={focus_applied:true,focus_matching_sources_available:8,
+    focus_matching_sources_considered:3,focus_matching_passages_included:2,
+    speech_passages_available:40,speech_sources_without_passages:1,sampling_limited:true};
+  conceptHistory=[session];
+  await mountConcepts();
+  await waitFor(()=>document.querySelector('[aria-label="Source retrieval coverage"]'));
+  const text=document.querySelector('[aria-label="Source retrieval coverage"]').textContent;
+  assert.match(text,/3 of 8 sources matching your direction/);
+  assert.match(text,/6 of 40 eligible recorded passages/);
+  assert.match(text,/bounded sample/);
+  assert.match(text,/do not verify pictured products/);
+  assert.match(text,/cannot supply a recorded script/);
+  assert.equal(posts("concepts").length,0);
+  assert.equal(calls.some(call=>call.route.endsWith("/render")),false);
+});
+
 test("bloopers are an explicit mode with visible clues and no preview until selection", async () => {
   await mountConcepts();
   assert.equal(document.querySelector('select[aria-label="Reel type"]').value, "story");

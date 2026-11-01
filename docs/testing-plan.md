@@ -1,6 +1,6 @@
 # GM Studio testing phase
 
-Updated: 2026-11-01 (Australia/Brisbane)
+Updated: 2026-11-02 (Australia/Brisbane)
 
 The testing phase is layered so a cheap failure is found before a GPU render or hosted editor request is started. A failed lane stops promotion, but the runner continues its remaining checks so one run produces a useful defect list.
 
@@ -20,7 +20,7 @@ After deployment:
 
 The learning loop, new story-selection behaviour and natural-language revision routing are not changed by this sprint. Do not treat passing technical checks as acceptance of those later phases.
 
-For real-footage testing of the deployed features, use the [hands-on user checklist](user-acceptance-checklist.md). It starts with eight priority checks, then covers source selection, bloopers, library management, precise edits, finishing, phone delivery, learning and appliance behaviour. The [brief-first editing proposal](brief-led-editing-plan.md) describes the next recipe/form change; it is not yet implemented.
+For real-footage testing of the deployed features, use the [hands-on user checklist](user-acceptance-checklist.md). It starts with eight priority checks, then covers source selection, bloopers, library management, precise edits, finishing, phone delivery, learning and appliance behaviour. The [brief-first editing plan](brief-led-editing-plan.md) records the implemented migration-033 increment and later assembly work.
 
 ## System audit baseline and proposed regression coverage
 
@@ -283,3 +283,20 @@ After deployment:
 These checks do not establish that every requested creative improvement happened, that a story is coherent, or that a gag is funny. Compare real outputs before accepting creative quality. No production hosted requests or live database mutations are part of the local regression run.
 
 Local validation completed: 496 backend tests passed with no skips, including CPU FFmpeg renders and disposable local rclone checks; 47 DOM interaction tests passed; web TypeScript, the production web build, Compose configuration, Python parsing and public-release audit passed. The temporary FFmpeg/rclone test binaries live outside the repository. No deployed service was rebuilt and no hosted edit was requested during this validation.
+
+
+## Shared retrieval follow-up (Phase 20B) — 2026-11-02
+
+Regressions cover exact word boundaries, normalized words, bounded alias expansion/query terms, generic-direction fallback, camera-named transcript/OCR matches before the source cap, canonical identity with duplicate ranking clues, relevant-group priority, protected speech slots when photos dominate, focused middle passages with close neighbours and source endings, unchanged no-focus sampling, unchanged public inventory budgets, private-vocabulary stripping, and relevant late preview panels within the same four-image allowance. The coverage UI reopens saved sessions without a concept/render request and states that text matching does not establish pictured identity.
+
+An isolated PostgreSQL-compatible engine applies the existing 39 migrations and runs the actual source eligibility and indexed transcript-ranking SQL. Fixtures check collection scoping, archived exclusion, marked Avoid ranges, exact terms versus substrings, and an empty permitted-ID list. This does not touch the production database. Existing B-roll/privacy and real CPU render tests remain regression gates; live GPU latency and subjective relevance require final acceptance.
+
+Keep these tasks for the combined testing pass:
+
+1. Give Find ideas a specific topic already spoken in an older camera-named recording. Check coverage, the exact quoted script and its final story. Compare with blank-direction discovery, which should still explore sources broadly.
+2. Use an existing product alias and a collection containing relevant speech, unrelated material and a readable review screenshot. Check that the matching source/recognized-text clues are considered, the collection remains respected and the resulting pictures actually match the spoken product.
+3. Try a topic in the middle of a long recording. Inspect the recorded passages for the matching line, intelligible setup and complete ending. A text match alone is not acceptance of story quality.
+4. Reopen an older saved concept session. It should work without the new coverage details or another model request. Its chosen script and existing exports should remain unchanged.
+5. On a larger library inspect the sampling notice, narrow the direction or choose a collection, then explicitly generate another session if needed. Do not interpret a bounded sample as an exhaustive understanding of all footage.
+
+Source checkpoint verification: 508 backend tests passed with no skips, including real CPU FFmpeg renders; 48 DOM interaction checks passed; all eight source-suite gates passed, including web/agent TypeScript, production build, Compose, Python compilation, public-release audit and patch checks. The 39-migration isolated SQL run additionally exercised the new actual ranking query. These checks made no hosted request and did not mutate production media, jobs, publishing or backup state. The combined real-footage/GPU/pilot pass remains pending after the build sequence.

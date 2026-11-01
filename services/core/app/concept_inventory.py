@@ -11,6 +11,7 @@ from app.concept_schemas import ConceptProposals, ConceptRequestCreate
 from app.blooper_detection import find_blooper_evidence, has_specific_blooper_clue, transcript_continuations
 from app.take_quality import production_chatter_reason
 from app.blooper_focus import attach_word_times, focus_blooper_passages
+from app.source_retrieval import FOCUSED_TRANSCRIPT_SQL, focus_query, focused_passages, match_score, source_score
 
 MAX_SOURCES = 60
 MAX_INVENTORY_CHARACTERS = 36_000
@@ -38,30 +39,44 @@ def _sample(items: list[Any], limit: int) -> list[Any]:
     return [items[index] for index in indices]
 
 
-def balanced_sources(rows: list[dict], focus: str, limit: int = MAX_SOURCES) -> list[dict]:
+def balanced_sources(rows: list[dict], focus: str, limit: int = MAX_SOURCES, *, products=(), transcript_matches=None) -> list[dict]:
     """Prefer explicit focus; otherwise spread the bounded view across upload groups."""
-    words = set(re.findall(r"[a-z0-9]{3,}", focus.lower())) - {"the", "and", "from", "with", "reel", "make", "video", "about"}
+    query = focus_query(focus, products)
+    transcript_matches = transcript_matches or {}
     def score(row):
-        text = " ".join(str(row.get(key) or "") for key in ("display_name", "source_name", "project_name", "notes", "tags")).lower()
-        return sum(word in text for word in words), bool(row.get("favorite"))
-    unique = {}
+        return source_score(row, query, transcript_matches.get(str(row["id"]), 0)), bool(row.get("favorite"))
+    unique, scores = {}, {}
     # SQL presents a reviewed canonical first within each verified hash group.
     for row in rows:
         unique.setdefault(row["sha256"], row)
-    groups = defaultdict(deque)
-    for row in sorted(unique.values(), key=score, reverse=True):
-        groups[str(row["project_id"])].append(row)
-    ranked_groups = sorted(groups.values(), key=lambda group: score(group[0]), reverse=True)
+        scores[row["sha256"]] = max(scores.get(row["sha256"], (0, False)), score(row))
     chosen = []
-    while ranked_groups and len(chosen) < limit:
-        next_groups = []
-        for group in ranked_groups:
-            chosen.append(group.popleft())
-            if group:
-                next_groups.append(group)
-            if len(chosen) == limit:
-                break
-        ranked_groups = next_groups
+    ranked = sorted(unique.values(), key=lambda row: scores[row["sha256"]], reverse=True)
+    # Concepts require recorded speech. A flood of strongly labelled pictures
+    # must not consume every slot before a camera-named matching speaker.
+    spoken_hashes = {row["sha256"] for row in rows if transcript_matches.get(str(row["id"]))
+                     and row.get("media_role") != "broll" and str(row.get("mime_type", "")).startswith("video/")}
+    spoken = [row for row in ranked if row["sha256"] in spoken_hashes and row.get("media_role") != "broll"]
+    if query.terms:
+        chosen.extend(spoken[:min(2, limit)])
+    reserved = {row["sha256"] for row in chosen}
+    # Focused sources get the allowance before unrelated upload groups. Within
+    # either partition, spread it across groups rather than only one long take.
+    for matched in (True, False):
+        groups = defaultdict(deque)
+        for row in ranked:
+            if row["sha256"] not in reserved and bool(scores[row["sha256"]][0]) == matched:
+                groups[str(row["project_id"])].append(row)
+        ranked_groups = sorted(groups.values(), key=lambda group: scores[group[0]["sha256"]], reverse=True)
+        while ranked_groups and len(chosen) < limit:
+            next_groups = []
+            for group in ranked_groups:
+                chosen.append(group.popleft())
+                if group:
+                    next_groups.append(group)
+                if len(chosen) == limit:
+                    break
+            ranked_groups = next_groups
     return chosen
 
 
@@ -88,6 +103,7 @@ def compact_inventory(rows: list[dict], segments: list[dict], payload: ConceptRe
     sources = []
     by_asset = defaultdict(list)
     bloopers = payload.reel_kind == "bloopers"
+    query = focus_query(payload.focus, products)
     if not bloopers:
         from app.story_passages import story_passages
         segments = story_passages(segments)
@@ -131,7 +147,8 @@ def compact_inventory(rows: list[dict], segments: list[dict], payload: ConceptRe
                         "_visual_available": bool(derived.get("preview") or derived.get("thumbnail") or derived.get("contact_sheet")),
                         "_storage_key": row.get("storage_key")})
     inventory = {"focus": payload.focus, "audience": payload.audience, "reel_kind": payload.reel_kind,
-                 "assets": sources, "evidence": [], "recent_concepts": (recent or [])[:6]}
+                 "assets": sources, "evidence": [], "recent_concepts": (recent or [])[:6],
+                 "_retrieval_products": [{"name":p["name"],"aliases":p.get("aliases") or []} for p in (products or [])[:100]]}
     text = " ".join([*(str(segment.get("text", "")) for segment in segments), *(str(row.get("display_name", "")) + " " + str(row.get("notes", "")) for row in rows)])
     inventory["product_mentions"] = [item["name"] for item in product_mentions(text, products or [])]
     used = len(json.dumps(public_inventory(inventory), ensure_ascii=False))
@@ -147,7 +164,7 @@ def compact_inventory(rows: list[dict], segments: list[dict], payload: ConceptRe
         # Retain candidate anchors before contextual passages under a tight budget.
         sampled = (_sample([item for item in passages if has_specific_blooper_clue(item)], 6)
                    + _sample([item for item in passages if item.get("blooper_candidate") and not has_specific_blooper_clue(item)], 2)
-                   + _sample([item for item in passages if not item.get("blooper_candidate")], 4)) if bloopers else _sample(passages, 12)
+                   + _sample([item for item in passages if not item.get("blooper_candidate")], 4)) if bloopers else focused_passages(passages, query, _sample)
         queues.append(deque(sampled))
     # Round-robin means a long first recording cannot crowd every other source out.
     while queues:
@@ -160,6 +177,15 @@ def compact_inventory(rows: list[dict], segments: list[dict], payload: ConceptRe
             if queue:
                 next_queues.append(queue)
         queues = next_queues
+    available = [item for source in eligible for item in by_asset[source["asset_id"]]]
+    inventory["_retrieval"] = {
+        "method": "stored_text_and_metadata_v1", "focus_applied": bool(query.terms),
+        "speech_passages_available": len(available),
+        "focus_matching_passages_available": sum(bool(match_score(item["text"], query)) for item in available),
+        "focus_matching_passages_included": sum(bool(match_score(item["text"], query)) for item in inventory["evidence"]),
+        "speech_sources_without_passages": sum(not by_asset[source["asset_id"]] for source in eligible),
+        "hosted_retrieval_calls": 0,
+    }
     return inventory
 
 
@@ -182,7 +208,11 @@ def load_inventory(database: Any, payload: ConceptRequestCreate) -> tuple[dict, 
           AND (a.mime_type LIKE 'video/%%' OR a.mime_type LIKE 'image/%%') {where}
         ORDER BY (a.id=d.canonical_asset_id) DESC NULLS LAST, a.created_at DESC, a.id
     """, (payload.collection_id,) if payload.collection_id else ()).fetchall()
-    chosen = balanced_sources(list(rows), payload.focus)
+    products = list(database.execute("SELECT id,name,aliases FROM source_products ORDER BY name LIMIT 100").fetchall())
+    query = focus_query(payload.focus, products)
+    matches = list(database.execute(FOCUSED_TRANSCRIPT_SQL, (query.search_text, [row["id"] for row in rows])).fetchall()) if query.terms and rows else []
+    transcript_matches = {str(row["asset_id"]): row["text_rank"] for row in matches}
+    chosen = balanced_sources(list(rows), payload.focus, products=products, transcript_matches=transcript_matches)
     if not chosen:
         return {"assets": [], "evidence": []}, {"unique_sources_available": 0, "sources_considered": 0, "speech_passages": 0}
     segments = database.execute("""
@@ -195,13 +225,19 @@ def load_inventory(database: Any, payload: ConceptRequestCreate) -> tuple[dict, 
     prior = database.execute("SELECT concepts FROM reel_concept_requests WHERE status='ready' AND reel_kind=%s AND (%s::uuid IS NULL OR collection_id=%s) ORDER BY created_at DESC LIMIT 3", (payload.reel_kind, payload.collection_id, payload.collection_id)).fetchall()
     recent = [{"title": option["title"][:100], "speech_evidence_ids": [beat["evidence_id"] for beat in option["script"][:10]]}
               for row in prior for option in row["concepts"]][:6]
-    products = list(database.execute("SELECT id,name,aliases FROM source_products ORDER BY name LIMIT 100").fetchall())
     segments = attach_word_times(chosen, list(segments), all_sources=payload.reel_kind != "bloopers")
     inventory = compact_inventory(chosen, list(segments), payload, recent=recent, products=products)
     coverage = {"unique_sources_available": len({row["sha256"] for row in rows}),
                 "sources_considered": len(chosen), "speech_passages": len(inventory["evidence"]),
                 "inventory_character_limit": MAX_INVENTORY_CHARACTERS,
                 "scope": "collection" if payload.collection_id else "library"}
+    matched_hashes = {row["sha256"] for row in rows if source_score(row, query, transcript_matches.get(str(row["id"]), 0))}
+    coverage["retrieval"] = {**inventory["_retrieval"],
+        "focus_matching_sources_available": len(matched_hashes),
+        "focus_matching_sources_considered": len(matched_hashes.intersection(row["sha256"] for row in chosen)),
+        "source_limit": MAX_SOURCES,
+        "sampling_limited": len(chosen) < coverage["unique_sources_available"] or len(inventory["evidence"]) < inventory["_retrieval"]["speech_passages_available"],
+    }
     if payload.reel_kind == "bloopers":
         coverage["possible_blooper_passages"] = sum(bool(item.get("blooper_candidate")) for item in inventory["evidence"])
     return inventory, coverage
