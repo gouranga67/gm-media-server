@@ -238,3 +238,6 @@ The root URL is the studio dashboard. `/welcome` explains initial setup, `/jobs`
 | `scripts/` | Deployment, diagnostics, enrollment, and acceptance checks |
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) before submitting changes and [SECURITY.md](SECURITY.md) before deploying or reporting a vulnerability.
+
+
+Targeted revisions support exact local commands such as **Make clip 2 louder by 6 dB**, **Move captions to the top**, **Remove effects**, and **Remove B-roll** without another AI editing call. Other notes use the editor model and honour server-checked protections. The review screen shows actual changes and a source-timed **Recorded story outline** under Local quality review. See the [revision acceptance checklist](docs/testing-plan.md#story-sequence-and-precise-revisions--2026-11-01) for deployment tests and limits.

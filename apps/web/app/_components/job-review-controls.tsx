@@ -118,6 +118,7 @@ export function JobReviewControls({
   const revisionReport = run.manifest.revision_report as {
     changed?: boolean; changes?: readonly string[]; notice?: string;
     editor_explanation?: string; instruction?: string;
+    execution?: { route?: string; scope?: string };
   } | undefined;
   const [coverTime, setCoverTime] = useState(initialCoverTime);
   const [captionPosition, setCaptionPosition] = useState<"lower_safe" | "middle" | "upper">(
@@ -298,7 +299,7 @@ export function JobReviewControls({
     return (
       <div className="space-y-4">
       <PublishingPanel key={currentFinal.id} exportId={currentFinal.id} version={currentFinal.version} />
-      <RenderQualityCard review={currentFinal.manifest.quality_review} storyContract={currentFinal.manifest.story_contract_review} storyFinishing={currentFinal.manifest.story_finishing} />
+      <RenderQualityCard review={currentFinal.manifest.quality_review} storyContract={currentFinal.manifest.story_contract_review} storyFinishing={currentFinal.manifest.story_finishing} storySequence={currentFinal.manifest.story_sequence_review} />
       <section className="space-y-4 rounded-md border border-[#BFE3FF] bg-white p-5">
         <div>
           <p className="flex items-center gap-2 font-mono text-xs font-bold tracking-wide text-[#215B43] uppercase">
@@ -424,7 +425,7 @@ export function JobReviewControls({
         </section>
       ) : null}
 
-      <RenderQualityCard review={run.manifest.quality_review} storyContract={run.manifest.story_contract_review} storyFinishing={run.manifest.story_finishing} />
+      <RenderQualityCard review={run.manifest.quality_review} storyContract={run.manifest.story_contract_review} storyFinishing={run.manifest.story_finishing} storySequence={run.manifest.story_sequence_review} />
       <section className="rounded-md border border-[#D7D9D3] bg-white p-5">
         {storyAssessment ? (
           <div className="mb-5 rounded-md border border-[#BFE3FF] bg-[#EFF6FA] p-4">
@@ -644,6 +645,7 @@ export function JobReviewControls({
         {revisionReport ? <div className="mt-4 rounded-md bg-[#EFF6FA] p-4 text-sm text-[#173F5F]" role="status">
           <p className="font-bold">What changed in version {run.version}</p>
           {revisionReport.instruction ? <p className="mt-2">Your request: {revisionReport.instruction}</p> : null}
+          {revisionReport.execution ? <p className="mt-2 text-xs font-bold">{revisionReport.execution.route === "local" ? "Applied locally · zero AI editing calls" : "Planned by the editor model"}</p> : null}
           {revisionReport.changes?.length ? <ul className="mt-2 list-disc space-y-1 pl-5">{revisionReport.changes.map((change) => <li key={change}>{change}</li>)}</ul> : null}
           {revisionReport.notice ? <p className="mt-2">{revisionReport.notice}</p> : null}
           {revisionReport.editor_explanation ? <p className="mt-2">Editor explanation: {revisionReport.editor_explanation}</p> : null}
@@ -653,7 +655,7 @@ export function JobReviewControls({
           <option value="targeted">Adjust this edit</option>
           <option value="rebuild_story">Rebuild the story from the footage</option>
         </select>
-        <p className="mt-2 text-xs leading-relaxed text-[#666862]">{revisionMode === "rebuild_story" ? "Reconsiders the source dialogue and your original brief. Clip order and spoken selections are unlocked; other protections stay active." : "Describe a specific change and the parts you want to keep."} This sends a new AI editing request only when you submit. Use the rating card below to teach future edits.</p>
+        <p className="mt-2 text-xs leading-relaxed text-[#666862]">{revisionMode === "rebuild_story" ? "Reconsiders the source dialogue and your original brief. Clip order and spoken selections are unlocked; other protections stay active." : "Describe a specific change and the parts you want to keep. Exact commands such as ‘Make clip 2 louder by 6 dB’, ‘Move captions to the top’, ‘Remove effects’, or ‘Remove B-roll’ run locally. Other requests use the editor model."} Nothing runs until you submit. Use the rating card below to teach future edits.</p>
         <label className="mt-4 block text-sm font-bold text-[#20211F]" htmlFor="revision-note">What should the editor change?</label>
         <Textarea
           className="mt-2 min-h-28"

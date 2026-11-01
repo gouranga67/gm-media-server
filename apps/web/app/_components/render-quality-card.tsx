@@ -23,14 +23,35 @@ type QualityReview = {
   readonly finding_count: number;
 };
 
+type StoryBeat = {
+  readonly clip_index: number;
+  readonly role: string;
+  readonly text: string;
+  readonly start_seconds: number;
+  readonly end_seconds: number;
+  readonly source_in: number;
+  readonly source_out: number;
+  readonly word_timed: boolean;
+};
+
+function isStoryBeat(value: unknown): value is StoryBeat {
+  if (!value || typeof value !== "object") return false;
+  const beat = value as Record<string, unknown>;
+  return ["clip_index", "start_seconds", "end_seconds", "source_in", "source_out"].every(
+    (key) => typeof beat[key] === "number" && Number.isFinite(beat[key]),
+  ) && typeof beat.role === "string" && typeof beat.text === "string" && typeof beat.word_timed === "boolean";
+}
+
 export function RenderQualityCard({
   review,
   storyContract,
   storyFinishing,
+  storySequence,
 }: {
   readonly review: unknown;
   readonly storyContract?: unknown;
   readonly storyFinishing?: unknown;
+  readonly storySequence?: unknown;
 }) {
   if (!review || typeof review !== "object" || !("version" in review))
     return null;
@@ -49,6 +70,11 @@ export function RenderQualityCard({
           speech_clip_count?: number;
         })
       : undefined;
+  const sequence = storySequence && typeof storySequence === "object"
+    ? storySequence as { findings?: readonly string[]; outline?: readonly unknown[] } : undefined;
+  const sequenceFindings = Array.isArray(sequence?.findings)
+    ? sequence.findings.filter((line) => typeof line === "string") : [];
+  const outline = Array.isArray(sequence?.outline) ? sequence.outline.filter(isStoryBeat).slice(0, 48) : [];
   const changes = Array.isArray(cleanup?.changes)
     ? cleanup.changes.filter((line) => typeof line === "string")
     : [];
@@ -60,6 +86,7 @@ export function RenderQualityCard({
   const needsReview =
     report.status === "attention" ||
     findings.length > 0 ||
+    sequenceFindings.length > 0 ||
     contract?.status === "attention";
   const label = needsReview
     ? "Worth reviewing"
@@ -94,6 +121,16 @@ export function RenderQualityCard({
         pause, dark shot, or delivery choice. Story quality and humour still
         need your judgement.
       </p>
+      {outline.length ? <details className="mt-4 border-t border-[#D7D9D3] pt-3">
+        <summary className="min-h-11 cursor-pointer text-sm font-bold text-[#173F5F]">Recorded story outline</summary>
+        <p className="mt-2 text-xs text-[#53646F]">These are the selected source passages. Roles describe the edit plan; they do not prove that the story or joke works.</p>
+        <ol className="mt-3 space-y-3 text-xs text-[#53646F]">{outline.map((beat) => <li key={beat.clip_index}>
+          <p className="font-bold">Clip {beat.clip_index + 1} · {beat.start_seconds.toFixed(1)}–{beat.end_seconds.toFixed(1)}s · {beat.role}</p>
+          <p className="mt-1">{beat.text || "Picture-only passage or speech without usable transcript timing."}</p>
+          <p className="mt-1">Source {beat.source_in.toFixed(1)}–{beat.source_out.toFixed(1)}s · {beat.word_timed ? "word-timed transcript" : "limited transcript evidence"}</p>
+        </li>)}</ol>
+        {sequenceFindings.length ? <ul className="mt-3 space-y-2 text-xs text-[#A23B2A]">{sequenceFindings.map((finding, index) => <li key={index}>{finding}</li>)}</ul> : null}
+      </details> : null}
       {contract?.status === "checked" ||
       (cleanup && cleanup.status !== "not_applicable") ? (
         <details className="mt-4 border-t border-[#D7D9D3] pt-3">
@@ -171,7 +208,7 @@ export function RenderQualityCard({
       ) : (
         <p className="mt-4 text-sm text-[#245E43]">
           {report.status === "passed"
-            ? "No issues flagged by these checks."
+            ? "No issues flagged by the video measurements."
             : "No issues flagged so far; some measurements are unavailable."}
         </p>
       )}

@@ -479,6 +479,7 @@ def _manifest(
         "revision_report": context.get("revision_report"),
         "story_contract_review": context.get("story_contract_review"),
         "story_finishing": context.get("story_finishing"),
+        "story_sequence_review": context.get("story_sequence_review"),
         "assembly": context["job"].get("assembly_decision"),
         "creative_direction": {
             "target_duration_seconds": context["job"].get("target_duration_seconds"),

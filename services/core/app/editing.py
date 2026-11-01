@@ -756,6 +756,12 @@ def _request_revision(job_id: UUID, payload: RevisionCreate,
                     status_code=404,
                     detail="a ready version with that number was not found",
                 )
+        # A later ordinary revision must not silently reverse a prior explicit
+        # removal. Restoring an earlier version inherits that chosen version.
+        if payload.effects_enabled is None:
+            payload.effects_enabled = based_on.get("effects_enabled")
+        if payload.broll_enabled is None:
+            payload.broll_enabled = based_on.get("broll_enabled")
         if not payload.note and not alternative:
             from app.duration_policy import apply_duration_snapshot
             apply_duration_snapshot(context, based_on)

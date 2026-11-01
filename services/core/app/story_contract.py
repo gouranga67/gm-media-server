@@ -23,11 +23,17 @@ def contract_for(angle: str, script: list[dict]) -> dict:
 def selected_story_contract(context: dict) -> dict | None:
     selected = context.get("selected_concept") or {}
     contract = selected.get("story_contract") or {}
-    if (
-        selected.get("reel_kind") == "bloopers"
-        or contract.get("version") != 1
-        or not selected.get("script")
-    ):
+    if not selected.get("script"):
+        return None
+    if selected.get("reel_kind") == "bloopers":
+        # Only modern, word-focused incidents have a sufficiently narrow
+        # selected script. Keep the user's chosen setup and reaction as well as
+        # the mistake; never impose an advertising story shape on an outtake.
+        if not all(beat.get("blooper_scope_version") == 1 for beat in selected["script"]):
+            return None
+        contract = contract_for(str(selected.get("angle") or selected.get("title") or "Selected recorded outtake"), selected["script"])
+        contract["policy"] = "preserve_selected_setup_incident_reaction_and_order; allow_silence_cleanup"
+    elif contract.get("version") != 1:
         return None
     return {**contract, "beats": selected["script"]}
 

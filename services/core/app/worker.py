@@ -948,6 +948,8 @@ def process_one_edit(state: WorkerState) -> bool:
                 context["job"]["selected_blooper_scope"] = scope
         if run.get("broll_enabled") is False:
             context["job"]["broll_enabled"] = False
+        if run.get("effects_enabled") is False:
+            context["job"]["effect_level"] = "off"
         if not context["ready_for_editing"]:
             raise RuntimeError("source analysis is not ready")
 
@@ -1041,6 +1043,10 @@ def process_one_edit(state: WorkerState) -> bool:
                     "caption_corrections": run.get("caption_corrections") or [],
                     "locked_elements": run.get("locked_elements") or [],
                 }
+                if run.get("revision_note") and run.get("locked_elements"):
+                    context["job"]["_revision_protection"] = {
+                        "previous": previous["document"], "locks": run["locked_elements"],
+                    }
                 context["job"]["editorial_policy"] = editing_policy({
                     **context["job"], "project_name": context["project"]["name"],
                     "brief": context["project"]["brief"] + " " + str(run.get("revision_note") or ""),
@@ -1054,10 +1060,33 @@ def process_one_edit(state: WorkerState) -> bool:
                     )
                     context["learning_preferences"] = {"directives": [], "scope": "bloopers", "hosted_model_calls": 0}
             adjustments = list(run.get("clip_adjustments") or [])
+            resolved_revision = None
+            if (run.get("based_on_run_id") and run.get("revision_note")
+                    and (run.get("revision_mode") or "targeted") == "targeted"
+                    and not run.get("alternative_kind") and not run.get("evaluation_lesson_id")
+                    and run.get("finishing_settings") is None and not adjustments):
+                from app.revision_intent import local_revision
+                resolved_revision = local_revision(context["revision"]["previous_plan"],
+                    run["revision_note"], run.get("locked_elements") or [])
+                if resolved_revision and resolved_revision[1]["scope"] in {"broll", "effects"}:
+                    scope = resolved_revision[1]["scope"]
+                    run[f"{scope}_enabled"] = False
+                    if scope == "broll":
+                        context["job"]["broll_enabled"] = False
+                    with connection() as database:
+                        database.execute("UPDATE edit_runs SET broll_enabled=CASE WHEN %s THEN false ELSE broll_enabled END, effects_enabled=CASE WHEN %s THEN false ELSE effects_enabled END WHERE id=%s",
+                            (scope == "broll", scope == "effects", run["id"]))
+                if resolved_revision and resolved_revision[1]["scope"] == "captions":
+                    run["caption_settings"] = {**(run.get("caption_settings") or {}),
+                                               "position": resolved_revision[0]["caption_position"]}
+                    with connection() as database:
+                        database.execute("UPDATE edit_runs SET caption_settings=%s WHERE id=%s",
+                            (Jsonb(run["caption_settings"]), run["id"]))
             deterministic_revision = bool(run.get("based_on_run_id")) and not run.get("revision_note")
+            deterministic_revision = deterministic_revision or resolved_revision is not None
             if deterministic_revision:
                 previous_document, _ = repair_predictable_plan_defaults(
-                    context["revision"]["previous_plan"],
+                    resolved_revision[0] if resolved_revision else context["revision"]["previous_plan"],
                     creative_direction=context["job"],
                     music_tracks=context["music_library"],
                     creative_effects=context["creative_effect_library"],
@@ -1098,7 +1127,8 @@ def process_one_edit(state: WorkerState) -> bool:
                     proposed = proposed.model_copy(update={"broll": []}, deep=True)
                 provenance = {
                     "provider": (
-                        "local_finishing"
+                        "local_revision_instruction"
+                        if resolved_revision else "local_finishing"
                         if run.get("finishing_settings") is not None
                         else "local_timeline"
                         if adjustments
@@ -1113,6 +1143,8 @@ def process_one_edit(state: WorkerState) -> bool:
                     "model": "deterministic_editor_v1",
                     "reasoning_effort": None,
                 }
+                if resolved_revision:
+                    context["revision_resolution"] = resolved_revision[1]
             else:
                 assert_ai_budget()
                 with measure_processing("model_planning") as timing:
@@ -1131,6 +1163,8 @@ def process_one_edit(state: WorkerState) -> bool:
                 proposed = type(proposed).model_validate(repaired_duration)
             if run.get("broll_enabled") is False:
                 proposed = proposed.model_copy(update={"broll": []}, deep=True)
+            if run.get("effects_enabled") is False:
+                proposed = proposed.model_copy(update={"effects": []}, deep=True)
             revision_text = str(run.get("revision_note") or "").lower()
             check_story = context["project"]["privacy_mode"] != "local_only" and not deterministic_revision and (
                 not run.get("based_on_run_id") or run.get("revision_mode") == "rebuild_story"
@@ -1147,7 +1181,7 @@ def process_one_edit(state: WorkerState) -> bool:
                     enforce_story_quality=check_story,
                 )
             except (ValueError, ValidationError) as validation_error:
-                if context["project"]["privacy_mode"] == "local_only":
+                if context["project"]["privacy_mode"] == "local_only" or deterministic_revision:
                     raise
                 repaired_document, deterministic_repairs = repair_predictable_plan_defaults(
                     proposed.model_dump(mode="json"),
@@ -1272,6 +1306,9 @@ def process_one_edit(state: WorkerState) -> bool:
 
         from app.story_contract import check_story_contract
         context["story_contract_review"] = check_story_contract(plan, context["job"].get("_selected_story_contract"), context["assets"])
+        from app.story_sequence import story_sequence_review
+        context["story_sequence_review"] = story_sequence_review(plan, context["assets"],
+            bloopers=bool((context["job"].get("editorial_policy") or {}).get("bloopers_requested")))
 
         if run.get("based_on_run_id"):
             with connection() as database:
@@ -1287,6 +1324,12 @@ def process_one_edit(state: WorkerState) -> bool:
                 )
                 context["revision_report"]["mode"] = run.get("revision_mode") or "targeted"
                 context["revision_report"]["instruction"] = run.get("revision_note") or ""
+                context["revision_report"]["execution"] = context.get("revision_resolution") or {
+                    "route": "local" if provider.startswith("local_") else "model",
+                    "scope": "explicit_tools" if not run.get("revision_note") else "editorial",
+                }
+                if run.get("revision_mode") == "rebuild_story" and not context["revision_report"].get("source_selection_changed"):
+                    context["revision_report"]["notice"] = "The story rebuild kept the same source selections and order. Other treatment changes do not establish a different story."
                 if run.get("alternative_kind"):
                     from app.alternative_edits import assess_alternative
                     context["revision_report"]["alternative"] = assess_alternative(
@@ -1442,7 +1485,7 @@ def process_one_final_export(state: WorkerState) -> bool:
         from app.duration_policy import apply_duration_snapshot
         apply_duration_snapshot(context, export)
         if isinstance(export.get("preview_manifest"), dict):
-            for key in ("story_contract_review", "story_finishing"):
+            for key in ("story_contract_review", "story_finishing", "story_sequence_review"):
                 context[key] = export["preview_manifest"].get(key)
             context["duration_repair"] = (export["preview_manifest"].get("duration_review") or {}).get("local_repair")
         render_document, _ = repair_predictable_plan_defaults(

@@ -953,6 +953,10 @@ def validate_edit_plan(
     creative_effects: list[dict[str, Any]] | None = None,
     enforce_story_quality: bool = False,
 ) -> EditPlan:
+    protection = (creative_direction or {}).get("_revision_protection")
+    if protection:
+        from app.revision_intent import assert_revision_locks
+        assert_revision_locks(document, protection["previous"], protection["locks"], assets)
     if enforce_story_quality:
         for asset in assets:
             avoided = [r for r in asset.get("source_evidence", {}).get("user_ranges", []) if r.get("role") == "avoid"]
@@ -963,7 +967,7 @@ def validate_edit_plan(
                 if any(max(a,float(r["start_seconds"])) < min(b,float(r["end_seconds"])) for r in avoided):
                     raise ValueError("new source selection overlaps a human-marked avoid range")
     if document.get("recipe") == "montage":
-        return validate_montage_plan(
+        plan = validate_montage_plan(
             document,
             assets,
             allow_post_copy=allow_post_copy,
@@ -971,6 +975,9 @@ def validate_edit_plan(
             music_tracks=music_tracks,
             creative_effects=creative_effects,
         )
+        if protection:
+            assert_revision_locks(plan.model_dump(mode="json"), protection["previous"], protection["locks"], assets)
+        return plan
     plan = protect_spoken_boundaries(TalkingHeadEditPlan.model_validate(document), assets)
     if plan.post_copy and not allow_post_copy:
         raise ValueError("AI-written post copy was not enabled for this project")
@@ -1077,6 +1084,8 @@ def validate_edit_plan(
             return validate_edit_plan(tightened_document, assets,
                 allow_post_copy=allow_post_copy, creative_direction=creative_direction,
                 music_tracks=music_tracks, creative_effects=creative_effects)
+    if protection:
+        assert_revision_locks(plan.model_dump(mode="json"), protection["previous"], protection["locks"], assets)
     return plan
 
 

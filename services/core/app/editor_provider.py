@@ -20,6 +20,7 @@ from app.edit_plan import (
     schema_for_recipe,
 )
 from app.media_analysis import resolve_source
+from app.story_sequence import add_narrative_links
 
 
 OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses"
@@ -202,6 +203,7 @@ def _public_context(context: dict[str, Any], max_characters: int) -> dict[str, A
         if key.startswith("_"):
             public.pop(key)
     public.get("job", {}).pop("_selected_story_contract", None)
+    public.get("job", {}).pop("_revision_protection", None)
     if public.get("job", {}).get("editorial_policy", {}).get("bloopers_requested"):
         public["learning_preferences"] = {"directives": [], "scope": "bloopers", "hosted_model_calls": 0}
     source_checksums: dict[str, str] = {}
@@ -351,6 +353,7 @@ def _public_context(context: dict[str, Any], max_characters: int) -> dict[str, A
     public["creative_effect_library"] = shortlist(public)
     encoded = json.dumps(public, ensure_ascii=False, separators=(",", ":"))
     if len(encoded) <= max_characters:
+        add_narrative_links(public, max_characters)
         return public
 
     # Rich moment cards repeat locally calculated scores and provenance. Under
@@ -380,6 +383,7 @@ def _public_context(context: dict[str, Any], max_characters: int) -> dict[str, A
         len(json.dumps(public, ensure_ascii=False, separators=(",", ":")))
         <= max_characters
     ):
+        add_narrative_links(public, max_characters)
         return public
 
     # Apply the same hint budget to every source, keeping the full transcripts
@@ -409,6 +413,7 @@ def _public_context(context: dict[str, Any], max_characters: int) -> dict[str, A
             len(json.dumps(public, ensure_ascii=False, separators=(",", ":")))
             <= max_characters
         ):
+            add_narrative_links(public, max_characters)
             return public
 
     # Share the remaining budget across sources and across each source's
@@ -457,6 +462,7 @@ def _public_context(context: dict[str, Any], max_characters: int) -> dict[str, A
     for asset, segments, indexes in zip(public.get("assets", []), originals, retained):
         asset["transcript_segments"] = [segments[index] for index in sorted(indexes)]
         asset["transcript_truncated"] = len(indexes) < len(segments)
+    add_narrative_links(public, max_characters)
     return public
 
 
@@ -729,6 +735,14 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
         "reveals or emphasis, whooshes for movement, and comedic sounds only for earned reactions. Respect cue limits. "
         if public.get("job", {}).get("edit_style") == "high_impact" else ""
     )
+    narrative_instruction = (
+        "Before selecting cuts, settle on one supported central point and its recorded ending. "
+        "Use existing story_role fields to express the outline; no extra outline document is needed. "
+        "narrative_links identifies possible same-source sentence continuations or references: inspect both "
+        "ranges before omitting setup. These are fallible text hints, not proof of meaning. Preserve "
+        "cause, conditions and product referents across source changes. "
+        if public.get("narrative_links") and not bloopers else ""
+    )
     music_timing_instruction = (
         "Music beat_grid_sample_only lists are start-of-track samples, not complete grids. When "
         "beat_interval_seconds is supplied, continue from the first beat up to beat_grid_end_seconds; "
@@ -748,7 +762,7 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
         if public.get("job", {}).get("effect_level", "off") != "off" else
         "Return finishing=null: creative treatments are disabled for this job. "
     )
-    finishing_instruction = music_timing_instruction + creative_tools_instruction + rhythmic_instruction + (
+    finishing_instruction = narrative_instruction + music_timing_instruction + creative_tools_instruction + rhythmic_instruction + (
         "Use broll for 0.5–4s picture-only cutaways to relevant uploaded video or image assets. Main speech continues "
         "unchanged under broll; never replace dialogue clips just to show a product close-up. Give each overlay a "
         "source-backed editorial_intent. Do not infer an object from a generic visual_window or invent relevant footage. "

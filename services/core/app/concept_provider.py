@@ -18,6 +18,8 @@ def generate_concepts(inventory: dict, privacy_mode: str, settings: Settings) ->
         "Preserve setup → stumble → real reaction/recovery within each gag; order separate gags for a satisfying ending. "
         "Do not turn ordinary speech, intentional repetition, or a correct product claim into a supposed error. "
         "Keep useful laughter and a brief earned reaction, trim empty waiting, and never pad to a target length. "
+        "In angle, explain the specific recorded setup, what goes wrong, and the recorded reaction or unresolved "
+        "ending that makes this option worth watching. A generic 'funny bloopers' description is insufficient. "
         "No invented dialogue, laugh track, new reaction or misleading splice. Return concepts=[] if no worthwhile "
         "blooper reel is actually supported, even when weak clues are present. "
         "ASR passage boundaries are not sentence boundaries. Read possible_sentence_continuation before/after hints "

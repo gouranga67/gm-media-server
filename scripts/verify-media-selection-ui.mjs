@@ -784,6 +784,20 @@ test("story review distinguishes recorded script coverage, automatic cleanup and
   assert.equal(document.body.textContent.includes("Story selection and cleanup"),false);
 });
 
+test("recorded story outline shows actual passages and timing without model work", async () => {
+  const review={version:"1.0",status:"passed",checks:[],findings:[],finding_count:0};
+  const beat={clip_index:0,role:"context",text:"Our family made this cream.",start_seconds:0,end_seconds:3.25,source_in:12,source_out:15.25,word_timed:true};
+  await act(async()=>root.render(React.createElement(RenderQualityCard,{review,storySequence:{outline:[null,{},beat],findings:["Check the setup before the source change."]}})));
+  assert.equal(document.body.textContent.includes("Recorded story outline"),true);
+  assert.equal(document.body.textContent.includes("Our family made this cream."),true);
+  assert.equal(document.body.textContent.includes("Clip 1 · 0.0–3.3s · context"),true);
+  assert.equal(document.body.textContent.includes("Source 12.0–15.3s · word-timed transcript"),true);
+  assert.equal(document.body.textContent.includes("do not prove that the story or joke works"),true);
+  assert.equal(document.body.textContent.includes("Worth reviewing"),true);
+  assert.equal(document.querySelectorAll('ol li').length,1);
+  assert.equal(calls.length,0);
+});
+
 
 test("publishing opens without side effects and posts only the saved caption after an explicit click", async () => {
   await act(async()=>root.render(React.createElement(PublishingPanel,{exportId:serverId,version:4})));
