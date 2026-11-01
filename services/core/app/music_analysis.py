@@ -7,6 +7,9 @@ from typing import Any
 
 from app.media_analysis import run_command
 
+MUSIC_ANALYSIS_VERSION = 1
+MAX_ANALYSIS_SECONDS = 180.0
+
 
 def analyze_music_beats(source: Path, duration_seconds: float, timeout: int) -> dict[str, Any]:
     """Estimate a bounded beat grid locally for cut alignment.
@@ -15,6 +18,9 @@ def analyze_music_beats(source: Path, duration_seconds: float, timeout: int) -> 
     editing hint, not a claim about the track's published BPM.
     """
 
+    if not math.isfinite(duration_seconds) or duration_seconds <= 0:
+        raise ValueError("music duration must be finite and positive")
+    limit = min(float(duration_seconds), MAX_ANALYSIS_SECONDS)
     with tempfile.TemporaryDirectory(prefix="gm-music-analysis-") as directory:
         decoded = Path(directory) / "mono.wav"
         completed = run_command(
@@ -27,6 +33,8 @@ def analyze_music_beats(source: Path, duration_seconds: float, timeout: int) -> 
                 "-y",
                 "-i",
                 str(source),
+                "-t",
+                str(limit),
                 "-vn",
                 "-ac",
                 "1",
@@ -75,7 +83,6 @@ def analyze_music_beats(source: Path, duration_seconds: float, timeout: int) -> 
     phase_window = max(1, round(beat_seconds * frames_per_second))
     phase_frame = max(range(min(phase_window, len(onsets))), key=onsets.__getitem__)
     phase_seconds = phase_frame / frames_per_second
-    limit = min(float(duration_seconds), 180.0)
     beats: list[float] = []
     beat = phase_seconds
     while beat <= limit + 0.001:

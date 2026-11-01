@@ -113,14 +113,14 @@ if offsite["configured"]:
         loaded = json.loads(Path(offsite_path).read_text(encoding="utf-8"))
         offsite.update(loaded)
         offsite["configured"] = True
-        completed = loaded.get("completed_at")
+        completed = loaded.get("last_verified_at") or loaded.get("completed_at")
         if completed:
             completed_at = datetime.fromisoformat(str(completed).replace("Z", "+00:00"))
             age = max(0.0, (now - completed_at).total_seconds() / 3600)
             offsite["age_hours"] = round(age, 1)
-            if loaded.get("state") == "ready" and age > 36:
+            if loaded.get("state") in {"ready", "attention"} and age > 36:
                 offsite["state"] = "stale"
-                offsite["message"] = "The newest verified OneDrive copy is more than 36 hours old."
+                offsite["message"] = "The newest file-size-checked OneDrive copy is more than 36 hours old."
     except (OSError, ValueError, TypeError, json.JSONDecodeError):
         pass
 if not Path(reboot_pending_path).is_file():

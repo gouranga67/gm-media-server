@@ -89,6 +89,16 @@ class ApprovedMusicTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(_parser().parse_args(args).ai_generated_music)
         self.assertTrue(_parser().parse_args([*args, "--ai-generated-music"]).ai_generated_music)
 
+    def test_system_capability_reports_approved_music_exception(self):
+        from app.main import system_information
+        with patch("app.main.get_settings", return_value=SimpleNamespace(app_env="test")), \
+             patch("app.main.deployed_build_id", return_value="fixture"):
+            policy = system_information()["content_policy"]
+        self.assertTrue(policy["synthetic_music"])
+        self.assertTrue(policy["synthetic_music_requires_explicit_approval"])
+        for kind in ("synthetic_image", "synthetic_video", "synthetic_voice"):
+            self.assertFalse(policy[kind])
+
     def test_montage_manifest_reports_ai_music_truthfully_without_changing_footage_policy(self):
         identity, track = uuid4(), uuid4()
         plan = MontageEditPlan(

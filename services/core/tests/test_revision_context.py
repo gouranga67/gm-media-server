@@ -193,6 +193,36 @@ class RevisionContextTests(unittest.TestCase):
         self.assertEqual(public["learning_preferences"], context["learning_preferences"])
         self.assertIn("Keep complete phrases.", prompt)
 
+    def test_large_music_grids_compact_without_removing_choices_or_source_evidence(self):
+        context = self.context()
+        context["job"]["music_mode"] = "present"
+        context["music_library"] = [
+            {"track_id": str(index), "title": f"Track {index}", "bpm": 120,
+             "beat_grid_seconds": [round(0.125 + beat * 0.5, 3) for beat in range(360)]}
+            for index in range(24)
+        ]
+        original = deepcopy(context)
+        public = _public_context(context, 120_000)
+        self.assertEqual(context, original)
+        self.assertEqual([t["track_id"] for t in public["music_library"]], [str(n) for n in range(24)])
+        for track in public["music_library"]:
+            self.assertEqual(track["beat_grid_seconds"], original["music_library"][0]["beat_grid_seconds"][:8])
+            self.assertTrue(track["beat_grid_sample_only"])
+            self.assertEqual(track["beat_interval_seconds"], 0.5)
+            self.assertEqual(track["beat_grid_end_seconds"], 179.625)
+        self.assertEqual(public["assets"], _public_context(self.context(), 120_000)["assets"])
+        before = len(json.dumps(context["music_library"]))
+        after = len(json.dumps(public["music_library"]))
+        self.assertLess(after, before * 0.2)
+
+    def test_irregular_music_grid_is_labelled_as_sample_without_inventing_a_period(self):
+        context = self.context()
+        context["job"]["music_mode"] = "subtle"
+        context["music_library"] = [{"track_id": "one", "beat_grid_seconds": list(range(10)) + [11.5]}]
+        track = _public_context(context, 120_000)["music_library"][0]
+        self.assertTrue(track["beat_grid_sample_only"])
+        self.assertNotIn("beat_interval_seconds", track)
+
     def test_summary_changes_do_not_count_as_edit_changes(self):
         before = {"clips": [{"asset_id": "one", "source_in": 0, "source_out": 4}],
                   "editorial_summary": "Original", "schema_version": "1.2"}

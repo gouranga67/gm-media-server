@@ -1,8 +1,20 @@
 # Build phases and live status
 
-Updated: 2026-10-26 (Australia/Brisbane)
+Updated: 2026-11-01 (Australia/Brisbane)
 
 This is the working plan for turning the Lenovo into a private media-editing appliance. A phase is complete only when its exit checks pass. Discussion, generated files, and installed packages do not count as a completed phase by themselves.
+
+## Reliability and efficiency sprint — source checkpoint
+
+Implemented on 2026-11-01, pending root-managed deployment and live acceptance:
+
+- Migration 039 preserves existing music grids and adds durable background claims, bounded attempts, retry delays and expired-lease recovery. One idle-turn music task replaces the startup batch; decoding is capped at three minutes and does not disable playback when beat analysis fails.
+- The planner retains every eligible track and all source dialogue. Regular music grids are represented by eight sample timestamps, phase/interval and analyzed extent. Complete server-side context, rights validation and render grids remain unchanged. A read-only comparison using the current 24-track catalogue reduced the music JSON from 44,184 to 10,737 characters (75.7%); this is not a measurement of total token or cost reduction, or a subjective quality comparison.
+- OneDrive upload, file-size comparison and retention have separate states. Filtered deletion leaves directories intact and protects recent UTC displacement buckets as well as recently modified files. Maintenance warnings remain visible without misreporting a successfully matched upload as a failed transfer. The last file-size-match time survives later failures; preflight failures and interruptions are recorded. This does not replace a restore drill.
+- Bounded timing history survives worker restarts and merges concurrent writers. Only approved diagnostic fields are stored, and failed work is excluded from successful-task timing percentiles.
+- System capability reporting acknowledges explicitly approved AI-labelled library music. Image, video and voice generation remain disabled. The live suite now checks the database migration checkpoint rather than only an old migration container's exit status.
+
+Verification passed: 478 backend tests with no skips, including real CPU FFmpeg renders and disposable local retention tests using rclone 1.75.2; 46 web interaction tests; TypeScript, production build, Compose configuration and public-release audit; isolated execution of all 39 migrations and the actual music claim/completion/failure SQL. Live NVENC playback, a post-startup music import and OneDrive maintenance still need the owner's sudo-authenticated deployment environment. No hosted editing request, real social post or production backup deletion was performed during these checks. Shared retrieval changes, natural-language revision routing, story improvements and the evaluated learning loop remain subsequent work; this checkpoint does not mark those phases complete.
 
 ## Status at a glance
 

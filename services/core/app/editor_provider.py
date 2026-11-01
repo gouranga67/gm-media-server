@@ -1,5 +1,6 @@
 import base64
 import json
+import math
 import os
 import time
 import urllib.error
@@ -314,6 +315,24 @@ def _public_context(context: dict[str, Any], max_characters: int) -> dict[str, A
                     "attribution",
                 }:
                     del item[key]
+    # Keep every eligible track and every story/source choice. A regular beat
+    # grid can be described by its phase and interval instead of hundreds of
+    # timestamps per track. Full grids remain in the untouched render context.
+    for track in public.get("music_library", []):
+        beats = track.get("beat_grid_seconds")
+        if not isinstance(beats, list) or len(beats) <= 8:
+            continue
+        track["beat_grid_seconds"] = beats[:8]
+        track["beat_grid_sample_only"] = True
+        if all(isinstance(beat, (int, float)) and not isinstance(beat, bool)
+               and math.isfinite(beat) for beat in beats):
+            interval = (beats[-1] - beats[0]) / (len(beats) - 1)
+            if interval > 0 and all(
+                abs(beat - (beats[0] + index * interval)) <= 0.002
+                for index, beat in enumerate(beats)
+            ):
+                track["beat_interval_seconds"] = round(interval, 6)
+                track["beat_grid_end_seconds"] = beats[-1]
     direction = public.get("job") or {}
     if direction.get("music_mode") == "none":
         public["music_library"] = []
@@ -710,6 +729,11 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
         "reveals or emphasis, whooshes for movement, and comedic sounds only for earned reactions. Respect cue limits. "
         if public.get("job", {}).get("edit_style") == "high_impact" else ""
     )
+    music_timing_instruction = (
+        "Music beat_grid_sample_only lists are start-of-track samples, not complete grids. When "
+        "beat_interval_seconds is supplied, continue from the first beat up to beat_grid_end_seconds; "
+        "account for any finishing.music_start_seconds offset. "
+    ) if any(track.get("beat_grid_sample_only") for track in public.get("music_library", [])) else ""
     creative_tools_instruction = (
         "Creative treatments are optional finishing.callouts, finishing.pointers and finishing.music_regions. "
         "Return finishing=null when unused. A callout is up to 64 plain-text characters: use a short source-backed "
@@ -724,7 +748,7 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
         if public.get("job", {}).get("effect_level", "off") != "off" else
         "Return finishing=null: creative treatments are disabled for this job. "
     )
-    finishing_instruction = creative_tools_instruction + rhythmic_instruction + (
+    finishing_instruction = music_timing_instruction + creative_tools_instruction + rhythmic_instruction + (
         "Use broll for 0.5–4s picture-only cutaways to relevant uploaded video or image assets. Main speech continues "
         "unchanged under broll; never replace dialogue clips just to show a product close-up. Give each overlay a "
         "source-backed editorial_intent. Do not infer an object from a generic visual_window or invent relevant footage. "

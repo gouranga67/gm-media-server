@@ -105,6 +105,69 @@ class EfficiencyTests(unittest.TestCase):
                 performance_snapshot(root)["events"][-1]["status"], "failed"
             )
 
+    def test_history_survives_fresh_process_and_does_not_mix_media_roots(self):
+        import os
+        import subprocess
+        import sys
+        with tempfile.TemporaryDirectory() as directory, tempfile.TemporaryDirectory() as other:
+            root = Path(directory)
+            with measure_task("preview", root) as event:
+                event["did_work"] = True
+            subprocess.run([sys.executable, "-c",
+                "from pathlib import Path; import sys; from app.runtime_metrics import measure_task; "
+                "\nwith measure_task('export', Path(sys.argv[1])) as event: event['did_work'] = True",
+                directory], check=True, env=os.environ.copy())
+            self.assertEqual([e["stage"] for e in performance_snapshot(root)["events"]], ["preview", "export"])
+            with measure_task("ingest", Path(other)) as event:
+                event["did_work"] = True
+            self.assertEqual(len(performance_snapshot(Path(other))["events"]), 1)
+
+    def test_corrupt_history_recovers_and_event_payloads_are_allowlisted(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / "analysis" / "runtime" / "worker.json"
+            path.parent.mkdir(parents=True)
+            path.write_text('{broken')
+            with measure_task("preview", root) as event:
+                event.update(did_work=True, prompt="private brief", command_output="private command")
+            report = performance_snapshot(root)
+            self.assertEqual(len(report["events"]), 1)
+            self.assertNotIn("private", json.dumps(report))
+
+    def test_concurrent_measurements_preserve_both_writers(self):
+        from concurrent.futures import ThreadPoolExecutor
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            def record(index):
+                with measure_task(f"task_{index}", root) as event:
+                    event["did_work"] = True
+            with ThreadPoolExecutor(max_workers=4) as pool:
+                list(pool.map(record, range(12)))
+            self.assertEqual(len(performance_snapshot(root)["events"]), 12)
+
+    def test_diagnostics_write_failure_does_not_fail_a_successful_task(self):
+        with tempfile.TemporaryDirectory() as directory:
+            with patch("app.runtime_metrics.os.replace", side_effect=OSError("unavailable")):
+                with measure_task("preview", Path(directory)) as event:
+                    event["did_work"] = True
+            self.assertEqual(list((Path(directory) / "analysis" / "runtime").glob(".worker-*")), [])
+
+    def test_idle_worker_analyzes_one_music_track_before_visual_backfill(self):
+        tasks = ["finalize_one_upload", "catalog_one_asset", "process_one_edit", "process_one_final_export",
+                 "process_one_delivery_variant", "process_one_concept", "process_one_organization",
+                 "process_one_post", "process_one_caption", "analyze_one_asset"]
+        with tempfile.TemporaryDirectory() as directory:
+            mocks = {name: Mock(return_value=False) for name in tasks}
+            mocks.update({name: Mock() for name in ["seed_pending_ingests", "seed_pending_catalogs",
+                "recover_interrupted_concepts", "recover_interrupted_organization", "recover_interrupted_publishing",
+                "seed_pending_visual_indexes", "index_one_asset_visually"]})
+            mocks["get_settings"] = Mock(return_value=SimpleNamespace(media_root=Path(directory)))
+            mocks["process_one_music_track"] = Mock(return_value=True)
+            with patch.multiple(worker, **mocks):
+                self.assertTrue(worker.run_work_cycle(worker.WorkerState()))
+            mocks["process_one_music_track"].assert_called_once()
+            mocks["index_one_asset_visually"].assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

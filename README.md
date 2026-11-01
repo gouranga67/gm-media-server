@@ -168,9 +168,15 @@ Example metadata shape:
 
 Importing confirms only what you record; it does not independently grant or verify rights. Tracks remain unavailable to the agent unless they are active, marked for commercial use, compatible with the job's selected platform, and either non-synthetic or explicitly approved AI-generated music.
 
+Music beat analysis runs locally in idle worker turns, one track at a time, without a restart. Decoding is limited to the first three minutes. Interrupted work is reclaimed and failed analysis receives up to three attempts with a retry delay; a missing beat grid does not disable an otherwise eligible track. The music API reports the analysis state separately from playback eligibility.
+
+The editor still receives every eligible music choice. Large beat grids are represented by a small sample and, for regular grids, their interval and extent. Complete grids, original media, source dialogue, and rights records remain on the server for validation and rendering.
+
 ## Recovery operations
 
-The production appliance uses two copies of the same encrypted Restic repository: the prepared USB at `/mnt/gm-backup` and a verified mirror in OneDrive. The OneDrive side contains encrypted repository objects, not directly playable media. Private web access is restricted to the configured Tailscale owner, and `/system` reports the USB snapshot, off-site mirror, queues, storage, GPU, and reboot-recovery state.
+The production appliance uses two copies of the same encrypted Restic repository: the prepared USB at `/mnt/gm-backup` and a file-size-checked mirror in OneDrive. The OneDrive side contains encrypted repository objects, not directly playable media. Private web access is restricted to the configured Tailscale owner, and `/system` reports the USB snapshot, off-site mirror, queues, storage, GPU, and reboot-recovery state.
+
+OneDrive status separates upload, file-size comparison, and old-history maintenance. `attention` means the current upload matched but maintenance failed; it remains visible as a health alert. Transfer or comparison failures still fail the service and retain the previous match timestamp. History maintenance protects the most recent 90 days of dated displacement folders, deletes only older files in older history, and leaves directories intact. A file-size comparison is not a full restore drill. The latest 240 processing measurements survive worker restarts; timing statistics exclude failed tasks, queue waits, and hosted-model billing.
 
 The one-time and destructive acceptance steps are documented in [the testing plan](docs/testing-plan.md). In order, configure private access, enroll/import OneDrive, then run the deliberate reboot recovery drill. Never paste the Restic recovery key or the temporary rclone configuration into chat, email, logs, or the repository.
 

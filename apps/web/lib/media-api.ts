@@ -268,6 +268,10 @@ export type MusicTrack = {
   readonly energy: "low" | "medium" | "high";
   readonly bpm: number | null;
   readonly beat_grid_seconds: readonly number[];
+  readonly beat_analysis_status?: "pending" | "running" | "ready" | "failed";
+  readonly beat_analysis_version?: number;
+  readonly beat_analysis_attempts?: number;
+  readonly beat_analysis_next_attempt_at?: string | null;
   readonly license_name: string;
   readonly license_source_url: string;
   readonly allowed_platforms: readonly TargetPlatform[];
@@ -626,12 +630,16 @@ export type ApplianceHealth = {
     readonly age_hours: number | null;
   };
   readonly offsite_backup?: {
-    readonly state: "ready" | "running" | "failed" | "stale" | "missing" | "not_configured";
+    readonly state: "ready" | "running" | "attention" | "failed" | "stale" | "missing" | "not_configured";
     readonly message: string;
     readonly configured: boolean;
     readonly started_at?: string | null;
     readonly completed_at?: string | null;
     readonly age_hours: number | null;
+    readonly stage?: string;
+    readonly stages?: Readonly<Record<string, string>>;
+    readonly verification_method?: string;
+    readonly last_verified_at?: string | null;
   };
   readonly reboot_recovery?: {
     readonly status: "passed" | "failed" | "running" | "not_run";

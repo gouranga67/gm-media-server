@@ -37,7 +37,7 @@ from app.productization import assert_ai_budget
 from app.story_intelligence import STORY_INTELLIGENCE_VERSION, build_story_moments, build_story_assessment
 from app.take_quality import editing_policy
 from app.montage_renderer import render_montage_delivery, render_montage_preview
-from app.music_analysis import analyze_music_beats
+from app.music_jobs import process_one_music_track
 from app.revision_report import compare_revision
 from app.broll_evidence import guard_broll
 from app.visual_index import (
@@ -64,6 +64,7 @@ class WorkerState:
     active_edit_run_id: str | None = None
     active_final_export_id: str | None = None
     active_delivery_variant_id: str | None = None
+    active_music_track_id: str | None = None
 
 
 def claim_pending_upload() -> dict[str, Any] | None:
@@ -1745,42 +1746,6 @@ def refresh_editor_model_catalog() -> int:
     return len(models)
 
 
-def analyze_pending_music_tracks() -> int:
-    settings = get_settings()
-    with connection() as database:
-        rows = database.execute(
-            """
-            SELECT id, storage_key, duration_seconds
-            FROM music_tracks
-            WHERE active = true
-              AND (bpm IS NULL OR jsonb_array_length(beat_grid_seconds) = 0)
-            ORDER BY created_at
-            """
-        ).fetchall()
-    completed = 0
-    for row in rows:
-        try:
-            source = resolve_source(settings.media_root, str(row["storage_key"]))
-            analysis = analyze_music_beats(
-                source,
-                float(row["duration_seconds"]),
-                settings.analysis_command_timeout_seconds,
-            )
-            with connection() as database:
-                database.execute(
-                    """
-                    UPDATE music_tracks
-                    SET bpm = %s, beat_grid_seconds = %s, updated_at = now()
-                    WHERE id = %s
-                    """,
-                    (analysis["bpm"], Jsonb(analysis["beat_grid_seconds"]), row["id"]),
-                )
-            completed += 1
-        except Exception as error:
-            print(f"music beat analysis deferred for {row['id']}: {error}", flush=True)
-    return completed
-
-
 def heartbeat_loop(state: WorkerState, stop_event: threading.Event) -> None:
     settings = get_settings()
     client = Redis.from_url(settings.redis_url, decode_responses=True)
@@ -1808,6 +1773,8 @@ def heartbeat_loop(state: WorkerState, stop_event: threading.Event) -> None:
                 if state.active_publishing_post_id
                 else "writing-post-copy"
                 if state.active_publishing_caption_id
+                else "analyzing-music"
+                if state.active_music_track_id
                 else "idle"
             )
             client.set(
@@ -1826,6 +1793,7 @@ def heartbeat_loop(state: WorkerState, stop_event: threading.Event) -> None:
                         "edit_run_id": state.active_edit_run_id,
                         "final_export_id": state.active_final_export_id,
                         "delivery_variant_id": state.active_delivery_variant_id,
+                        "music_track_id": state.active_music_track_id,
                     }
                 ),
                 ex=settings.worker_heartbeat_ttl_seconds,
@@ -1971,6 +1939,12 @@ def run_work_cycle(state: WorkerState) -> bool:
         with measure_task(name, root) as event:
             event["did_work"] = bool(task(state))
             worked = event["did_work"] or worked
+    # Optional beat analysis and indexing run only after an otherwise idle turn.
+    # Each import is durably claimed/retried without holding up worker startup.
+    if not worked and not state.stopping:
+        with measure_task("music_analysis", root) as event:
+            event["did_work"] = bool(process_one_music_track(state))
+            worked = event["did_work"]
     # Index only after an otherwise idle turn. Required ingest gets a turn
     # even when previews are queued; background work cannot drain ahead of it.
     if not worked and not state.stopping:
@@ -2024,9 +1998,6 @@ def main() -> None:
         print(f"refreshed ChatGPT model catalogue: {model_count} models", flush=True)
     except Exception as error:
         print(f"ChatGPT model catalogue refresh deferred: {error}", flush=True)
-    music_count = analyze_pending_music_tracks()
-    if music_count:
-        print(f"analyzed music beat grids: {music_count}", flush=True)
     next_model_refresh = time.monotonic() + settings.editor_model_refresh_seconds
     print("worker ready", flush=True)
     while not state.stopping:

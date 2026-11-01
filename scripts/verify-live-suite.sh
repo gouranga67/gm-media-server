@@ -61,7 +61,9 @@ run_check() {
 }
 
 check_migration_runner() {
-  local container_id state
+  local container_id state installed latest
+  local migration_paths=(services/core/migrations/*.sql)
+  latest=$(basename "${migration_paths[-1]}")
   container_id=$(timeout --foreground --kill-after=2s 10s \
     docker compose ps -aq migrate) || return $?
   if [[ -z "$container_id" ]]; then
@@ -71,11 +73,18 @@ check_migration_runner() {
   state=$(timeout --foreground --kill-after=2s 10s \
     docker inspect --format '{{.State.Status}} {{.State.ExitCode}}' "$container_id") || return $?
   printf 'Migration runner state: %s\n' "$state"
-  [[ "$state" == "exited 0" ]]
+  [[ "$state" == "exited 0" ]] || return 1
+  # A successful old migration container alone does not prove that a new
+  # release's schema was installed. Check the database's actual checkpoint.
+  installed=$(timeout --foreground --kill-after=2s 10s \
+    docker compose exec -T postgres sh -c \
+      'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Atc "SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1"') || return $?
+  printf 'Latest installed migration: %s (expected %s)\n' "$installed" "$latest"
+  [[ "$installed" == "$latest" ]]
 }
 
 run_check "Service and container health" timeout --foreground --kill-after=10s 120s ./scripts/verify-phase2.sh
-run_check "Database migrations through 038" check_migration_runner
+run_check "Database migration checkpoint" check_migration_runner
 run_check "Brief-first assembly readiness" timeout --foreground --kill-after=10s 120s python3 scripts/verify-brief-first.py
 run_check "Continuous studio sprint readiness (19–25)" timeout --foreground --kill-after=10s 120s python3 scripts/verify-phase19-25.py
 run_check "Backend unit and local render tests" timeout --foreground --kill-after=10s 300s docker compose run --rm --no-deps \

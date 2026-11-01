@@ -197,7 +197,8 @@ def list_music_tracks(active: bool | None = Query(default=True)) -> list[dict[st
         rows = database.execute(
             f"""
             SELECT id, title, artist, duration_seconds, mood, energy, bpm,
-                   beat_grid_seconds,
+                   beat_grid_seconds, beat_analysis_status, beat_analysis_version,
+                   beat_analysis_attempts, beat_analysis_next_attempt_at,
                    license_name, license_source_url, allowed_platforms,
                    attribution, synthetic_media, synthetic_music_approved, active, created_at
             FROM music_tracks

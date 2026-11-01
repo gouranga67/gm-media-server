@@ -104,7 +104,8 @@ def system_information() -> dict[str, Any]:
             "synthetic_image": False,
             "synthetic_video": False,
             "synthetic_voice": False,
-            "synthetic_music": False,
+            "synthetic_music": True,
+            "synthetic_music_requires_explicit_approval": True,
         },
     }
 

@@ -1,8 +1,24 @@
 # GM Studio testing phase
 
-Updated: 2026-10-27 (Australia/Brisbane)
+Updated: 2026-11-01 (Australia/Brisbane)
 
 The testing phase is layered so a cheap failure is found before a GPU render or hosted editor request is started. A failed lane stops promotion, but the runner continues its remaining checks so one run produces a useful defect list.
+
+## Reliability and efficiency sprint acceptance (migration 039)
+
+Source verification passed 478 backend tests with real CPU FFmpeg and no skips, 46 browser interaction tests, TypeScript, production build, public-release audit and Compose validation. An isolated PostgreSQL engine applied all 39 migrations and exercised actual queue SQL: existing grids survive, new imports are claimed, failures back off, interrupted work is reclaimed, obsolete claim completion is rejected and final attempts stop retrying. Temporary test dependencies were unpacked outside the repository; no system packages or live container state were changed.
+
+The off-site tests run the actual shell pipeline and JSON writer against a fake transport. They cover transfer/comparison failure, missing history, retention-only warnings and preservation of the previous match timestamp. With rclone installed (or `GM_TEST_RCLONE` set to its executable path), an additional disposable local transport test proves that a newly displaced object with an old modification time survives, recent history buckets remain, old eligible history files are deleted and current repository files are retained. This never contacts OneDrive. These checks do not establish remote availability or a successful restore.
+
+After deployment:
+
+1. Run the core live suite. Its migration check must report `039_background_music_analysis.sql` from the database, not merely a migration container with exit code zero.
+2. Import one new rights-recorded music track after the worker is already running. Allow an idle turn; `music-tracks` should report beat analysis moving from pending to ready without a restart. Tracks with failed optional analysis remain otherwise eligible, and repeat failures must stop after three attempts.
+3. Run the existing off-site service and refresh System health. Upload, file-size comparison and history maintenance should report separately. Investigate `attention` warnings even when the copy matched; use the separately documented restore drill to establish recoverability.
+4. Make an ordinary music-enabled edit and check story, words, music selection, timing, captions and colour against a known good result. The compact music context retained all 24 choices and full render data, but subjective edit quality and total token savings require this real-footage comparison.
+5. After processing a task, redeploy once and confirm recent timing samples remain. Samples are bounded to 240 and exclude queue wait, billing and failed-task durations from successful-task percentiles.
+
+The learning loop, new story-selection behaviour and natural-language revision routing are not changed by this sprint. Do not treat passing technical checks as acceptance of those later phases.
 
 For real-footage testing of the deployed features, use the [hands-on user checklist](user-acceptance-checklist.md). It starts with eight priority checks, then covers source selection, bloopers, library management, precise edits, finishing, phone delivery, learning and appliance behaviour. The [brief-first editing proposal](brief-led-editing-plan.md) describes the next recipe/form change; it is not yet implemented.
 

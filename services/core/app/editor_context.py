@@ -315,7 +315,8 @@ def build_editor_context(
             "synthetic_image": False,
             "synthetic_video": False,
             "synthetic_voice": False,
-            "synthetic_music": False,
+            "synthetic_music": any(track["synthetic_media"] for track in music_library),
+            "synthetic_music_requires_explicit_approval": True,
         },
     }
 

@@ -585,6 +585,10 @@ class MusicTrackResponse(BaseModel):
     energy: str
     bpm: float | None = None
     beat_grid_seconds: list[float] = Field(default_factory=list)
+    beat_analysis_status: Literal["pending", "running", "ready", "failed"] = "pending"
+    beat_analysis_version: int = 0
+    beat_analysis_attempts: int = 0
+    beat_analysis_next_attempt_at: datetime | None = None
     license_name: str
     license_source_url: str
     allowed_platforms: list[str] = Field(default_factory=list)
