@@ -65,8 +65,10 @@ const { AlternativeVersions } = require(path.join(repo, "apps/web/app/_component
 const { MetaConnectResult } = require(path.join(repo, "apps/web/app/_components/meta-connect-result.tsx"));
 const { JobDurationSettings } = require(path.join(repo, "apps/web/app/_components/job-duration-settings.tsx"));
 const { JobPreview } = require(path.join(repo, "apps/web/app/_components/job-preview.tsx"));
+const { JobReviewControls } = require(path.join(repo, "apps/web/app/_components/job-review-controls.tsx"));
 const { EditProgress } = require(path.join(repo, "apps/web/app/_components/edit-progress.tsx"));
 const { RenderQualityCard } = require(path.join(repo, "apps/web/app/_components/render-quality-card.tsx"));
+const { TreatmentTimeline } = require(path.join(repo, "apps/web/app/_components/treatment-timeline.tsx"));
 const { AssemblyReadiness } = require(path.join(repo, "apps/web/app/_components/assembly-readiness.tsx"));
 const { NewJobForm } = require(path.join(repo, "apps/web/app/_components/new-job-form.tsx"));
 const { ConceptDesk } = require(path.join(repo, "apps/web/app/_components/concept-desk.tsx"));
@@ -816,6 +818,52 @@ test("recorded story outline shows actual passages and timing without model work
   assert.equal(calls.length,0);
 });
 
+
+test("treatment review filters saved cues and seeks only after an explicit jump", async () => {
+  const seeks=[];
+  const framing={kind:"framing",label:"Camera anchor",start:2.5,end:4,detail:"A planned move, not tracking.",clip_index:0};
+  const captions={kind:"captions",label:"Upper captions",start:5,end:7,detail:"Saved caption region."};
+  await act(async()=>root.render(React.createElement(TreatmentTimeline,{report:{events:[null,{},framing,captions,{...framing,start:NaN}],event_count:2},onSeek:seconds=>seeks.push(seconds)})));
+  assert.equal(document.querySelectorAll('ol li').length,2);
+  assert.deepEqual(seeks,[]);
+  assert.equal(calls.length,0);
+  const filter=document.querySelector('select[aria-label="Treatment kind"]');
+  await act(async()=>{filter.value="captions";filter.dispatchEvent(new window.Event("change",{bubbles:true}));});
+  assert.equal(document.querySelectorAll('ol li').length,1);
+  assert.equal(document.body.textContent.includes("Upper captions"),true);
+  assert.deepEqual(seeks,[]);
+  await click(button("5.0–7.0s · Jump in preview"));
+  assert.deepEqual(seeks,[5]);
+  assert.equal(calls.length,0);
+  await act(async()=>root.render(React.createElement(TreatmentTimeline,{report:{events:[framing]}})));
+  assert.equal(document.querySelectorAll('ol li').length,1);
+  assert.equal(document.body.textContent.includes("Camera anchor"),true);
+  assert.equal(document.querySelector('select').value,"all");
+  assert.equal(document.querySelectorAll('button').length,0);
+});
+
+test("legacy previews need no treatment report", async () => {
+  await act(async()=>root.render(React.createElement(TreatmentTimeline,{report:undefined})));
+  assert.equal(document.body.textContent,"");
+  assert.equal(calls.length,0);
+});
+
+test("review recognises generated graphics and removes them only on request", async () => {
+  let updates=0;
+  const run={id:"ready",version:2,status:"ready",caption_settings:{},manifest:{
+    finishing:{local_tools:{callouts:[{text:"A recorded label"}],pointers:[]}},
+  }};
+  await act(async()=>root.render(React.createElement(JobReviewControls,{jobId,run,finalExport:null,
+    outputAspect:"vertical",recipe:"talking_head",targetDuration:30,deliveryVariants:[],editorialTimeline:[],
+    initialCoverTime:0,initialFeedback:null,onUpdated:()=>{updates+=1;}})));
+  assert.equal(document.body.textContent.includes("1 text labels/pointers"),true);
+  assert.equal(document.body.textContent.includes("uses no library sound/graphic cues"),false);
+  assert.equal(posts("revisions").length,0);
+  await click(button("Remove sounds & graphics · zero AI"));
+  assert.equal(posts("revisions").length,1);
+  assert.equal(posts("revisions")[0].body.effects_enabled,false);
+  assert.equal(updates,1);
+});
 
 test("publishing opens without side effects and posts only the saved caption after an explicit click", async () => {
   await act(async()=>root.render(React.createElement(PublishingPanel,{exportId:serverId,version:4})));

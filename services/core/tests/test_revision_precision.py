@@ -5,6 +5,7 @@ from uuid import uuid4
 
 from app import worker
 from app.edit_plan import TalkingHeadEditPlan, validate_edit_plan
+from app.finishing_tools import FinishingTools
 from app.revision_intent import assert_revision_locks, local_revision
 from app.revision_report import compare_revision
 
@@ -171,9 +172,13 @@ class RevisionPrecisionTests(unittest.TestCase):
                 self.assertEqual([(c.source_in,c.source_out) for c in actual.clips], [(1,4),(5,8)])
 
     def test_worker_remembers_removals_and_reports_a_model_noop_without_another_request(self):
-        plan, asset = fixture()
         for note in ("Remove effects", "Remove B-roll", "Make the explanation clearer"):
             with self.subTest(note=note):
+                plan, asset = fixture()
+                if note == "Remove effects":
+                    plan.finishing = FinishingTools(callouts=[dict(start=0,end=1,text="A recorded label")],
+                        motions=[dict(clip_index=0,points=[dict(time=0),dict(time=3,zoom=1.1)])],
+                        caption_regions=[dict(start=0,end=2,position="upper")])
                 run = dict(id=str(uuid4()),job_id=str(uuid4()),version=2,edit_plan_id=None,
                     based_on_run_id=str(uuid4()),revision_note=note)
                 context = dict(ready_for_editing=True,project=dict(name="Fixture",brief="Explain the recording.",
@@ -196,6 +201,11 @@ class RevisionPrecisionTests(unittest.TestCase):
                     key="effects_enabled" if note.endswith("effects") else "broll_enabled"
                     self.assertIs(run[key],False)
                     self.assertTrue(any("UPDATE edit_runs SET broll_enabled=CASE" in c.args[0] for c in database.execute.call_args_list))
+                    if note == "Remove effects":
+                        actual = renderer.call_args.args[1]
+                        self.assertEqual(actual.finishing.callouts, [])
+                        self.assertEqual(actual.finishing.motions, plan.finishing.motions)
+                        self.assertEqual(actual.finishing.caption_regions, plan.finishing.caption_regions)
                 else:
                     planner.assert_called_once()
                     budget.assert_called_once()

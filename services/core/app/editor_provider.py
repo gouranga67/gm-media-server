@@ -718,7 +718,9 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
             "For energetic edits, split around "
             "genuine emphasis beats identified in the source evidence, alternate standard framing with restrained "
             "punch-ins, keep complete phrases intact, and include a "
-            "transition beat when the edit is at least 20 seconds. For clean edits, favor stable framing. For "
+            "transition beat at an existing boundary when the multi-clip edit is at least 20 seconds. Prefer a short "
+            "cross_dissolve when a soft picture transition helps; do not force a dip to black or split speech for decoration. "
+            "For clean edits, favor stable framing. For "
             "calm edits, favor longer clips and slow moves. Select music only from music_library and only when "
             "job.music_mode requests it; otherwise return no music. Use creative_effect_library only when "
             "job.effect_level is enabled. Every effect must support a real hook, transition, emphasis, reveal, "
@@ -748,19 +750,31 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
         "beat_interval_seconds is supplied, continue from the first beat up to beat_grid_end_seconds; "
         "account for any finishing.music_start_seconds offset. "
     ) if any(track.get("beat_grid_sample_only") for track in public.get("music_library", [])) else ""
-    creative_tools_instruction = (
+    camera_caption_instruction = (
+        "Use finishing.motions for anchored camera moves and finishing.caption_regions for timed caption placement when useful. "
+        "Prefer at most four camera moves and eight caption regions in a fresh edit; leave the arrays empty when unused. "
+        "Motion points use clip-relative time, start at zero, and must stay inside that clip; zoom is 1–1.35 and x/y are normalized crop anchors. "
+        "Use visual evidence for off-center anchors; these are fixed/animated coordinates, not automatic subject tracking. "
+        "Choose either a visual_preset or a finishing motion for a clip, never both. Keep reaction/intentional holds stable. "
+        "Caption regions use final-reel seconds and upper/middle/lower_safe bands; move them only for a specific readability need, "
+        "and use hidden only when the user explicitly asks. Never hide words merely to fit a decorative callout. "
+        "Return finishing=null when none of its tools are used. "
+    )
+    creative_tools_instruction = camera_caption_instruction + (
         "Creative treatments are optional finishing.callouts, finishing.pointers and finishing.music_regions. "
-        "Return finishing=null when unused. A callout is up to 64 plain-text characters: use a short source-backed "
+        "A callout is up to 64 plain-text characters: use a short source-backed "
         "phrase, a faithful thought label, or a list counter only when its number is supported. Never invent facts, "
         "quotes, attempt counts or product claims. Place callouts above dialogue captions and away from faces/products. "
         "Pointers are fixed arrows/circles at normalized frame coordinates: use only if the shown object location is clear; "
         "they do not track moving objects. Music regions briefly reduce/mute only the selected music, then restore it, "
         "for a real reaction; never mute or stretch dialogue. Use sparingly around evidence-backed moments, not to meet a quota. "
         "An audio and visual effect may share a beat within 50ms; both count towards the effect limit. "
+        "Library effects, callouts, pointers and music regions share that limit; camera moves and caption placement are separate. "
         "Respect use_when/avoid_when and energy. Keep effects shorter than important speech; do not reuse one gag throughout a reel. "
         "Do not fabricate laughter or reactions. Use existing silent picture-layer freeze/reaction tools only when a user requests them. "
         if public.get("job", {}).get("effect_level", "off") != "off" else
-        "Return finishing=null: creative treatments are disabled for this job. "
+        "Sounds and decorative graphics are disabled: leave finishing.callouts, finishing.pointers and finishing.music_regions empty. "
+        "Camera and caption placement remain available without adding decorative effects. "
     )
     finishing_instruction = narrative_instruction + music_timing_instruction + creative_tools_instruction + rhythmic_instruction + (
         "Use broll for 0.5–4s picture-only cutaways to relevant uploaded video or image assets. Main speech continues "

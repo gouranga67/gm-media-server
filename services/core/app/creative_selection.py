@@ -128,14 +128,28 @@ def bound_generated_treatments(context, plan):
         }
     if not any(tools.model_dump(mode="json").values()):
         tools = None
-    return plan.model_copy(update={"finishing": tools}, deep=True)
+    changed = plan.model_copy(update={"finishing": tools}, deep=True)
+    # The local renderer supports stacked transforms, but a new planner move
+    # must be the only camera treatment on its clip. Frozen plans stay intact.
+    for motion in tools.motions if tools else []:
+        if motion.clip_index < len(changed.clips):
+            changed.clips[motion.clip_index].visual_preset = "standard"
+    return changed
 
 
 def only_creative_treatments(tools):
     if tools is None:
         return False
     data = tools.model_dump(mode="json")
-    names = {"callouts", "pointers", "music_regions"}
+    names = {"callouts", "pointers", "music_regions", "motions", "caption_regions"}
     return any(data.get(name) for name in names) and not any(
         value for name, value in data.items() if name not in names
     )
+
+
+def remove_graphic_effects(plan):
+    """Remove library cues and generated graphics, keeping local mix/layout."""
+    tools = plan.finishing.model_copy(update={"callouts": [], "pointers": []}, deep=True) if plan.finishing else None
+    if tools and not any(tools.model_dump(mode="json").values()):
+        tools = None
+    return plan.model_copy(update={"effects": [], "finishing": tools}, deep=True)

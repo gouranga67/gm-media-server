@@ -133,7 +133,7 @@ class CreativeToolkitTests(unittest.TestCase):
             self.assertIn("finishing", schema["required"])
             finishing = schema["properties"]["finishing"]["anyOf"][1]
             self.assertEqual(
-                set(finishing["properties"]), {"callouts", "pointers", "music_regions"}
+                set(finishing["properties"]), {"callouts", "pointers", "music_regions", "motions", "caption_regions"}
             )
             for prop in finishing["properties"].values():
                 self.assertEqual(

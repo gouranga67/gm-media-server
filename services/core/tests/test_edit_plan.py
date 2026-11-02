@@ -194,7 +194,7 @@ class EditPlanValidationTests(unittest.TestCase):
             creative_direction=direction, complete_creative_defaults=True)
         plan = validate_edit_plan(repaired, self.assets, creative_direction=direction)
         self.assertIn("added_required_transition_at_existing_story_boundary", repairs)
-        self.assertEqual(plan.clips[1].transition, "dip_to_black")
+        self.assertEqual(plan.clips[1].transition, "cross_dissolve")
         self.assertEqual(plan.clips[0].transition, "cut")
         for before, after in zip(original["clips"], repaired["clips"]):
             self.assertEqual({k: v for k, v in before.items() if k != "transition"},

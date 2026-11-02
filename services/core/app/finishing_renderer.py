@@ -123,6 +123,7 @@ def public_broll_manifest(context: dict[str, Any], plan: EditPlan) -> list[dict[
 
 def finishing_manifest(context: dict[str, Any], plan: EditPlan) -> dict[str, Any]:
     from app.edit_plan import MontageEditPlan
+    from app.finishing_review import treatment_timeline
 
     beats = []
     timeline = 0.0
@@ -150,4 +151,5 @@ def finishing_manifest(context: dict[str, Any], plan: EditPlan) -> dict[str, Any
             "broll_selection_review": context.get("broll_selection_review", []),
             "creative_treatment_review": context.get("creative_treatment_review"),
             "local_tools": plan.finishing.model_dump(mode="json") if plan.finishing else None,
+            "treatment_timeline": treatment_timeline(context, plan),
             "additional_model_calls": 0}

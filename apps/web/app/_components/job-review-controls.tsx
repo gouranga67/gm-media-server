@@ -18,6 +18,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { HookAuditions } from "./hook-auditions";
 import { FinishingWorkspace } from "./finishing-workspace";
+import { TreatmentTimeline } from "./treatment-timeline";
 import { PreciseClipEditor } from "./precise-clip-editor";
 import { EditFeedbackCard } from "@/app/_components/edit-feedback-card";
 import { RenderQualityCard } from "@/app/_components/render-quality-card";
@@ -84,6 +85,7 @@ export function JobReviewControls({
   initialCoverTime,
   initialFeedback,
   onUpdated,
+  onSeek,
 }: {
   readonly jobId: string;
   readonly run: EditRun;
@@ -97,6 +99,7 @@ export function JobReviewControls({
   readonly initialCoverTime: number;
   readonly initialFeedback: EditFeedback | null;
   readonly onUpdated: () => void;
+  readonly onSeek?: (seconds: number) => void;
 }) {
   const [note, setNote] = useState("");
   const [originalText, setOriginalText] = useState("");
@@ -133,7 +136,12 @@ export function JobReviewControls({
   const creativeDirection = run.manifest.creative_direction as { effect_level?: string } | undefined;
   const plannedBroll = Array.isArray(run.manifest.broll)
     ? run.manifest.broll as readonly Record<string, unknown>[] : [];
-  const finishing = run.manifest.finishing as { mode?: string; rhythmic_punch_beats?: readonly number[] } | undefined;
+  const finishing = run.manifest.finishing as {
+    mode?: string; rhythmic_punch_beats?: readonly number[]; treatment_timeline?: unknown;
+    local_tools?: { callouts?: readonly unknown[]; pointers?: readonly unknown[] };
+  } | undefined;
+  const localGraphics = (Array.isArray(finishing?.local_tools?.callouts) ? finishing.local_tools.callouts.length : 0)
+    + (Array.isArray(finishing?.local_tools?.pointers) ? finishing.local_tools.pointers.length : 0);
   const effectMode = creativeDirection?.effect_level;
   const punchInCount = editorialTimeline.filter((clip) =>
     clip.visual_preset === "punch_in" || clip.visual_preset === "strong_punch_in").length;
@@ -141,6 +149,8 @@ export function JobReviewControls({
     clip.visual_preset === "slow_push_in" || clip.visual_preset === "slow_pull_out").length;
   const transitionCount = editorialTimeline.filter((clip, index) =>
     index > 0 && clip.transition === "dip_to_black").length;
+  const dissolveCount = editorialTimeline.filter((clip, index) =>
+    index > 0 && clip.transition === "cross_dissolve").length;
 
   const removeEffects = async () => {
     setSubmitting("revision"); setError(undefined);
@@ -300,6 +310,7 @@ export function JobReviewControls({
       <div className="space-y-4">
       <PublishingPanel key={currentFinal.id} exportId={currentFinal.id} version={currentFinal.version} />
       <RenderQualityCard review={currentFinal.manifest.quality_review} storyContract={currentFinal.manifest.story_contract_review} storyFinishing={currentFinal.manifest.story_finishing} storySequence={currentFinal.manifest.story_sequence_review} />
+      <TreatmentTimeline report={(currentFinal.manifest.finishing as { treatment_timeline?: unknown } | undefined)?.treatment_timeline} onSeek={onSeek} />
       <section className="space-y-4 rounded-md border border-[#BFE3FF] bg-white p-5">
         <div>
           <p className="flex items-center gap-2 font-mono text-xs font-bold tracking-wide text-[#215B43] uppercase">
@@ -426,6 +437,7 @@ export function JobReviewControls({
       ) : null}
 
       <RenderQualityCard review={run.manifest.quality_review} storyContract={run.manifest.story_contract_review} storyFinishing={run.manifest.story_finishing} storySequence={run.manifest.story_sequence_review} />
+      <TreatmentTimeline report={finishing?.treatment_timeline} onSeek={onSeek} />
       <section className="rounded-md border border-[#D7D9D3] bg-white p-5">
         {storyAssessment ? (
           <div className="mb-5 rounded-md border border-[#BFE3FF] bg-[#EFF6FA] p-4">
@@ -596,11 +608,12 @@ export function JobReviewControls({
             <Button className="h-10 w-full" disabled={submitting !== undefined} onClick={() => void removeBroll()} type="button" variant="outline"><Trash2Icon className="size-4" />Remove B-roll &amp; render · zero AI</Button>
           </div> : null}
           <p className="mt-2 text-xs leading-relaxed text-[#53646F]">
-            This edit: {punchInCount} punch-ins · {cameraMoveCount} camera moves · {transitionCount} dips to black · {plannedEffects.length} sound or overlay cues.
+            This edit: {punchInCount} punch-ins · {cameraMoveCount} preset camera moves · {transitionCount} dips to black · {dissolveCount} dissolves · {plannedEffects.length} library cues · {localGraphics} text labels/pointers.
             {" "}Other clip boundaries use hard cuts. Use the clip framing controls above to adjust a punch-in without an AI call.
           </p>
-          {plannedEffects.length ? <><div className="mt-3 space-y-2">{plannedEffects.map((effect, index) => <div className="rounded-md bg-[#F7F7F5] px-3 py-2 text-xs text-[#53646F]" key={`${String(effect.asset_id)}-${index}`}><span className="font-bold text-[#173F5F]">{String(effect.title || effect.kind || "Effect")}</span> · {Number(effect.start_seconds || 0).toFixed(1)}s · {String(effect.purpose || "emphasis")}</div>)}</div><Button className="mt-3 h-10 w-full" disabled={submitting !== undefined} onClick={() => void removeEffects()} type="button" variant="outline"><Trash2Icon className="size-4" />Remove all effects &amp; render · zero AI</Button></> : <p className="mt-2 text-xs text-[#666862]">This version uses no creative effects.</p>}
-          {!plannedEffects.length ? (
+          {plannedEffects.length ? <div className="mt-3 space-y-2">{plannedEffects.map((effect, index) => <div className="rounded-md bg-[#F7F7F5] px-3 py-2 text-xs text-[#53646F]" key={`${String(effect.asset_id)}-${index}`}><span className="font-bold text-[#173F5F]">{String(effect.title || effect.kind || "Effect")}</span> · {Number(effect.start_seconds || 0).toFixed(1)}s · {String(effect.purpose || "emphasis")}</div>)}</div> : null}
+          {plannedEffects.length || localGraphics ? <Button className="mt-3 h-10 w-full" disabled={submitting !== undefined} onClick={() => void removeEffects()} type="button" variant="outline"><Trash2Icon className="size-4" />Remove sounds &amp; graphics · zero AI</Button> : <p className="mt-2 text-xs text-[#666862]">This version uses no library sound/graphic cues or text labels/pointers.</p>}
+          {!plannedEffects.length && !localGraphics ? (
             <p className="mt-2 text-xs leading-relaxed text-[#666862]">
               {run.effects_enabled === false
                 ? "Effects were removed in this revision."

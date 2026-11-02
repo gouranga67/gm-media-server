@@ -300,3 +300,21 @@ Keep these tasks for the combined testing pass:
 5. On a larger library inspect the sampling notice, narrow the direction or choose a collection, then explicitly generate another session if needed. Do not interpret a bounded sample as an exhaustive understanding of all footage.
 
 Source checkpoint verification: 508 backend tests passed with no skips, including real CPU FFmpeg renders; 48 DOM interaction checks passed; all eight source-suite gates passed, including web/agent TypeScript, production build, Compose, Python compilation, public-release audit and patch checks. The 39-migration isolated SQL run additionally exercised the new actual ranking query. These checks made no hosted request and did not mutate production media, jobs, publishing or backup state. The combined real-footage/GPU/pilot pass remains pending after the build sequence.
+
+## Purposeful finishing follow-up (Phase 22) — 2026-11-02
+
+Regressions cover strict nested planner schemas for both engines, camera/caption controls with decorative effects off, replacement of stacked zooms in generated plans, anchored/intentional holds, single-shot validation, new dissolve fallback versus frozen plans, caption cue windows, camera/caption retiming after trims, removal of generated labels without changing local layout, treatment-report timing and one-call worker execution. A real CPU FFmpeg fixture starts with 60fps picture and audible speech, renders an anchored move and a short dissolve with timed caption regions, measures the changed framing and absence of a black flash, and checks four seconds of audible output audio. Existing HDR, word/caption alignment, montage, motion cadence, B-roll and revision-lock regressions remain gates.
+
+Browser interactions check malformed/legacy report handling, kind filtering without requests, explicit seek callbacks, changed-report filter fallback and accurate generated-graphic counts. Removing sounds/graphics makes exactly one explicit revision request; mounting or filtering the timeline makes none. The player seek handler changes position and focuses the video without calling play.
+
+Keep these tasks for the combined real-footage pass after the build sequence:
+
+1. Make an ordinary fresh reel and a high-impact reel with a useful product reveal. Inspect **Treatment timeline** for the actual saved camera moves, cuts, sounds and labels; jump to each and judge relevance and framing in playback. No sound or movement quota proves quality.
+2. Give a specific caption-readability instruction, then check the timed band and that important speech remains visible. Check both preview and approved final output; platform overlays still need a real phone review.
+3. On a long multi-clip energetic edit, check the short picture dissolve against the recorded speech. Check a single-shot edit and an intentional reaction hold too. Compare a saved frozen version to ensure an exact re-render does not invent a new transition or zoom.
+4. On a version with generated text labels/pointers, use **Remove sounds & graphics · zero AI**. Confirm those cues disappear while camera motion, caption placement and mix settings remain. A later revision should retain the removal choice unless explicitly reenabled.
+5. Open a legacy preview without a treatment report. Its normal playback, revisions and downloads should remain available. The new report appears on newly rendered manifests; opening an old preview does not regenerate it.
+
+No new hosted edit, production deployment, media mutation or live GPU claim is part of local verification. Automatic tracking, new segmentation models and creative-quality acceptance remain outside this checkpoint.
+
+Source checkpoint verification: 517 backend tests passed with no skips, including real CPU FFmpeg renders and disposable local rclone checks; 51 DOM interaction tests passed; all eight source-suite gates passed, including web/agent TypeScript, production build, Compose, Python compilation, public-release audit and patch checks. The temporary render/test dependencies remain outside the repository. No database migration is added by this increment.

@@ -5,7 +5,7 @@ import { JobDurationSettings } from "./job-duration-settings";
 import { AssemblyReadiness } from "./assembly-readiness";
 import { EditProgress } from "./edit-progress";
 import { StudioNav } from "./studio-nav";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CheckIcon, DownloadIcon, LoaderCircleIcon, RefreshCwIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -35,6 +35,15 @@ function formatTokens(value: number) {
 }
 
 export function JobPreview({ jobId }: { readonly jobId: string }) {
+  const previewVideo = useRef<HTMLVideoElement>(null);
+  const seekPreview = (seconds: number) => {
+    const video = previewVideo.current;
+    if (!video || !Number.isFinite(seconds)) return;
+    const last = Number.isFinite(video.duration) ? Math.max(0, video.duration - 0.05) : seconds;
+    video.currentTime = Math.max(0, Math.min(seconds, last));
+    video.focus();
+    video.scrollIntoView({ block: "center", behavior: "smooth" });
+  };
   const [assemblyReady, setAssemblyReady] = useState(false);
   const [review, setReview] = useState<JobReview>();
   const [checkedAt, setCheckedAt] = useState<number | null>(null);
@@ -195,6 +204,7 @@ export function JobPreview({ jobId }: { readonly jobId: string }) {
                 </h1>
               </div>
               <video
+                ref={previewVideo}
                 className={`${isLandscape ? "aspect-video" : isSquare ? "aspect-square" : "aspect-[9/16]"} w-full rounded-md bg-black object-contain`}
                 controls
                 playsInline
@@ -234,6 +244,7 @@ export function JobPreview({ jobId }: { readonly jobId: string }) {
                 versions={review.versions} onUpdated={() => setPollGeneration((current) => current + 1)} /> : null}
               {run ? (
                 <JobReviewControls
+                  onSeek={seekPreview}
                   finalExport={currentFinalExport}
                   jobId={jobId}
                   onUpdated={() => setPollGeneration((current) => current + 1)}

@@ -1122,7 +1122,8 @@ def process_one_edit(state: WorkerState) -> bool:
                         deep=True,
                     )
                 if run.get("effects_enabled") is False:
-                    proposed = proposed.model_copy(update={"effects": []}, deep=True)
+                    from app.creative_selection import remove_graphic_effects
+                    proposed = remove_graphic_effects(proposed)
                 if run.get("broll_enabled") is False:
                     proposed = proposed.model_copy(update={"broll": []}, deep=True)
                 provenance = {
@@ -1164,7 +1165,8 @@ def process_one_edit(state: WorkerState) -> bool:
             if run.get("broll_enabled") is False:
                 proposed = proposed.model_copy(update={"broll": []}, deep=True)
             if run.get("effects_enabled") is False:
-                proposed = proposed.model_copy(update={"effects": []}, deep=True)
+                from app.creative_selection import remove_graphic_effects
+                proposed = remove_graphic_effects(proposed)
             revision_text = str(run.get("revision_note") or "").lower()
             check_story = context["project"]["privacy_mode"] != "local_only" and not deterministic_revision and (
                 not run.get("based_on_run_id") or run.get("revision_mode") == "rebuild_story"
@@ -1293,7 +1295,8 @@ def process_one_edit(state: WorkerState) -> bool:
             if run.get("alternative_kind"):
                 changes = {}
                 if run.get("effects_enabled") is False:
-                    changes["effects"] = []
+                    from app.creative_selection import remove_graphic_effects
+                    plan = remove_graphic_effects(plan)
                 if run.get("broll_enabled") is False:
                     changes["broll"] = []
                 if run.get("caption_settings"):
