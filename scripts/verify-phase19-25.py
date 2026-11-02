@@ -23,6 +23,8 @@ def main():
     if len(performance.get("events", [])) > 240:
         raise RuntimeError("worker measurements exceeded the retention bound")
     lab = request("learning/lab")
+    if lab.get("version") != 2:
+        raise RuntimeError("the evaluated-learning comparison checkpoint is not deployed")
     if lab.get("hosted_model_calls") != 0:
         raise RuntimeError("the learning dashboard must not make hosted model calls")
     if any(
@@ -30,6 +32,10 @@ def main():
         for item in lab.get("lessons", [])
     ):
         raise RuntimeError("unexpected lesson promotion state")
+    for item in lab.get("lessons", []):
+        evaluation = item.get("evaluation", {})
+        if not isinstance(item.get("trial_options"), list) or (evaluation.get("can_promote") and evaluation.get("held_out_jobs", 0) < 3):
+            raise RuntimeError("lesson source-independence guards are unavailable")
     print(
         json.dumps(
             {

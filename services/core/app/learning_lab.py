@@ -11,6 +11,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.database import connection
 from app.productization import actor_login, require_owner
 from app.take_quality import editing_policy
+from app.config import get_settings
+from app.learning_evidence import comparison_evidence, evaluation_result, known_hashes, preview_available, usage_for_runs
 
 router = APIRouter(prefix="/api/v1/learning/lab", tags=["evaluated learning"])
 NOTE_RULES = {
@@ -71,27 +73,11 @@ def propose_from_notes(rows: list[dict]) -> list[dict]:
     return proposals
 
 
-def evaluation_result(rows: list[dict]) -> dict:
-    jobs = {str(row["job_id"]) for row in rows}
-    deltas = [
-        int(row["candidate_rating"]) - int(row["baseline_rating"]) for row in rows
-    ]
-    passed = len(jobs) >= 3 and all(delta >= 0 for delta in deltas) and sum(deltas) > 0
-    return {
-        "held_out_jobs": len(jobs),
-        "rating_delta": round(sum(deltas) / len(deltas), 2) if deltas else None,
-        "regressions": sum(delta < 0 for delta in deltas),
-        "can_promote": passed,
-        "method": "human paired playback review; distinct jobs and source hashes",
-        "note": "Three independent held-out jobs, no lower rating, and at least one improvement are required. This is not proof of universal quality.",
-    }
-
-
 def source_hashes(database: Any, job_ids: list[str]) -> list[str]:
     return [
-        row["sha256"]
+        row["sha256"] or ""
         for row in database.execute(
-            "SELECT DISTINCT a.sha256 FROM job_assets j JOIN assets a ON a.id=j.asset_id WHERE j.job_id=ANY(%s::uuid[]) AND a.sha256 IS NOT NULL",
+            "SELECT DISTINCT a.sha256 FROM job_assets j JOIN assets a ON a.id=j.asset_id WHERE j.job_id=ANY(%s::uuid[])",
             (job_ids,),
         ).fetchall()
     ]
@@ -107,8 +93,43 @@ def lesson(database: Any, lesson_id: UUID, *, lock=False):
     return row
 
 
+JOBS_SQL = """SELECT DISTINCT ON(j.id) j.id,p.name,j.recipe,j.edit_style,j.reel_intent,j.story_goal,
+    j.must_include,j.ending_instruction,p.brief,p.privacy_mode,r.version,r.evaluation_lesson_id,r.status,r.preview_path,
+    ARRAY(SELECT DISTINCT a.sha256 FROM job_assets ja JOIN assets a ON a.id=ja.asset_id WHERE ja.job_id=j.id) AS source_hashes,
+    EXISTS(SELECT 1 FROM edit_runs active WHERE active.job_id=j.id AND active.status IN ('pending','planning','rendering')) AS busy
+    FROM jobs j JOIN projects p ON p.id=j.project_id JOIN edit_runs r ON r.job_id=j.id
+    WHERE r.status='ready' AND j.archived_at IS NULL AND p.name !~* '^Phase[[:space:]]+[0-9]'
+    ORDER BY j.id,r.version DESC LIMIT 100"""
+
+TRIAL_SOURCES_SQL = """SELECT DISTINCT r.evaluation_lesson_id,r.job_id,a.sha256
+    FROM edit_runs r JOIN job_assets ja ON ja.job_id=r.job_id JOIN assets a ON a.id=ja.asset_id
+    WHERE r.evaluation_lesson_id=ANY(%s::uuid[])"""
+
+
+def trial_block_reason(item, job, previous):
+    if editing_policy(job)["bloopers_requested"] or str(job["recipe"]) != item["recipe"] or str(job["edit_style"]) != item["edit_style"]:
+        return "Choose a non-blooper job matching this lesson recipe and style; clean-take lessons do not apply to outtakes."
+    identity = str(job.get("id") or job.get("job_id"))
+    if identity in item["training_job_ids"] or set(job.get("source_hashes") or []) & set(item["training_source_hashes"]):
+        return "Training footage is excluded; choose fresh recordings."
+    if not known_hashes(job.get("source_hashes")) or not known_hashes(item["training_source_hashes"]):
+        return "Source checksums are incomplete; independence cannot be checked yet."
+    if any(str(row["job_id"]) == identity for row in previous):
+        return "This job already has a trial for this lesson; review that comparison."
+    if set(job["source_hashes"]) & {row["sha256"] for row in previous}:
+        return "Footage overlaps another trial for this lesson; choose a different recording."
+    if job.get("evaluation_lesson_id"):
+        return "Choose an ordinary edit as the baseline, not another lesson trial."
+    if job.get("privacy_mode") == "local_only":
+        return "This job is local-only and cannot request an editor-model trial."
+    if job.get("busy"):
+        return "This job has an edit in progress."
+    return None
+
+
 @router.get("")
 def lab():
+    media_root = get_settings().media_root
     with connection() as database:
         lessons = list(
             database.execute(
@@ -117,29 +138,49 @@ def lab():
         )
         evaluations = list(
             database.execute(
-                "SELECT * FROM learning_evaluations ORDER BY created_at DESC LIMIT 500"
+                """SELECT id,lesson_id,job_id,baseline_run_id,candidate_run_id,baseline_rating,candidate_rating,
+                note,reviewer,created_at,updated_at,evidence FROM learning_evaluations
+                WHERE lesson_id=ANY(%s::uuid[]) ORDER BY created_at DESC""",
+                ([item["id"] for item in lessons],),
             ).fetchall()
         )
         trials = list(
-            database.execute("""SELECT r.id,r.job_id,r.version,r.status,r.evaluation_lesson_id,r.based_on_run_id,b.version AS baseline_version,p.name AS project_name
+            database.execute("""SELECT r.id,r.job_id,r.version,r.status,r.preview_path,r.evaluation_lesson_id,r.based_on_run_id,b.version AS baseline_version,
+            b.status AS baseline_status,b.preview_path AS baseline_path,p.name AS project_name,
+            b.manifest->'quality_review'->>'status' AS baseline_quality,r.manifest->'quality_review'->>'status' AS candidate_quality
             FROM edit_runs r JOIN edit_runs b ON b.id=r.based_on_run_id JOIN jobs j ON j.id=r.job_id JOIN projects p ON p.id=j.project_id
             WHERE r.evaluation_lesson_id IS NOT NULL ORDER BY r.created_at DESC LIMIT 100""").fetchall()
         )
-        jobs = list(
-            database.execute("""SELECT DISTINCT ON(j.id) j.id,p.name,j.recipe,j.edit_style,r.version
-            FROM jobs j JOIN projects p ON p.id=j.project_id JOIN edit_runs r ON r.job_id=j.id
-            WHERE r.status='ready' AND j.archived_at IS NULL AND p.name !~* '^Phase[[:space:]]+[0-9]'
-            ORDER BY j.id,r.version DESC LIMIT 100""").fetchall()
-        )
+        jobs = list(database.execute(JOBS_SQL).fetchall())
+        previous = list(database.execute(TRIAL_SOURCES_SQL, ([item["id"] for item in lessons],)).fetchall())
+        usage = usage_for_runs(database, list({identity for trial in trials for identity in (trial["id"],trial["based_on_run_id"])}))
     for item in lessons:
         item["evaluation"] = evaluation_result(
-            [e for e in evaluations if e["lesson_id"] == item["id"]]
+            [e for e in evaluations if e["lesson_id"] == item["id"]], item=item,
         )
+        item["trial_options"] = []
+        for job in jobs:
+            if str(job["recipe"]) != item["recipe"] or str(job["edit_style"]) != item["edit_style"]:
+                continue
+            reason = trial_block_reason(item, job, [row for row in previous if row["evaluation_lesson_id"] == item["id"]])
+            if not reason and not preview_available(job, media_root):
+                reason = "The exact baseline preview has expired or is unavailable."
+            item["trial_options"].append({"job_id": str(job["id"]), "eligible": reason is None, "reason": reason})
+    for trial in trials:
+        trial["baseline_available"] = preview_available({"status":trial.pop("baseline_status"),"preview_path":trial.pop("baseline_path")},media_root)
+        trial["candidate_available"] = preview_available(trial,media_root)
+        trial.pop("preview_path",None)
+        trial["baseline_usage"] = usage.get(str(trial["based_on_run_id"]))
+        trial["candidate_usage"] = usage.get(str(trial["id"]))
+        saved = next((e for e in evaluations if e["candidate_run_id"] == trial["id"]),None)
+        trial["comparison"] = {key:saved[key] for key in ("baseline_rating","candidate_rating","note")} if saved else None
+        trial["executable_changed"] = (saved.get("evidence") or {}).get("executable_changed") if saved else None
     return {
+        "version": 2,
         "lessons": lessons,
         "evaluations": evaluations,
         "trials": trials,
-        "jobs": jobs,
+        "jobs": [{key:job[key] for key in ("id","name","recipe","edit_style","version")} for job in jobs],
         "hosted_model_calls": 0,
         "note": "Proposals and scoring run locally. Trying a lesson is an explicit normal editor revision and uses model tokens. Promotion never changes model weights or application code.",
     }
@@ -158,6 +199,9 @@ def propose(x_gm_user_login: str | None = Header(default=None)):
         )
         proposals = propose_from_notes(rows)
         for item in proposals:
+            hashes = source_hashes(database, item["job_ids"])
+            if not known_hashes(hashes):
+                continue
             database.execute(
                 """INSERT INTO learning_lessons(id,recipe,edit_style,rule_key,directive,training_feedback_ids,training_job_ids,training_source_hashes)
                 VALUES(%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT(recipe,edit_style,rule_key) DO NOTHING""",
@@ -169,7 +213,7 @@ def propose(x_gm_user_login: str | None = Header(default=None)):
                     item["directive"],
                     Jsonb(item["feedback_ids"]),
                     Jsonb(item["job_ids"]),
-                    Jsonb(source_hashes(database, item["job_ids"])),
+                    Jsonb(hashes),
                 ),
             )
     return {"matched_proposals": len(proposals), "hosted_model_calls": 0}
@@ -181,27 +225,22 @@ class TrialRequest(BaseModel):
     base_version: int = Field(gt=0)
 
 
-def assert_holdout(database: Any, item: dict, job_id: UUID):
-    if str(job_id) in item["training_job_ids"] or set(
-        source_hashes(database, [str(job_id)])
-    ) & set(item["training_source_hashes"]):
-        raise HTTPException(
-            status_code=409,
-            detail="use a job with footage not used to propose this lesson; training sources are excluded from held-out evaluation",
-        )
+def assert_holdout(database: Any, item: dict, job_id: UUID, *, scoring=False):
     job = database.execute(
         """SELECT j.recipe,j.edit_style,j.reel_intent,j.story_goal,j.must_include,j.ending_instruction,
-        p.brief,p.name AS project_name FROM jobs j JOIN projects p ON p.id=j.project_id WHERE j.id=%s""", (job_id,)
+        j.archived_at,p.brief,p.privacy_mode,p.name AS project_name FROM jobs j JOIN projects p ON p.id=j.project_id WHERE j.id=%s""", (job_id,)
     ).fetchone()
-    if (
-        not job
-        or editing_policy(job)["bloopers_requested"]
-        or str(job["recipe"]) != item["recipe"]
-        or str(job["edit_style"]) != item["edit_style"]
-    ):
-        raise HTTPException(
-            status_code=409, detail="choose a non-blooper job matching this lesson recipe and style; clean-take lessons do not apply to outtakes"
-        )
+    if not job or job.get("archived_at"):
+        raise HTTPException(409,"choose an active job for the lesson trial")
+    job = {**job,"id":str(job_id),"source_hashes":source_hashes(database,[str(job_id)])}
+    # New experiments must use fresh footage. Existing pairs can be rerated;
+    # source-group aggregation still prevents legacy overlaps adding evidence.
+    previous = [] if scoring else list(database.execute(TRIAL_SOURCES_SQL, ([item["id"]],)).fetchall())
+    # Rechecking a finished comparison must allow that trial's own job.
+    previous = [row for row in previous if str(row["job_id"]) != str(job_id)]
+    reason = trial_block_reason(item,job,previous)
+    if reason:
+        raise HTTPException(409,reason)
 
 
 @router.post("/lessons/{lesson_id}/trial")
@@ -249,6 +288,8 @@ def evaluate(
                 status_code=409,
                 detail="evaluate a finished trial preview created for this lesson",
             )
+        if candidate.get("revision_note") != item["directive"]:
+            raise HTTPException(409,"the trial used a different lesson directive; compare the matching lesson version")
         baseline = database.execute(
             "SELECT * FROM edit_runs WHERE id=%s AND status='ready' AND job_id=%s",
             (candidate["based_on_run_id"], candidate["job_id"]),
@@ -257,12 +298,14 @@ def evaluate(
             raise HTTPException(
                 status_code=409, detail="the trial baseline is unavailable"
             )
-        assert_holdout(database, item, candidate["job_id"])
+        assert_holdout(database, item, candidate["job_id"], scoring=True)
+        evidence = comparison_evidence(database,item,baseline,candidate,get_settings().media_root)
         database.execute(
-            """INSERT INTO learning_evaluations(id,lesson_id,job_id,baseline_run_id,candidate_run_id,baseline_rating,candidate_rating,note,reviewer)
-            VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT(lesson_id,job_id) DO UPDATE SET
+            """INSERT INTO learning_evaluations(id,lesson_id,job_id,baseline_run_id,candidate_run_id,baseline_rating,candidate_rating,note,reviewer,evidence)
+            VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT(lesson_id,job_id) DO UPDATE SET
             candidate_run_id=EXCLUDED.candidate_run_id,baseline_run_id=EXCLUDED.baseline_run_id,
-            baseline_rating=EXCLUDED.baseline_rating,candidate_rating=EXCLUDED.candidate_rating,note=EXCLUDED.note,reviewer=EXCLUDED.reviewer""",
+            baseline_rating=EXCLUDED.baseline_rating,candidate_rating=EXCLUDED.candidate_rating,note=EXCLUDED.note,reviewer=EXCLUDED.reviewer,
+            evidence=EXCLUDED.evidence,updated_at=now()""",
             (
                 uuid4(),
                 lesson_id,
@@ -273,6 +316,7 @@ def evaluate(
                 payload.candidate_rating,
                 payload.note,
                 actor,
+                Jsonb(evidence),
             ),
         )
         rows = list(
@@ -280,7 +324,7 @@ def evaluate(
                 "SELECT * FROM learning_evaluations WHERE lesson_id=%s", (lesson_id,)
             ).fetchall()
         )
-    return evaluation_result(rows)
+    return evaluation_result(rows,item=item)
 
 
 class LessonAction(BaseModel):
@@ -296,13 +340,13 @@ def change_status(
 ):
     require_owner(actor_login(x_gm_user_login))
     with connection() as database:
-        lesson(database, lesson_id, lock=True)
+        item = lesson(database, lesson_id, lock=True)
         rows = list(
             database.execute(
                 "SELECT * FROM learning_evaluations WHERE lesson_id=%s", (lesson_id,)
             ).fetchall()
         )
-        if payload.action == "promote" and not evaluation_result(rows)["can_promote"]:
+        if payload.action == "promote" and not evaluation_result(rows,item=item)["can_promote"]:
             raise HTTPException(
                 status_code=409,
                 detail="this lesson has not passed held-out playback evaluation",

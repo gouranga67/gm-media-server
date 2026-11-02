@@ -59,7 +59,7 @@ export function LearningDashboard() {
             </p>
           </div>
           <div className="rounded-full bg-[#E4F1E9] px-4 py-2 font-mono text-xs font-bold text-[#307455]">
-            ZERO EXTRA MODEL CALLS
+            LOCAL FEEDBACK · OPT-IN MODEL TRIALS
           </div>
         </header>
 

@@ -101,7 +101,8 @@ class ReelIntentTests(unittest.TestCase):
         database = Mock()
         database.execute.return_value.fetchone.return_value = {
             "recipe": "talking_head", "edit_style": "high_impact", "reel_intent": "bloopers"}
-        lesson = {"training_job_ids": [], "training_source_hashes": [], "recipe": "talking_head", "edit_style": "high_impact"}
+        lesson = {"id": uuid4(), "training_job_ids": [], "training_source_hashes": [], "recipe": "talking_head", "edit_style": "high_impact"}
+        database.execute.return_value.fetchall.return_value = []
         with patch("app.learning_lab.source_hashes", return_value=[]):
             with self.assertRaisesRegex(HTTPException, "clean-take lessons do not apply"):
                 assert_holdout(database, lesson, uuid4())

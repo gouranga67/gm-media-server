@@ -1477,13 +1477,23 @@ export type FinishingTools = {
 export type FinishingInspection = { readonly version: number; readonly settings: FinishingTools; readonly sources: readonly { readonly asset_id: string; readonly name: string; readonly media_kind: "image" | "video"; readonly duration_seconds: number }[] };
 export const getFinishingTools = (id: string) => apiRequest<FinishingInspection>(`jobs/${id}/finishing-tools`);
 
-export type LearningLesson = { readonly id: string; readonly directive: string; readonly recipe: string; readonly edit_style: string; readonly status: "proposed" | "promoted" | "rolled_back"; readonly training_job_ids: readonly string[]; readonly evaluation: { readonly held_out_jobs: number; readonly can_promote: boolean; readonly rating_delta: number | null; readonly regressions: number } };
-export type LearningTrial = { readonly id: string; readonly job_id: string; readonly version: number; readonly baseline_version: number; readonly status: string; readonly evaluation_lesson_id: string; readonly project_name: string };
+export type LearningLesson = { readonly id: string; readonly directive: string; readonly recipe: string; readonly edit_style: string; readonly status: "proposed" | "promoted" | "rolled_back"; readonly training_job_ids: readonly string[];
+  readonly trial_options?: readonly { readonly job_id: string; readonly eligible: boolean; readonly reason: string | null }[];
+  readonly evaluation: { readonly held_out_jobs: number; readonly can_promote: boolean; readonly rating_delta: number | null; readonly regressions: number;
+    readonly rated_jobs?: number; readonly excluded_comparisons?: number; readonly overlapping_comparisons?: number;
+    readonly token_delta?: number | null; readonly costed_comparisons?: number; readonly note?: string } };
+export type LearningUsage = { readonly requests: number; readonly total_tokens: number; readonly model_latency_ms: number };
+export type LearningTrial = { readonly id: string; readonly job_id: string; readonly version: number; readonly baseline_version: number; readonly status: string; readonly evaluation_lesson_id: string; readonly project_name: string;
+  readonly baseline_available?: boolean; readonly candidate_available?: boolean;
+  readonly baseline_usage?: LearningUsage | null; readonly candidate_usage?: LearningUsage | null;
+  readonly baseline_quality?: string | null; readonly candidate_quality?: string | null;
+  readonly executable_changed?: boolean | null;
+  readonly comparison?: { readonly baseline_rating: number; readonly candidate_rating: number; readonly note: string } | null };
 export type LearningLab = { readonly lessons: readonly LearningLesson[]; readonly trials: readonly LearningTrial[]; readonly jobs: readonly { readonly id: string; readonly name: string; readonly recipe: string; readonly edit_style: string; readonly version: number }[]; readonly note: string };
 export const getLearningLab = () => apiRequest<LearningLab>("learning/lab");
 export const proposeLearningLessons = () => apiRequest("learning/lab/propose",{method:"POST"});
 export const tryLearningLesson = (lessonId: string, jobId: string, version: number) => apiRequest(`learning/lab/lessons/${lessonId}/trial`,{method:"POST",body:JSON.stringify({job_id:jobId,base_version:version})});
-export const evaluateLearningLesson = (lessonId: string, candidateId: string, baseline: number, candidate: number) => apiRequest(`learning/lab/lessons/${lessonId}/evaluate`,{method:"POST",body:JSON.stringify({candidate_run_id:candidateId,baseline_rating:baseline,candidate_rating:candidate})});
+export const evaluateLearningLesson = (lessonId: string, candidateId: string, baseline: number, candidate: number, note = "") => apiRequest(`learning/lab/lessons/${lessonId}/evaluate`,{method:"POST",body:JSON.stringify({candidate_run_id:candidateId,baseline_rating:baseline,candidate_rating:candidate,note})});
 export const setLearningLessonStatus = (lessonId: string, action: "promote" | "rollback") => apiRequest(`learning/lab/lessons/${lessonId}/status`,{method:"POST",body:JSON.stringify({action})});
 
 export const requestLocalRepair = (jobId: string, version: number, action: "tighten_pauses" | "denoise") => apiRequest(`jobs/${jobId}/local-repair`,{method:"POST",body:JSON.stringify({base_version:version,action})});

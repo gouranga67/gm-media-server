@@ -813,8 +813,14 @@ class RevisionCreate(BaseModel):
             or self.finishing_settings
             or self.restore_version
             or self.caption_corrections
+            or self.caption_settings is not None
+            or self.effects_enabled is not None
+            or self.broll_enabled is not None
+            or self.locked_elements
+            or self.repair_kind is not None
+            or self.base_version is None
         ):
-            raise ValueError("try a lesson separately from other revision changes")
+            raise ValueError("try a lesson on an explicit base version separately from other revision changes")
         if self.finishing_settings is not None and self.base_version is None:
             raise ValueError("finishing tools require the current base version")
         if self.finishing_settings is not None and (

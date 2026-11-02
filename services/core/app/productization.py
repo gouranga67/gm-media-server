@@ -318,9 +318,15 @@ def _storage_totals(database: Any) -> dict[str, int]:
     return {"original_logical_bytes": int(originals["logical"]), "original_physical_estimate_bytes": int(originals["physical"]), "preview_estimate_bytes": stored_bytes(list(preview_rows)), "delivery_estimate_bytes": stored_bytes(list(delivery_rows))}
 
 
+LEARNING_PREVIEW_GUARD = """NOT EXISTS (
+    SELECT 1 FROM edit_runs trial JOIN learning_lessons lesson ON lesson.id=trial.evaluation_lesson_id
+    WHERE lesson.status='proposed' AND trial.status IN ('pending','planning','rendering','ready')
+    AND (trial.id=edit_runs.id OR trial.based_on_run_id=edit_runs.id))"""
+
+
 def _retention_candidates(database: Any, settings: dict[str, Any]) -> dict[str, Any]:
     preview = database.execute(
-        "SELECT count(*) AS records FROM edit_runs WHERE preview_path IS NOT NULL AND completed_at < now() - (%s * interval '1 day')",
+        "SELECT count(*) AS records FROM edit_runs WHERE preview_path IS NOT NULL AND completed_at < now() - (%s * interval '1 day') AND " + LEARNING_PREVIEW_GUARD,
         (settings["preview_retention_days"],),
     ).fetchone()
     delivery = database.execute(
@@ -454,7 +460,7 @@ def apply_retention(payload: dict[str, str], x_gm_user_login: str | None = Heade
     with connection() as database:
         settings = _settings(database)
         previews = database.execute(
-            "SELECT id, preview_path, manifest_path FROM edit_runs WHERE preview_path IS NOT NULL AND completed_at < now() - (%s * interval '1 day') FOR UPDATE",
+            "SELECT id, preview_path, manifest_path FROM edit_runs WHERE preview_path IS NOT NULL AND completed_at < now() - (%s * interval '1 day') AND " + LEARNING_PREVIEW_GUARD + " FOR UPDATE",
             (settings["preview_retention_days"],),
         ).fetchall()
         for row in previews:

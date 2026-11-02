@@ -38,8 +38,10 @@ class LearningLabTests(unittest.TestCase):
 
     def test_promotion_requires_independent_improved_playback(self):
         rows = [
-            dict(job_id=str(uuid4()), baseline_rating=4, candidate_rating=4)
-            for _ in range(3)
+            dict(job_id=str(uuid4()), baseline_run_id="baseline",candidate_run_id="candidate",baseline_rating=4,candidate_rating=4,
+                evidence=dict(version=1,source_hashes=[str(n)*64],baseline_run_id="baseline",candidate_run_id="candidate",
+                    baseline_plan_hash="a"*64,candidate_plan_hash="b"*64,executable_changed=True))
+            for n in range(3)
         ]
         self.assertFalse(evaluation_result(rows)["can_promote"])
         rows[0]["candidate_rating"] = 5
@@ -50,14 +52,18 @@ class LearningLabTests(unittest.TestCase):
     def test_shared_training_footage_cannot_be_holdout(self):
         job_id = uuid4()
         lesson = dict(
+            id=uuid4(),
             training_job_ids=[],
             training_source_hashes=["a" * 64],
             recipe="talking_head",
             edit_style="clean",
         )
+        database=Mock()
+        database.execute.return_value.fetchone.return_value=dict(recipe="talking_head",edit_style="clean")
+        database.execute.return_value.fetchall.return_value=[]
         with patch("app.learning_lab.source_hashes", return_value=["a" * 64]):
             with self.assertRaises(HTTPException) as raised:
-                assert_holdout(Mock(), lesson, job_id)
+                assert_holdout(database, lesson, job_id)
         self.assertEqual(raised.exception.status_code, 409)
 
     def test_timestamped_feedback_requires_a_forward_pair(self):

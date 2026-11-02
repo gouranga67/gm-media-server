@@ -697,6 +697,18 @@ def _request_revision(job_id: UUID, payload: RevisionCreate,
                         or existing["revision_note"] != payload.note):
                     raise HTTPException(409, "This alternative request was already used for a different choice. Refresh before trying again.")
                 return _response(existing)
+        if payload.evaluation_lesson_id is not None:
+            # Retrying an ambiguous response reuses the original experiment;
+            # it must not buy another candidate or select a more flattering one.
+            existing = database.execute(
+                """SELECT r.*,b.version AS baseline_version FROM edit_runs r JOIN edit_runs b ON b.id=r.based_on_run_id
+                WHERE r.job_id=%s AND r.evaluation_lesson_id=%s ORDER BY r.version LIMIT 1""",
+                (job_id,payload.evaluation_lesson_id),
+            ).fetchone()
+            if existing:
+                if existing["baseline_version"] != payload.base_version:
+                    raise HTTPException(409,"this lesson already has a trial on this job; review it or choose fresh footage")
+                return _response(existing)
         assert_job_capacity(database, job_id)
         active = database.execute(
             """
@@ -806,13 +818,16 @@ def _request_revision(job_id: UUID, payload: RevisionCreate,
         if payload.evaluation_lesson_id is not None:
             from app.learning_lab import lesson, assert_holdout
 
-            candidate_lesson = lesson(database, payload.evaluation_lesson_id)
+            candidate_lesson = lesson(database, payload.evaluation_lesson_id, lock=True)
             if candidate_lesson["status"] != "proposed":
                 raise HTTPException(
                     status_code=409,
                     detail="only a proposed lesson can be tried as a held-out experiment",
                 )
             assert_holdout(database, candidate_lesson, job_id)
+            from app.learning_evidence import preview_available
+            if based_on.get("evaluation_lesson_id") or not preview_available(based_on,get_settings().media_root):
+                raise HTTPException(409,"a playable ordinary baseline preview is required for a lesson trial")
             payload.note = candidate_lesson["directive"]
         if payload.repair_kind is not None:
             existing_repair = database.execute(
