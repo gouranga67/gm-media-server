@@ -1,8 +1,8 @@
 # GM Studio hands on test checklist
 
-Updated: 2026-10-26 (Australia/Brisbane).
+Updated: 2026-11-02 (Australia/Brisbane).
 
-Use this checklist to judge whether the deployed tools make useful reels. A successful render alone is not a pass: listen, watch and compare against the raw footage. The first increment of the [brief-first flow](brief-led-editing-plan.md) is implemented in source; test it after deploying migration 033.
+Use this checklist to judge whether the deployed tools make useful reels. A successful render alone is not a pass: listen, watch and compare against the raw footage. Build `84b96419` is deployed; the [combined technical checkpoint](phase-reports/combined-acceptance-2026-11-02.md) records 536 passing backend tests, eight source gates, eight read-only live checks and a zero-AI NVENC fixture. The container-based core suite and hands-on acceptance remain pending. Start with the eight checks below; the later tables are a reference, not a requirement to test every control in one sitting.
 
 ## Start with these eight checks
 
@@ -140,8 +140,8 @@ Automatic subject tracking, learned background removal, optical-flow slow motion
 | --- | --- | --- |
 | R1 | Save a rating, tags, topic and timestamped note | Values persist against the correct job/version; entering feedback does not start a render. |
 | R2 | Propose lessons after repeated feedback on different ordinary jobs | Proposals are visible and remain inactive until evaluated/promoted. Revisions of one job do not count as independent training examples. |
-| R3 | Try a lesson on genuinely fresh footage | It creates an explicit normal editor revision, preserves baseline and candidate, and records its model usage. Training footage cannot serve as hold-out footage. |
-| R4 | Rate three distinct held-out comparisons | Promotion requires no lower candidate ratings and at least one improvement. A technical success alone cannot promote a lesson. |
+| R3 | Try a lesson on genuinely fresh footage | It creates an explicit normal editor revision, preserves baseline and candidate, and records its model usage. Checksums overlapping training footage or prior trial footage are refused, including shared supporting pictures. Reencoded copies are not automatically recognised as the same recording. |
+| R4 | Watch and rate three source-independent held-out comparisons | Explicit playback review binds each score to its exact versions and provenance. Promotion requires no lower candidate ratings and at least one improvement to an executable edit. A higher rating on an unchanged cut earns no positive credit; old scores without qualifying evidence need review. |
 | R5 | Promote, then roll back an evaluated lesson | Future applicable jobs receive/remove the guidance; prior edits remain unchanged. |
 | R6 | Make bloopers after ordinary clean-take feedback | Clean-take lessons do not override the outtake purpose. Blooper feedback is retained, but dedicated blooper learning is future work. |
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify the local Phase 14 learning loop without making a model request."""
+"""Read-only Phase 14 learning readiness. Never overwrite teaching examples."""
 
 import json
 import os
@@ -61,53 +61,27 @@ def main() -> int:
 
     job_id = selected["id"]
     run = review["latest_run"]
-    previous = review.get("latest_feedback")
-    temporary = {
-        "edit_run_id": run["id"],
-        "rating": 4,
-        "tags": ["strong_hook", "clear_story"],
-        "note": "Phase 14 reversible learning verification.",
-        "would_use_again": True,
-    }
-    saved = request(f"jobs/{job_id}/feedback", "POST", temporary)
-    try:
-        if saved.get("rating") != 4 or saved.get("tags") != temporary["tags"]:
-            raise RuntimeError("edit feedback did not round-trip")
-        summary = request("learning/summary")
-        if int(summary.get("feedback_count") or 0) < 1:
-            raise RuntimeError("learning dashboard did not include the saved feedback")
-        if summary.get("hosted_model_calls") != 0:
-            raise RuntimeError("local learning unexpectedly reported a hosted model call")
-        settings = summary.get("settings") or {}
-        if int(settings.get("minimum_samples") or 0) < 3:
-            raise RuntimeError("learning safeguard allows fewer than three samples")
-        context = request(f"jobs/{job_id}/editor-context")
-        learning = context.get("learning_preferences") or {}
-        if learning.get("hosted_model_calls") != 0:
-            raise RuntimeError("editor learning context is not local-only")
-    finally:
-        if previous:
-            request(
-                f"jobs/{job_id}/feedback",
-                "POST",
-                {
-                    "edit_run_id": previous["edit_run_id"],
-                    "rating": previous["rating"],
-                    "tags": previous["tags"],
-                    "note": previous["note"],
-                    "would_use_again": previous["would_use_again"],
-                },
-            )
-        else:
-            request(f"jobs/{job_id}/feedback/{run['id']}", "DELETE", expected=204)
+    summary = request("learning/summary")
+    if summary.get("hosted_model_calls") != 0:
+        raise RuntimeError("local learning unexpectedly reported a hosted model call")
+    settings = summary.get("settings") or {}
+    if int(settings.get("minimum_samples") or 0) < 3:
+        raise RuntimeError("learning safeguard allows fewer than three samples")
+    if not {"all", "talking_head", "montage"}.issubset(summary.get("scopes", {})):
+        raise RuntimeError("learning recipe scopes are incomplete")
+    context = request(f"jobs/{job_id}/editor-context")
+    learning = context.get("learning_preferences") or {}
+    if learning.get("hosted_model_calls") != 0:
+        raise RuntimeError("editor learning context is not local-only")
 
     print(
         json.dumps(
             {
                 "status": "passed",
                 "job_id": job_id,
-                "feedback_round_trip": True,
-                "feedback_restored": True,
+                "read_only": True,
+                "feedback_writes": 0,
+                "feedback_round_trip": "not run; test deliberate feedback on a disposable edit",
                 "minimum_samples": settings["minimum_samples"],
                 "recipe_scopes": sorted(summary.get("scopes", {}).keys()),
                 "future_context_verified": True,

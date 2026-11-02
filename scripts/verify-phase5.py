@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 import json
 import os
+import runpy
 import sys
 import time
 import urllib.error
 import urllib.request
 from uuid import uuid4
+from pathlib import Path
 
 
-BASE_URL = os.environ.get("GM_MEDIA_URL", "http://127.0.0.1:3000/api/media").rstrip("/")
+BASE_URL = runpy.run_path(str(Path(__file__).with_name("verify-phase14.py")))["BASE"]
 TIMEOUT_SECONDS = int(os.environ.get("PHASE5_TIMEOUT_SECONDS", "900"))
 
 
@@ -48,6 +50,7 @@ def find_ready_job() -> tuple[str, dict]:
                 asset
                 for asset in context.get("assets", [])
                 if asset.get("has_video") and asset.get("has_audio")
+                and float(asset.get("duration_seconds") or 0) >= 4
             ]
             if context.get("ready_for_editing") and candidates:
                 return job["id"], context
@@ -115,8 +118,35 @@ def plan_for(context: dict, invented_asset_id: str | None = None) -> dict:
     }
 
 
-def main() -> int:
-    job_id, context = find_ready_job()
+def create_fixture(context: dict) -> tuple[str, dict]:
+    asset = next((item for item in context["assets"] if item.get("has_video") and item.get("has_audio")
+                  and float(item.get("duration_seconds") or 0) >= 4), None)
+    if asset is None:
+        raise RuntimeError("a source of at least four seconds is needed for the isolated renderer check")
+    def create(path, payload, expected):
+        status, result = request(path, method="POST", payload=payload)
+        if status != expected:
+            raise RuntimeError(f"verification fixture {path} returned {status}: {result}")
+        return result
+    project = create("projects", {"name":"Phase 5 verification — isolated renderer",
+        "brief":"Technical source-only render check; no hosted editing request.",
+        "privacy_mode":"local_only","ai_copy_allowed":False}, 201)
+    job = create(f"projects/{project['id']}/jobs", {"recipe":"talking_head","assembly_mode":"talking_head",
+        "pacing_mode":"manual","edit_style":"clean","music_mode":"none","effect_level":"off",
+        "target_duration_seconds":15,"max_duration_seconds":15}, 201)
+    job_id = job["id"]
+    try:
+        create(f"jobs/{job_id}/assets", {"asset_ids":[asset["asset_id"]]}, 200)
+        fixture_context = get_json(f"jobs/{job_id}/editor-context")
+        if not fixture_context.get("ready_for_editing"):
+            raise RuntimeError("the isolated renderer fixture is not ready")
+        return job_id, fixture_context
+    except Exception:
+        request(f"jobs/{job_id}/archive", method="POST", payload={})
+        raise
+
+
+def check_fixture(job_id: str, context: dict) -> dict:
     asset = next(
         item for item in context["assets"] if item.get("has_video") and item.get("has_audio")
     )
@@ -124,7 +154,19 @@ def main() -> int:
     if duration < 0.25:
         raise RuntimeError("the selected source is too short for a preview")
 
-    invented = plan_for(context, str(uuid4()))
+    # Keep the live check short, while the stored job still has a valid 15s
+    # preference. A complete technical fixture need not fill that preference.
+    context = {**context,"job":{**context["job"],"target_duration_seconds":8}}
+    document = plan_for(context)
+    first = document["clips"][0]
+    split = round((first["source_in"]+first["source_out"])/2,3)
+    document["clips"] = [{**first,"source_out":split}, {**first,"source_in":split,"transition":"cross_dissolve"}]
+    duration = split-first["source_in"]
+    document.update(schema_version="1.5",finishing={
+        "motions":[{"clip_index":0,"points":[{"time":0,"zoom":1,"x":.5,"y":.5},
+            {"time":duration,"zoom":1.12,"x":.5,"y":.5}]}],
+        "caption_regions":[{"start":.5,"end":min(1.5,duration),"position":"upper"}]})
+    invented = {**document,"clips":[{**document["clips"][0],"asset_id":str(uuid4())},*document["clips"][1:]]}
     invalid_status, invalid_payload = request(
         f"jobs/{job_id}/edit-plans", method="POST", payload=invented
     )
@@ -136,7 +178,7 @@ def main() -> int:
     valid_status, run = request(
         f"jobs/{job_id}/edit-plans",
         method="POST",
-        payload=plan_for(context),
+        payload=document,
     )
     if valid_status != 202:
         raise RuntimeError(f"valid edit plan returned {valid_status}: {run}")
@@ -159,9 +201,13 @@ def main() -> int:
         if response.status != 200 or b"ftyp" not in prefix:
             raise RuntimeError("preview download is not a valid MP4 response")
 
-    print(
-        json.dumps(
-            {
+    review = get_json(f"jobs/{job_id}/review")
+    if int(review.get("usage",{}).get("requests",-1)) != 0:
+        raise RuntimeError("the isolated deterministic renderer unexpectedly recorded a model request")
+    events = current.get("manifest",{}).get("finishing",{}).get("treatment_timeline",{}).get("events",[])
+    if not {"framing","transition","captions"}.issubset({event.get("kind") for event in events}):
+        raise RuntimeError("the rendered treatment report is missing camera, dissolve or caption evidence")
+    return {
                 "status": "passed",
                 "job_id": job_id,
                 "run_id": current["id"],
@@ -172,11 +218,31 @@ def main() -> int:
                     "video_encoder"
                 ),
                 "invented_asset_rejected": True,
-                "phone_download_verified": True,
-            },
-            indent=2,
-        )
-    )
+                "preview_download_verified": True,
+                "download_check": "MP4 response; physical phone playback remains manual",
+                "isolated_verification_job": True,
+                "treatment_events": len(events),
+                "additional_model_tokens": 0,
+            }
+
+
+def main() -> int:
+    _, source_context = find_ready_job()
+    job_id, context = create_fixture(source_context)
+    fixture_archived = False
+    try:
+        report = check_fixture(job_id,context)
+    finally:
+        # Do not hide an in-progress render if its request/polling was interrupted.
+        status, current = request(f"jobs/{job_id}/preview")
+        if status == 404 or current.get("status") in {"ready","failed"}:
+            archived, _ = request(f"jobs/{job_id}/archive",method="POST",payload={})
+            if archived != 200:
+                raise RuntimeError("the renderer check finished but its verification job could not be archived")
+            fixture_archived = True
+    if not fixture_archived:
+        raise RuntimeError("the render passed but its fixture state could not be confirmed for cleanup")
+    print(json.dumps({**report,"fixture_archived":True},indent=2))
     return 0
 
 
