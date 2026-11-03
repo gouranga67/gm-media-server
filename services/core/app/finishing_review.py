@@ -38,6 +38,15 @@ def treatment_timeline(context, plan):
 
     tools = plan.finishing
     if tools:
+        for profile in tools.visual_profiles:
+            at = starts[profile.clip_index]
+            from app.visual_finishing import source_crop_filter
+            size = {"vertical": (540, 960), "square": (540, 540), "landscape": (960, 540)}.get(context.get("job", {}).get("output_aspect"), (540, 960))
+            if source_crop_filter(plan, profile.clip_index, *size):
+                add("framing", "Sampled face follow", at, at + durations[profile.clip_index],
+                    "Local single-face samples; no identity or product recognition. Tighter delivery crops may retain centre framing.", profile.clip_index)
+            if tools.shot_match and profile.brightness and not any(c.clip_index == profile.clip_index for c in tools.colours):
+                add("colour", "Small exposure match", at, at + durations[profile.clip_index], f"Brightness {profile.brightness:+.3f}; no saturation or HDR override.", profile.clip_index)
         for motion in tools.motions:
             at = starts[motion.clip_index]
             add("framing", "Anchored camera move", at, at + durations[motion.clip_index],

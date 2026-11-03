@@ -81,6 +81,7 @@ const { LearningLabPanel } = require(path.join(repo, "apps/web/app/_components/l
 const { PreciseClipEditor } = require(path.join(repo, "apps/web/app/_components/precise-clip-editor.tsx"));
 const { FinishingWorkspace } = require(path.join(repo, "apps/web/app/_components/finishing-workspace.tsx"));
 const { AudioCleanupControls } = require(path.join(repo, "apps/web/app/_components/audio-cleanup-controls.tsx"));
+const { VisualFinishingControls } = require(path.join(repo, "apps/web/app/_components/visual-finishing-controls.tsx"));
 const { SourceKnowledge } = require(path.join(repo, "apps/web/app/_components/source-knowledge.tsx"));
 const { SourceRanges } = require(path.join(repo, "apps/web/app/_components/source-ranges.tsx"));
 const { SubtitleEditor } = require(path.join(repo, "apps/web/app/_components/subtitle-editor.tsx"));
@@ -718,6 +719,32 @@ test("voice cleanup runs only on explicit click and retains the saved finishing 
  assert.deepEqual(body.finishing_settings.voice_cleanup_profiles,[]);
  assert.deepEqual(body.finishing_settings.audio_joins,[]);
  assert.deepEqual(body.finishing_settings.layers,[]);
+});
+test("visual options do no work before explicit apply and preserve unrelated finishing",async()=>{
+ await act(async()=>root.render(React.createElement(VisualFinishingControls,{jobId,version:2,onUpdated:()=>{readyEvents+=1;}})));
+ const checks=[...document.querySelectorAll('input[type="checkbox"]')];
+ assert.equal(checks.length,3);
+ assert.ok(checks.every(e=>!e.checked));
+ await click(checks[0]);await click(checks[2]);
+ assert.equal(posts(`jobs/${jobId}/revisions`).length,0);
+ await act(async()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+ await waitFor(()=>readyEvents===1);
+ const body=posts(`jobs/${jobId}/revisions`)[0].body;
+ assert.equal(body.base_version,2);assert.equal(body.note,"");
+ assert.equal(body.finishing_settings.smart_framing,"face");
+ assert.equal(body.finishing_settings.safe_overlays,true);
+ assert.equal(body.finishing_settings.shot_match,false);
+ assert.deepEqual(body.finishing_settings.visual_profiles,[]);
+ assert.deepEqual(body.finishing_settings.audio_joins,[]);
+});
+test("visual finishing explains declined shots and refuses stale versions",async()=>{
+ await act(async()=>root.render(React.createElement(VisualFinishingControls,{jobId,version:1,
+  report:{smart_framing:"face",profiles:[{clip_index:0,points:[],note:"Group shot; existing framing retained."}]},onUpdated:()=>{readyEvents+=1;}})));
+ assert.ok(document.body.textContent.includes("Group shot"));
+ await act(async()=>document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+ await waitFor(()=>document.querySelector('[role="alert"]'));
+ assert.ok(document.body.textContent.includes("A newer edit is available"));
+ assert.equal(posts(`jobs/${jobId}/revisions`).length,0);
 });
 test("voice cleanup explains source decisions and can be disabled without a model request",async()=>{
  await act(async()=>root.render(React.createElement(AudioCleanupControls,{jobId,version:2,

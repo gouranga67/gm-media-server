@@ -1494,6 +1494,14 @@ export type FinishingTools = {
   readonly voice_denoise: boolean;
   readonly voice_cleanup?: "off" | "auto";
   readonly voice_cleanup_profiles?: readonly { readonly asset_id: string; readonly status: "measured" | "skipped" | "unavailable"; readonly note: string }[];
+  readonly smart_framing?: "off" | "face";
+  readonly shot_match?: boolean;
+  readonly safe_overlays?: boolean;
+  readonly visual_profiles?: readonly { readonly clip_index: number; readonly asset_id: string; readonly source_in: number; readonly source_out: number;
+    readonly status: "measured" | "skipped" | "unavailable"; readonly sampled_frames: number; readonly note: string;
+    readonly source_width: number; readonly source_height: number; readonly brightness: number;
+    readonly framing_applied?: boolean;
+    readonly points: readonly { readonly time: number; readonly x: number; readonly y: number; readonly width: number; readonly height: number }[] }[];
 };
 export type FinishingInspection = { readonly version: number; readonly settings: FinishingTools; readonly sources: readonly { readonly asset_id: string; readonly name: string; readonly media_kind: "image" | "video"; readonly duration_seconds: number }[] };
 export const getFinishingTools = (id: string) => apiRequest<FinishingInspection>(`jobs/${id}/finishing-tools`);

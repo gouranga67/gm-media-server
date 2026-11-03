@@ -1,0 +1,38 @@
+# Phase 28 — selected-shot visual finishing
+
+Source checkpoint: 2026-11-03 UTC. This delivery adds optional face-aware cropping, small exposure matching and caption-aware image cards. Owner deployment and real-footage acceptance remain open. General object/product tracking, stabilization and learned background cutout are not implemented by this checkpoint; the wider Phase 28 gate remains open.
+
+## Controls and behaviour
+
+Open a ready edit, expand **Smart visual finishing**, choose the adjustments and click **Create visual preview**. Checkbox changes alone start no work. The previous preview remains available. The request uses the inspected version, rejects a stale version and creates an ordinary local finishing revision: it does not replan the story or spend hosted editing tokens. Clear the checkboxes and create another preview to turn these adjustments off.
+
+**Follow a single face** uses the bundled YuNet 2023 face detector through OpenCV on sparse samples of selected video shots. The crop runs before the existing centre-fill crop and optional punch-in. This fixes the structural limitation of a camera move applied only after a subject has already been cropped out. It does not recognize identity, select a speaker from a group, understand products or follow arbitrary objects. It conservatively declines weak coverage, multiple faces, abrupt jumps, source-edge problems and faces too large for the output crop and existing zoom. Manual camera anchors take priority. A tighter delivery aspect may decline an otherwise valid saved path; the report identifies that fallback. Samples cannot guarantee that every intermediate frame is safe. A face-first crop can still exclude a product, hands or another meaningful part of the picture: check playback.
+
+**Gently balance shot brightness** compares selected short SDR shots and applies only a small brightness offset, capped at ±0.035. It leaves saturation, gamma and contrast alone. Manual colour settings take priority. HDR is measured after the established transfer-aware conversion, but is excluded from automatic exposure matching; this feature does not replace or retune the corrected HLG/PQ pipeline. Large differences, near-white highlights, incomplete samples or an insufficient reference set are left alone. Whole-frame brightness is a heuristic, not a determination of the intended look or skin-tone equivalence.
+
+**Keep image cards clear of captions** uses resolved subtitle events, including user-edited positions and hidden cues. Each still retains all four edges and a stable contained layout in the largest band free throughout that card's own time window. Dialogue and subtitle timings stay unchanged. This avoids moving a card at every word, but many different caption positions can leave a small card; readability still needs a person to check. Optional callouts yield when every caption band is occupied. Manually positioned layers and fixed pointers are not automatically moved, and captions are not automatically moved away from faces.
+
+## Compute and replay
+
+Inspection is opt-in: at most eight selected 1.5–12 second video shots, two samples per second, 24 frames per shot and a 20-second parent inspection budget. Frames are at most 480 × 480 including analysis padding. OpenCV uses one CPU thread; decoding also has a bounded thread count. The interruptible inspector runs in a process group so a timeout kills its decoder as well. Unavailable inspection preserves the picture instead of failing the story. Original media files are never modified.
+
+Only small measurements are cached, keyed by source hash, resolved original/proxy identity, file size/modification time, selected range and measurement version and pinned detector hash. Detection frames are not stored. Saved typed profiles bind to exact clip asset IDs and source ranges. Finals, ordinary rerenders and delivery variants replay the saved measurements; an arbitrary timeline/range change invalidates those profiles before bounded reinspection. An approved duration-prefix variant restricts the saved path to that prefix and retains its exposure decision without new inspection. Manual camera/colour changes still override corresponding automatic effects. Rechecking explicitly can reuse the measurement cache. Profiles cannot be injected through the finishing endpoint: the server accepts a retained immutable profile or a request to clear/recheck it.
+
+The hosted editor's strict response schema has not gained face coordinates or measurement fields. Prior profiles are stripped from its context. Existing explicit visual preferences can carry through a story revision and be measured locally for its new selected shots. The agent's local `apply_finishing` tool exposes the three optional settings and must inspect/retain unrelated tools; it does not invent profiles. The existing story model, source selection, audio clocks and default visual treatment remain unchanged. Local runtime metrics record the optional visual finishing stage.
+
+## Verification and remaining work
+
+Focused tests cover legacy serialization, unchanged hosted schema size, opt-in, detection continuity/ambiguity, source-range binding, trim invalidation, manual overrides, aspect fallback, bounded exposure, cache corruption/reuse, child timeout cleanup and timed-caption layout. Rendered fixtures check pre-crop recovery, 60 fps picture timing and identical decoded audio. A public-domain NASA portrait from the scikit-image example set was used only in a temporary smoke test to verify actual face detections and moving-crop behaviour; synthetic markers isolate rendering behaviour. Neither proves quality across the owner's footage. See the [dependency and detector notices](../visual-finishing-dependencies.md).
+
+Verification passed: **672 backend tests**, including the pinned detector and local CPU FFmpeg renders; **74 UI interaction tests**; and all **eight source-suite gates** (web/agent TypeScript, production build, Python compilation, Compose, public-release audit and patch checks). The built app was checked with synthetic API responses at 1280px desktop and 390px phone: no overflow, 44px action targets, no JavaScript/network failures, no work on opening/toggling, and one version-bound POST on explicit submission. No production deployment, user-media mutation, hosted editing request, rule promotion or social post was performed. Live NVENC throughput and representative-footage acceptance remain open.
+
+After rebuilding:
+
+```bash
+sudo ./scripts/install-service.sh
+python3 scripts/verify-phase28.py
+```
+
+The helper checks the deployed capability contract only. It queues no work and is not a claim of visual quality. Follow the [visual finishing acceptance checklist](../testing-plan.md#selected-shot-visual-finishing-acceptance--2026-11-03). No database migration follows 043 for this checkpoint. The worker image gains the pinned CPU-only `opencv-python-headless==4.13.0.92` dependency, plus the pinned 232,589-byte MIT-licensed YuNet model and its license notice. The model is fetched at build time, checked against its SHA-256 and never downloaded during an edit. Its separate late Docker dependency layer preserves the existing cached speech/CLIP model download layers when that earlier build cache is available.
+
+Optional stabilization needs representative shaky-shot tests and motion/crop acceptance before enabling it. A background-cutout prototype still needs a pinned redistributable model, a measured selected-range compute budget, matte/edge tests and quality acceptance. Existing real green-screen keying remains available. These capabilities must not be advertised as shipped.

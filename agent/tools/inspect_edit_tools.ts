@@ -12,6 +12,7 @@ export default defineTool({
     // These are server measurements, not editable instructions. Auto recomputes
     // them locally when the retained configuration creates a new preview.
     if (result.settings) delete result.settings.voice_cleanup_profiles;
+    if (result.settings) delete result.settings.visual_profiles;
     return result;
   },
 });

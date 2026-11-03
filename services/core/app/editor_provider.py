@@ -222,6 +222,7 @@ def _base_public_context(context: dict[str, Any], max_characters: int) -> dict[s
     previous_tools = ((public.get("revision") or {}).get("previous_plan") or {}).get("finishing")
     if isinstance(previous_tools, dict):
         previous_tools.pop("voice_cleanup_profiles", None)  # Replay locally; not story-planning evidence.
+        previous_tools.pop("visual_profiles", None)
     for key in list(public):
         if key.startswith("_"):
             public.pop(key)

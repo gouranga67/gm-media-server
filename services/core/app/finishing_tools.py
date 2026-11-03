@@ -95,6 +95,42 @@ class VoiceCleanupProfile(ToolModel):
     note: str = Field(default="", max_length=300)
 
 
+class FacePoint(ToolModel):
+    time: float = Field(ge=0, le=12)
+    x: float = Field(ge=0, le=1)
+    y: float = Field(ge=0, le=1)
+    width: float = Field(gt=0, le=1)
+    height: float = Field(gt=0, le=1)
+
+    @model_validator(mode="after")
+    def inside(self):
+        if self.x - self.width / 2 < -0.001 or self.x + self.width / 2 > 1.001 or self.y - self.height / 2 < -0.001 or self.y + self.height / 2 > 1.001:
+            raise ValueError("face bounds must be inside the source picture")
+        return self
+
+
+class VisualProfile(ToolModel):
+    clip_index: int = Field(ge=0, le=47)
+    asset_id: UUID
+    source_in: float = Field(ge=0, le=86400)
+    source_out: float = Field(ge=0, le=86520)
+    status: Literal["measured", "skipped", "unavailable"]
+    source_width: int = Field(default=0, ge=0, le=32768)
+    source_height: int = Field(default=0, ge=0, le=32768)
+    points: list[FacePoint] = Field(default_factory=list, max_length=24)
+    brightness: float = Field(default=0, ge=-0.035, le=0.035)
+    sampled_frames: int = Field(default=0, ge=0, le=24)
+    note: str = Field(default="", max_length=400)
+
+    @model_validator(mode="after")
+    def ordered(self):
+        if self.source_out < self.source_in or (self.source_out == self.source_in and (self.status != "skipped" or self.points)) or any(b.time <= a.time for a, b in zip(self.points, self.points[1:])):
+            raise ValueError("visual measurements must advance through the source")
+        if self.points and (not self.source_width or not self.source_height or self.points[-1].time > self.source_out - self.source_in + .001):
+            raise ValueError("face measurements need source dimensions and valid clip times")
+        return self
+
+
 class FinishingTools(ToolModel):
     callouts: list[Callout] = Field(default_factory=list, max_length=8)
     pointers: list[Pointer] = Field(default_factory=list, max_length=8)
@@ -111,6 +147,14 @@ class FinishingTools(ToolModel):
             data.pop("voice_cleanup", None)
         if not data.get("voice_cleanup_profiles"):
             data.pop("voice_cleanup_profiles", None)
+        if data.get("smart_framing") == "off":
+            data.pop("smart_framing", None)
+        if not data.get("shot_match"):
+            data.pop("shot_match", None)
+        if not data.get("safe_overlays"):
+            data.pop("safe_overlays", None)
+        if not data.get("visual_profiles"):
+            data.pop("visual_profiles", None)
         return data
 
     motions: list[ClipMotion] = Field(default_factory=list, max_length=24)
@@ -122,6 +166,10 @@ class FinishingTools(ToolModel):
     voice_denoise: bool = False
     voice_cleanup: Literal["off", "auto"] = "off"
     voice_cleanup_profiles: list[VoiceCleanupProfile] = Field(default_factory=list, max_length=48)
+    smart_framing: Literal["off", "face"] = "off"
+    shot_match: bool = False
+    safe_overlays: bool = False
+    visual_profiles: list[VisualProfile] = Field(default_factory=list, max_length=48)
     audio_joins: list[AudioJoin] = Field(default_factory=list, max_length=8)
 
 
@@ -166,6 +214,15 @@ def validate_finishing(
     for motion in tools.motions:
         if motion.points[-1].time > durations[motion.clip_index] + 0.01:
             raise ValueError("camera move extends beyond its clip")
+    indexes = [p.clip_index for p in tools.visual_profiles]
+    if len(indexes) != len(set(indexes)):
+        raise ValueError("visual profiles must identify distinct clips")
+    for profile in tools.visual_profiles:
+        if profile.clip_index >= len(plan.clips):
+            raise ValueError("visual profile identifies a missing clip")
+        clip = plan.clips[profile.clip_index]
+        if profile.asset_id != clip.asset_id or abs(profile.source_in - clip.source_in) > .001 or abs(profile.source_out - clip.source_out) > .001:
+            raise ValueError("visual profile belongs to a different source range")
     for name in ("audio_regions", "caption_regions", "callouts", "pointers", "music_regions"):
         previous = 0.0
         for region in sorted(getattr(tools, name), key=lambda item: item.start):
@@ -294,6 +351,10 @@ def clip_finishing_filter(
         filters.append(
             f"eq=contrast={colour.contrast:.4f}:brightness={colour.brightness:.4f}:saturation={colour.saturation:.4f}:gamma={colour.gamma:.4f}"
         )
+    elif tools.shot_match:
+        profile = next((p for p in tools.visual_profiles if p.clip_index == index and p.status == "measured"), None)
+        if profile and profile.brightness:
+            filters.append(f"eq=brightness={profile.brightness:.4f}")
     return ",".join(filters)
 
 
@@ -586,6 +647,9 @@ def retime_finishing(
             "clear independent audio joins before changing timeline lengths or source ranges"
         )
     data = tools.model_dump(mode="json")
+    # Measurements belong to exact source ranges, never to a mutable clip index.
+    # The opted-in worker may inspect the newly selected ranges before saving.
+    data.pop("visual_profiles", None)
     for name in ("audio_regions", "caption_regions", "layers", "callouts", "pointers", "music_regions"):
         result = []
         for region in data.get(name, []):

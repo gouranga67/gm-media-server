@@ -39,6 +39,36 @@ def broll_input_arguments(sources: list[dict[str, Any]]) -> list[str]:
     return arguments
 
 
+def position_broll_cards(sources, events, plan):
+    """Use resolved subtitle cues, including saved user positions and hiding.
+
+    One stable layout per card avoids bouncing a reference image at every word.
+    The card fits the largest band that is free throughout its own time window.
+    """
+    if not plan.finishing or not plan.finishing.safe_overlays:
+        return
+    for source in sources:
+        cue = source["cue"]
+        if cue.media_kind == "image":
+            source["caption_bands"] = sorted({event.get("position") or plan.caption_position for event in events
+                if event["start"] < cue.start_seconds + cue.duration_seconds and event["end"] > cue.start_seconds})
+
+
+def caption_safe_card_layout(width, height, bands):
+    blocked = {"upper": (.09, .32), "middle": (.34, .59), "lower_safe": (.61, .85)}
+    intervals = sorted(blocked[band] for band in set(bands) if band in blocked)
+    gaps, cursor = [], .06
+    for start, end in intervals:
+        if start > cursor:
+            gaps.append((cursor, start))
+        cursor = max(cursor, end)
+    if cursor < .9:
+        gaps.append((cursor, .9))
+    start, end = max(gaps, key=lambda gap: gap[1] - gap[0])
+    max_height = max(2, int(height * min(.62, (end - start) * .9)) // 2 * 2)
+    return {"max_width": max(2, int(width * .90) // 2 * 2), "max_height": max_height, "center_y": round(height * (start + end) / 2)}
+
+
 def image_broll_layout(width: int, height: int, caption_position: str = "lower_safe") -> dict[str, int]:
     """A contained still card clear of the chosen caption band, in square pixels."""
     vertical = height > width
@@ -74,7 +104,8 @@ def append_broll_filters(graph: str, sources: list[dict[str, Any]], *, width: in
         end = cue.start_seconds + cue.duration_seconds
         active = f"gte(t,{cue.start_seconds:.3f})*lt(t,{end:.3f})"
         if cue.media_kind == "image":
-            layout = image_broll_layout(width, height, source.get("caption_position", "lower_safe"))
+            layout = (caption_safe_card_layout(width, height, source["caption_bands"]) if "caption_bands" in source
+                else image_broll_layout(width, height, source.get("caption_position", "lower_safe")))
             # A review, screenshot or still must retain all four edges. Do not
             # inherit a video's center-fill crop or flatten PNG alpha to YUV.
             sizing = (
@@ -123,6 +154,7 @@ def public_broll_manifest(context: dict[str, Any], plan: EditPlan) -> list[dict[
 
 def finishing_manifest(context: dict[str, Any], plan: EditPlan) -> dict[str, Any]:
     from app.audio_cleanup import cleanup_manifest
+    from app.visual_finishing import visual_manifest
     from app.edit_plan import MontageEditPlan
     from app.finishing_review import treatment_timeline
 
@@ -146,6 +178,7 @@ def finishing_manifest(context: dict[str, Any], plan: EditPlan) -> dict[str, Any
             "video_timing_pipeline": "source_timestamps_before_camera_effects_v1",
             "rhythmic_punch_beats": beats, "broll_count": len(plan.broll),
             "image_broll_framing": "contain_card_v1",
+            "resolved_caption_avoidance": bool(plan.finishing and plan.finishing.safe_overlays),
             "creative_effect_count": len(plan.effects), "picture_timeline_preserved": True,
             "dialogue_timeline_preserved": not bool(plan.finishing and plan.finishing.audio_joins),
             "picture_layers": picture_layers, "speech_playback_rate": 1.0,
@@ -153,5 +186,6 @@ def finishing_manifest(context: dict[str, Any], plan: EditPlan) -> dict[str, Any
             "creative_treatment_review": context.get("creative_treatment_review"),
             "local_tools": plan.finishing.model_dump(mode="json") if plan.finishing else None,
             "audio_cleanup": cleanup_manifest(plan),
+            "visual_finishing": visual_manifest(plan, context["job"].get("output_aspect") or "vertical"),
             "treatment_timeline": treatment_timeline(context, plan),
             "additional_model_calls": 0}

@@ -1,0 +1,2 @@
+# Kept in a late Docker layer so visual-tool updates do not redownload models.
+opencv-python-headless==4.13.0.92

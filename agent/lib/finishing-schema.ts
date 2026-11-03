@@ -126,5 +126,8 @@ export const finishingToolsSchema = z
     music_start_seconds: z.number().min(0).max(86400),
     voice_denoise: z.boolean(),
     voice_cleanup: z.enum(["off", "auto"]).optional(),
+    smart_framing: z.enum(["off", "face"]).optional(),
+    shot_match: z.boolean().optional(),
+    safe_overlays: z.boolean().optional(),
   })
   .strict();

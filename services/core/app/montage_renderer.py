@@ -1,4 +1,6 @@
 from app.duration_policy import duration_review
+from app.visual_finishing import source_crop_filter
+from app.finishing_renderer import position_broll_cards
 from app.finishing_tools import (
     apply_graph_finishing,
     finish_caption_events,
@@ -105,11 +107,12 @@ def _video_filter(
     height: int,
     fps: int,
     hdr_mode: str | None = None,
+    framing: str = "",
 ) -> str:
     chain = f"[{index}:v:0]"
     if hdr_mode is not None:
         chain += hdr_to_sdr_filter(hdr_mode) + ","
-    chain += (
+    chain += ("setpts=PTS-STARTPTS," + framing + ",setsar=1") if framing else (
         f"scale={width}:{height}:force_original_aspect_ratio=increase,"
         f"crop={width}:{height},setsar=1"
     )
@@ -192,6 +195,7 @@ def _filter_graph(
                 height,
                 fps,
                 hdr_mode=hdr_modes[index] if hdr_modes else None,
+                framing=source_crop_filter(plan, index, width, height),
             )
         )
         asset = assets[str(clip.asset_id)]
@@ -297,6 +301,7 @@ def _render(
     final: bool,
     settings: Settings,
     captions_path: Path | None = None,
+    caption_events: list[dict] | None = None,
 ) -> str:
     inventory = {str(asset["asset_id"]): asset for asset in context["assets"]}
     common = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-y"]
@@ -330,6 +335,7 @@ def _render(
     common.extend(effect_input_arguments(effect_sources))
     broll_sources = selected_broll(context, plan, settings,
         len(plan.clips) + (1 if music_source is not None else 0) + len(effect_sources))
+    position_broll_cards(broll_sources, caption_events or [], plan)
     common.extend(broll_input_arguments(broll_sources))
     picture_layers = selected_picture_layers(context, plan, settings, len(plan.clips)+(1 if music_source else 0)+len(effect_sources)+len(broll_sources))
     common.extend(picture_layer_inputs(picture_layers))
@@ -574,6 +580,7 @@ def render_montage_preview(
         final=False,
         settings=settings,
         captions_path=captions_ass if has_overlays else None,
+        caption_events=events,
     )
     manifest = _manifest(
         context,
@@ -662,6 +669,7 @@ def render_montage_delivery(
         final=True,
         settings=settings,
         captions_path=captions_ass if has_overlays else None,
+        caption_events=events,
     )
     probe = probe_media(video, settings.analysis_command_timeout_seconds)
     video_stream = next((stream for stream in probe["streams"] if stream.get("type") == "video"), None)

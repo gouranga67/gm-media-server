@@ -1,4 +1,6 @@
 from app.duration_policy import duration_review
+from app.visual_finishing import source_crop_filter
+from app.finishing_renderer import position_broll_cards
 from app.finishing_tools import (
     apply_graph_finishing,
     finish_caption_events,
@@ -341,11 +343,12 @@ def _clip_video_filter(
     height: int,
     frames_per_second: int,
     hdr_mode: str | None = None,
+    framing: str = "",
 ) -> str:
     chain = f"[{index}:v:0]"
     if hdr_mode is not None:
         chain += hdr_to_sdr_filter(hdr_mode) + ","
-    chain += (
+    chain += ("setpts=PTS-STARTPTS," + framing + ",setsar=1,setpts=PTS-STARTPTS") if framing else (
         f"scale={width}:{height}:force_original_aspect_ratio=increase,"
         f"crop={width}:{height},setsar=1,setpts=PTS-STARTPTS"
     )
@@ -412,6 +415,7 @@ def _ffmpeg_filter(
                 height=height,
                 frames_per_second=frames_per_second,
                 hdr_mode=hdr_modes[index] if hdr_modes else None,
+                framing=source_crop_filter(plan, index, width, height),
             )
         )
         audio = (
@@ -689,6 +693,7 @@ def render_edit_preview(
     events = finish_caption_events(events, plan.finishing)
     from app.subtitle_document import resolve_events, document_fingerprint
     events = resolve_events(context, plan, events)
+    position_broll_cards(broll_sources, events, plan)
     _atomic_text(
         captions_path,
         render_ass(
@@ -917,6 +922,7 @@ def render_final_delivery(
     events = finish_caption_events(events, plan.finishing)
     from app.subtitle_document import resolve_events, document_fingerprint
     events = resolve_events(context, plan, events)
+    position_broll_cards(broll_sources, events, plan)
     _atomic_text(
         captions_ass_path,
         render_ass(

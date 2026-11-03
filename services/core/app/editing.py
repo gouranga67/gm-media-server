@@ -830,6 +830,9 @@ def _request_revision(job_id: UUID, payload: RevisionCreate,
                     )
                 document = candidate.model_dump(mode="json")
                 if payload.finishing_settings is not None:
+                    profiles = payload.finishing_settings.model_dump(mode="json").get("visual_profiles") or []
+                    if profiles and profiles != (source_plan["document"].get("finishing") or {}).get("visual_profiles", []):
+                        raise ValueError("visual measurements are read-only; clear them to request a local recheck")
                     document.update(
                         schema_version="1.5",
                         finishing=payload.finishing_settings.model_dump(mode="json"),
@@ -1342,6 +1345,8 @@ def inspect_finishing_tools(job_id: UUID):
             "independent_audio_joins": True,
             "ai_background_removal": False,
             "automatic_tracking": False,
+            "single_face_follow": True,
+            "small_exposure_match": True,
         },
         "hosted_model_calls": 0,
     }

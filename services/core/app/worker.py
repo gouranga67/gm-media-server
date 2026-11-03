@@ -1352,6 +1352,21 @@ def process_one_edit(state: WorkerState) -> bool:
             if not deterministic_revision or run.get("finishing_settings") is not None:
                 plan = prepare_voice_cleanup(context, plan,
                     new_edit=not bool(run.get("based_on_run_id")))
+            from app.visual_finishing import prepare_visual_finishing
+            if not deterministic_revision:
+                # Hosted output cannot invent locally measured face coordinates.
+                from app.finishing_tools import FinishingTools
+                previous_tools = ((context.get("revision") or {}).get("previous_plan") or {}).get("finishing") or {}
+                visual_options = {key: previous_tools[key] for key in ("smart_framing", "shot_match", "safe_overlays") if key in previous_tools}
+                if plan.finishing or visual_options:
+                    tools = plan.finishing or FinishingTools()
+                    plan = plan.model_copy(update={"finishing": tools.model_copy(update={
+                        "smart_framing": "off", "shot_match": False, "safe_overlays": False,
+                        **visual_options, "visual_profiles": []}, deep=True)}, deep=True)
+            with measure_processing("visual_finishing") as timing:
+                timing["did_work"] = bool(plan.finishing and (plan.finishing.smart_framing == "face" or plan.finishing.shot_match)
+                    and not plan.finishing.visual_profiles)
+                plan = prepare_visual_finishing(context, plan)
             _persist_generated_plan(run, plan, provenance)
 
         from app.story_contract import check_story_contract

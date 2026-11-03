@@ -97,8 +97,10 @@ def treatment_events(tools, width, height, captions=(), caption_position="lower_
                     for band in ("upper", "middle", "lower_safe")
                     if band not in active_bands
                 ),
-                "upper",
+                None if getattr(tools, "safe_overlays", False) else "upper",
             )
+        if position is None:
+            continue  # Dialogue captions take priority when every band is busy.
         y = round(
             height * {"upper": 0.20, "middle": 0.42, "lower_safe": 0.60}[position]
         )

@@ -218,6 +218,28 @@ def derive_duration_variant(plan: EditPlan, target_seconds: int) -> EditPlan:
     tools = retime_finishing(finishing, [[0,variant_duration,0]], clips,
         [(i,0,float(c.duration if isinstance(plan,MontageEditPlan) else c.source_out-c.source_in)) for i,c in enumerate(clips)])
     if tools and plan.finishing:
+        # A delivery variant is an approved prefix, not a new inspection. Keep
+        # immutable visual decisions and restrict a final path to that prefix.
+        # Arbitrary timeline edits still invalidate profiles in retime_finishing.
+        from app.finishing_tools import FacePoint, VisualProfile
+        visual_profiles = []
+        for profile in plan.finishing.visual_profiles:
+            if profile.clip_index >= len(clips):
+                continue
+            clip = clips[profile.clip_index]
+            duration = float(clip.duration if isinstance(plan, MontageEditPlan) else clip.source_out - clip.source_in)
+            points = [p.model_copy(deep=True) for p in profile.points if p.time <= duration]
+            if profile.points and not points:
+                points = [profile.points[0].model_copy(update={"time": 0}, deep=True)]
+            for a, b in zip(profile.points, profile.points[1:]):
+                if a.time < duration < b.time:
+                    ratio = (duration - a.time) / (b.time - a.time)
+                    points.append(FacePoint(time=duration, **{field: getattr(a, field) + (getattr(b, field) - getattr(a, field)) * ratio
+                        for field in ("x", "y", "width", "height")}))
+                    break
+            visual_profiles.append(VisualProfile.model_validate({**profile.model_dump(), "source_out": clip.source_out,
+                "points": points}))
+        tools.visual_profiles = visual_profiles
         tools.audio_joins = [join.model_copy(update={"tail_seconds": min(join.tail_seconds, max(0, variant_duration-sum(float(c.duration if isinstance(plan,MontageEditPlan) else c.source_out-c.source_in) for c in clips[:join.clip_index+1])))})
                             for join in plan.finishing.audio_joins if join.clip_index < len(clips)]
     return plan.model_copy(update={"clips": clips, "effects": effects, "broll": broll, "finishing":tools}, deep=True)
