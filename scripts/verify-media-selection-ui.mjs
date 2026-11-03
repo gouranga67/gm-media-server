@@ -88,6 +88,7 @@ const { SubtitleEditor } = require(path.join(repo, "apps/web/app/_components/sub
 const { splitSubtitle, mergeSubtitles } = require(path.join(repo, "apps/web/lib/subtitle-editing.ts"));
 const { LibraryUpload } = require(path.join(repo, "apps/web/app/_components/library-upload.tsx"));
 
+let intakeItems = [];
 globalThis.fetch = async (url, options = {}) => {
   const route = String(url).replace("/api/media/", "");
   const body = options.body instanceof File ? options.body : options.body ? JSON.parse(options.body) : undefined;
@@ -170,6 +171,30 @@ globalThis.fetch = async (url, options = {}) => {
     payload={updated:body.suggestions.length,applied_asset_ids:session.applied_asset_ids};
   }
   else if (/^library\/organization\/[^/?]+$/.test(route)) payload=organizationHistory.find((item) => item.id === route.split("/")[2]);
+  else if (route.startsWith("library/browse?")) {
+    const p = new URLSearchParams(route.split("?")[1]);
+    const q = (p.get("query") || "").toLowerCase(), view=p.get("view"), ids=p.getAll("match_ids");
+    let items = managedAssets.filter(a => (view === "trash" ? a.library_status === "archived" : a.library_status === "active")
+      && (!["talking","broll","unsorted"].includes(view) || a.mime_type.startsWith("video/") && a.media_role === (view === "unsorted" ? "auto" : view))
+      && (!["image","audio"].includes(view) || a.mime_type.startsWith(view+"/"))
+      && (p.get("category") === "all" || (a.media_category || "auto") === p.get("category"))
+      && (p.get("favorite") !== "true" || a.favorite)
+      && (p.get("unfiled") !== "true" || !a.collection_count)
+      && (!p.get("collection_id") || folderMembers.get(p.get("collection_id"))?.has(a.id))
+      && (!q || [a.display_name,a.source_name,a.project_name,a.notes,...a.tags].some(v=>v?.toLowerCase().includes(q)) || ids.includes(a.id)));
+    const candidateIds=new Set(items.map(a=>a.id));
+    items=items.filter(a=>p.get("copies")==="true" || view==="trash" || !a.canonical_asset_id || a.canonical_asset_id===a.id || !candidateIds.has(a.canonical_asset_id));
+    items.sort((a,b)=>p.get("sort")==="name"?a.display_name.localeCompare(b.display_name):p.get("sort")==="largest"?b.byte_size-a.byte_size:Date.parse(b.created_at)-Date.parse(a.created_at)||a.id.localeCompare(b.id));
+    const offset=Number(p.get("offset")),limit=Number(p.get("limit"));
+    payload={items:items.slice(offset,offset+limit),total:items.length,summary:{active:managedAssets.filter(a=>a.library_status==="active").length,trash:managedAssets.filter(a=>a.library_status==="archived").length,stored_bytes:10000}};
+  }
+  else if (route.startsWith("library/intake/status?")) payload=new URLSearchParams(route.split("?")[1]).getAll("asset_ids").map(id=>({id,intake_status:analysisStatus === "failed" ? "failed" : "ready",error:"local analysis failed"}));
+  else if (route.startsWith("library/intake?")) {
+    const p=new URLSearchParams(route.split("?")[1]), q=(p.get("query")||"").toLowerCase();
+    const items=intakeItems.filter(a=>a.display_name.toLowerCase().includes(q));
+    payload={items:items.slice(Number(p.get("offset")),Number(p.get("offset"))+60),total:items.length,inbox_count:intakeItems.length};
+  }
+  else if (route === "library/intake/review") { intakeItems=intakeItems.filter(a=>!body.asset_ids.includes(a.id));payload={updated:body.asset_ids.length}; }
   else if (route.startsWith("library/assets?")) {
     const params = new URLSearchParams(route.split("?")[1]);
     payload = params.get("offset") === "0" ? managedAssets.filter((asset) => !params.get("collection_id") || folderMembers.get(params.get("collection_id"))?.has(asset.id)) : [];
@@ -260,6 +285,7 @@ beforeEach(() => {
   ].map((item) => ({ notes: "", tags: [], favorite: false, library_status: "active", collection_count: 0, visual_status: "ready", updated_at: item.created_at, ...item }));
   lessonProposed=false;labFixture=null;
   assemblySettings={assembly_mode:"auto",pacing_mode:"auto",edit_style:"energetic",reel_intent:"auto"}; assemblyError=null; assemblyLocked=false; profiles=[]; previewFixture=null;
+  intakeItems = [];
   window.sessionStorage.clear();
   document.body.innerHTML = '<div id="root"></div>';
   root = createRoot(document.getElementById("root"));
@@ -277,7 +303,7 @@ function button(label) {
   const found = [...document.querySelectorAll("button")].find((item) => item.textContent.trim() === label);
   assert.ok(found, `Missing button: ${label}`); return found;
 }
-async function click(element) { assert.ok(element); await act(async () => element.click()); }
+async function click(element) { assert.ok(element); await waitFor(() => !element.disabled); await act(async () => { element.click(); await tick(); }); }
 async function selectFiles(selector, files) {
   const input = document.querySelector(selector);
   assert.ok(input, `File picker unavailable alongside server selection: ${selector}`);
@@ -457,6 +483,7 @@ test("Trash requires an explicit click and confirmation, preserves used original
   await waitFor(() => !document.querySelector('input[aria-label="Select Product introduction"]'));
   assert.equal(managedAssets.find((item) => item.id === "talk").job_references, 2);
   await click(button("Trash"));
+  await waitFor(()=>document.querySelector('input[aria-label="Select Product introduction"]'));
   await click(document.querySelector('input[aria-label="Select Product introduction"]'));
   await click(button("Restore selected"));
   await waitFor(() => managedAssets.find((item) => item.id === "talk").library_status === "active");
@@ -482,9 +509,8 @@ test("uploads can be named and labelled as B-roll without creating an edit", asy
   await waitFor(() => transfers.length === 1);
   await act(async () => transfers[0].callbacks.onSuccess());
   await waitFor(() => readyEvents === 1);
-  const updates = posts("library/assets/batch").map((call) => call.body);
-  assert.ok(updates.some((body) => body.action === "rename" && body.name_prefix === "Lotion texture 001"));
-  assert.ok(updates.some((body) => body.action === "role" && body.media_role === "broll"));
+  assert.deepEqual(posts("/assets")[0].body.library_intake, { display_name: "Lotion texture 001", media_role: "broll" });
+  assert.equal(posts("library/assets/batch").length, 0, "Metadata is saved at registration, without waiting for browser analysis polling");
   assert.equal(posts("/jobs").length, 0);
 });
 
@@ -1307,6 +1333,7 @@ async function mountFolderHome() {
   await waitFor(()=>document.querySelector('button[aria-label="Open folder Creams"]'));
 }
 async function openCreams() {
+  await waitFor(()=>document.querySelector('button[aria-label="Open folder Creams"]'));
   await click(document.querySelector('button[aria-label="Open folder Creams"]'));
   await waitFor(()=>document.querySelector('input[aria-label="Select Product introduction"]'));
 }
@@ -1480,4 +1507,108 @@ test("subtitle split and merge preserve the full interval and words",()=>{
   assert.throws(()=>splitSubtitle({...cue,text:"  cream words"},1),/between two words/);
   const merged=mergeSubtitles(...parts);
   assert.equal(merged.start,cue.start);assert.equal(merged.end,cue.end);assert.equal(merged.text,cue.text);
+});
+
+test("standalone import registers folder and mixed-media labels before analysis", async () => {
+  setupFolders();
+  await act(async()=>root.render(React.createElement(LibraryUpload,{folders:folderList,destination:serverId,onReady:async()=>{readyEvents+=1;}})));
+  await act(async()=>root.render(React.createElement(LibraryUpload,{folders:folderList,destination:"",onReady:async()=>{readyEvents+=1;}})));
+  assert.equal(document.querySelector('select[aria-label="Upload destination folder"]').value,serverId,'Opening the Inbox preserves the chosen destination');
+  await type('input[aria-label="Upload file name prefix"]','Cream proof');
+  await chooseOption('select[aria-label="Upload footage role"]','broll');
+  await selectFiles('input[type="file"]',[clip(),new File(['photo'],'review.png',{type:'image/png'})]);
+  assert.equal(calls.length,0);
+  await click(button('Upload 2 files to library'));
+  await waitFor(()=>posts('/assets').length===2);
+  const bodies=posts('/assets').map(c=>c.body);
+  assert.deepEqual(bodies[0].library_intake,{display_name:'Cream proof 001',media_role:'broll',collection_id:serverId});
+  assert.deepEqual(bodies[1].library_intake,{display_name:'Cream proof 002',media_role:'auto',collection_id:serverId});
+  assert.ok(bodies.every(b=>b.job_id===null));
+  assert.equal(posts('library/assets/batch').length,0);
+  assert.equal(posts('/jobs').length,0);
+});
+
+test("large upload batches use two transfer slots, advance after errors, and group analysis checks",async()=>{
+  await mountLibrary();
+  await selectFiles('input[type="file"]',Array.from({length:5},(_,i)=>clip(`source-${i}.mp4`)));
+  await click(button('Upload 5 files to library'));
+  await waitFor(()=>transfers.length===2);
+  assert.equal(posts('/assets').length,2);
+  assert.match(document.body.textContent,/Waiting for an upload slot/);
+  await act(async()=>transfers[0].callbacks.onError(new Error('Connection interrupted')));
+  await waitFor(()=>transfers.length===3);
+  await act(async()=>{transfers[1].callbacks.onSuccess();transfers[2].callbacks.onSuccess();});
+  await waitFor(()=>transfers.length===5);
+  await waitFor(()=>document.body.textContent.includes('Ready in your library'));
+  assert.equal(calls.filter(c=>/^assets\/[^/]+\/analysis$/.test(c.route)).length,0);
+  const registered=posts('/assets').length;
+  await click(document.querySelector('button[aria-label="Resume source-0.mp4"]'));
+  assert.match(document.body.textContent,/Waiting for an upload slot/);
+  await click(document.querySelector('button[aria-label="Pause source-3.mp4"]'));
+  await waitFor(()=>transfers[0].resumes===1);
+  assert.equal(posts('/assets').length,registered,'Resume uses the original asset and transfer');
+});
+
+test("library pages request only 60 rows, and changing pages clears hidden selections",async()=>{
+  const template=managedAssets[0];
+  for(let i=0;i<130;i++)managedAssets.push({...template,id:`page-${String(i).padStart(3,'0')}`,display_name:`Product take ${i}`,created_at:'2024-01-01T00:00:00Z'});
+  await mountBrowser();
+  assert.equal(document.querySelectorAll('input[aria-label^="Select "]:not([aria-label="Select displayed files"])').length,60);
+  await click(document.querySelector('input[aria-label="Select Product introduction"]'));
+  await click(button('Next files'));
+  await waitFor(()=>document.body.textContent.includes('61–120 of 133'));
+  assert.equal(document.querySelector('[aria-label="Selected media actions"]'),null);
+  assert.equal(document.querySelector('input[aria-label="Select Product introduction"]'),null);
+  await click(button('Previous files'));
+  await waitFor(()=>document.querySelector('input[aria-label="Select Product introduction"]'));
+  assert.equal(document.querySelector('input[aria-label="Select Product introduction"]').checked,false);
+  assert.ok(calls.some(c=>c.route.startsWith('library/browse?')&&new URLSearchParams(c.route.split('?')[1]).get('offset')==='60'));
+  assert.equal(calls.filter(c=>c.route.startsWith('library/assets?')).length,0,'No full-library download');
+  assert.equal(calls.filter(c=>c.method!=='GET').length,0);
+  await type('input[type="search"]','Product');
+  await waitFor(()=>document.body.textContent.includes('132 files'));
+  const searches=calls.filter(c=>c.route.startsWith('catalog/search?')).length;
+  await click(button('Next files'));
+  await waitFor(()=>document.body.textContent.includes('61–120 of 132'));
+  assert.equal(calls.filter(c=>c.route.startsWith('catalog/search?')).length,searches,'Paging reuses the bounded speech/visual query');
+});
+
+function setupIntake(){
+  intakeItems=managedAssets.map((a,i)=>({...a,intake_status:i===0?'ready':i===1?'processing':'failed',error:i===2?'Local analysis failed':'',folders:[]}));
+}
+test("Inbox separates processing from reviewable imports, files explicitly, then marks reviewed",async()=>{
+  setupFolders();setupIntake();await mountBrowser();await click(button('Inbox'));
+  await waitFor(()=>document.querySelector('input[aria-label="Review Product introduction"]'));
+  assert.equal(document.querySelector('input[aria-label="Review Cream close-up"]').disabled,true);
+  assert.equal(document.querySelector('input[aria-label="Review VID_0003.mp4"]').disabled,true);
+  await click(document.querySelector('input[aria-label="Review Product introduction"]'));
+  await chooseOption('select[aria-label="File imports in folder"]',jobId);
+  assert.equal(posts('library/intake/review').length,0);
+  await click(button('Add imports to folder'));
+  await waitFor(()=>folderMembers.get(jobId).has('talk'));
+  assert.equal(posts('library/intake/review').length,0,'Filing does not silently mark reviewed');
+  await waitFor(()=>document.querySelector('input[aria-label="Review Product introduction"]'));
+  await click(document.querySelector('input[aria-label="Review Product introduction"]'));
+  await click(button('Mark reviewed'));
+  await waitFor(()=>!document.querySelector('input[aria-label="Review Product introduction"]'));
+  assert.deepEqual(posts('library/intake/review')[0].body,{asset_ids:['talk'],action:'review'});
+  assert.ok(managedAssets.some(a=>a.id==='talk'));
+  assert.equal(posts('library/organization').length,0);
+  assert.equal(posts('/jobs').length,0);
+});
+
+test("Inbox dismiss requires confirmation, never deletes and reopens without replaying selection",async()=>{
+  setupIntake();await mountBrowser();await click(button('Inbox'));
+  await waitFor(()=>document.querySelector('input[aria-label="Review Product introduction"]'));
+  await click(document.querySelector('input[aria-label="Review Product introduction"]'));
+  await click([...document.querySelectorAll('button')].find(b=>b.textContent==='Dismiss from Inbox'));
+  assert.equal(posts('library/intake/review').length,0);
+  await click(button('Confirm dismiss'));
+  await waitFor(()=>intakeItems.length===2);
+  assert.equal(posts('library/intake/review')[0].body.action,'dismiss');
+  assert.equal(calls.filter(c=>c.method==='DELETE').length,0);
+  await click(button('All media'));await waitFor(()=>document.querySelector('input[aria-label="Select Product introduction"]'));
+  await click(button('Inbox'));await waitFor(()=>document.querySelector('input[aria-label="Review Cream close-up"]'));
+  assert.equal(document.querySelector('[aria-label="Selected imports"]'),null);
+  assert.equal(managedAssets.length,3);
 });

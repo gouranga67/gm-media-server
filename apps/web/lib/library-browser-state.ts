@@ -3,12 +3,12 @@ import type { MediaCategory } from "./media-api";
 
 const KEY = "gm-studio:library-browser:v1";
 export type LibraryBrowserState = {
-  home: boolean; folder: string; unfiled: boolean; view: LibraryView;
+  home: boolean; inbox?: boolean; folder: string; unfiled: boolean; view: LibraryView;
   layout: "grid" | "list"; query: string; sort: string; category: MediaCategory | "all";
   favorites: boolean; copies: boolean;
 };
 export const defaultLibraryBrowser: LibraryBrowserState = {
-  home: true, folder: "", unfiled: false, view: "all", layout: "grid", query: "",
+  home: true, inbox: false, folder: "", unfiled: false, view: "all", layout: "grid", query: "",
   sort: "newest", category: "all", favorites: false, copies: false,
 };
 export function readLibraryBrowser(): LibraryBrowserState {
@@ -17,7 +17,7 @@ export function readLibraryBrowser(): LibraryBrowserState {
     if (!value || typeof value !== "object") return defaultLibraryBrowser;
     return {
       home: value.home !== false, folder: typeof value.folder === "string" ? value.folder.slice(0, 120) : "",
-      unfiled: value.unfiled === true,
+      unfiled: value.unfiled === true, inbox: value.inbox === true,
       view: libraryViews.some((item) => item.id === value.view) ? value.view : "all",
       layout: value.layout === "list" ? "list" : "grid",
       query: typeof value.query === "string" ? value.query.slice(0, 160) : "",

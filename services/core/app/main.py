@@ -105,6 +105,9 @@ def system_information() -> dict[str, Any]:
         "render_timing_pipeline": RENDER_TIMING_VERSION,
         "speech_precision": {"version": "speech_precision_v1", "enabled": getattr(settings, "speech_alignment_enabled", False)},
         "voice_cleanup": {"version": "voice_cleanup_v1", "automatic_new_speech_edits": True, "hosted_model_calls": 0},
+        "library_intake": {"version": 1, "durable_registration": True, "folder_upload": True,
+            "reviewable_inbox": True, "server_pagination": True, "page_size": 60,
+            "upload_concurrency": 2, "automatic_hosted_model_calls": 0},
         "visual_finishing": {"version": "selected_visual_v1", "single_face_follow": True,
             "detector": "yunet_2023mar",
             "small_exposure_match": True, "explicit_opt_in": True, "hosted_model_calls": 0,
@@ -146,6 +149,15 @@ def grounded_revision_information() -> dict[str, Any]:
         "quoted_phrase_audio": True, "verified_quiet_pause": True, "frozen_resolution": True,
         "subtitle_corrections_retimed": True, "story_review_version": 2,
         "semantic_judgement": "human_review_required"}
+
+
+@app.get("/api/v1/system/library-intake")
+def library_intake_information() -> dict[str, Any]:
+    from app.database import connection
+    with connection() as database:
+        row = database.execute("SELECT to_regclass('library_intakes') IS NOT NULL AS ready").fetchone()
+    return {"version": 1, "schema_ready": bool(row and row["ready"]),
+        "durable_registration": True, "server_pagination": True, "automatic_hosted_model_calls": 0}
 
 
 def deployed_build_id(settings: Any) -> str:

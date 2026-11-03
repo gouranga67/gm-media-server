@@ -209,12 +209,39 @@ class JobResponse(BaseModel):
     updated_at: datetime
 
 
+class LibraryIntakePreferences(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    collection_id: UUID | None = None
+    display_name: str | None = Field(default=None, min_length=1, max_length=255)
+    media_role: Literal["auto", "talking", "broll"] = "auto"
+
+    @field_validator("display_name")
+    @classmethod
+    def clean_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = " ".join(value.split())
+        if not value or "\x00" in value:
+            raise ValueError("enter a display name")
+        return value
+
+
 class AssetCreate(BaseModel):
     id: UUID | None = None
     job_id: UUID | None = None
     source_name: str = Field(min_length=1, max_length=255)
     mime_type: str = Field(min_length=1, max_length=160)
     byte_size: int = Field(gt=0)
+    library_intake: LibraryIntakePreferences | None = None
+
+    @model_validator(mode="after")
+    def validate_intake(self):
+        if self.library_intake and self.job_id is not None:
+            raise ValueError("library intake creates no editing job")
+        if self.library_intake and self.library_intake.media_role != "auto" and not self.mime_type.startswith("video/"):
+            raise ValueError("footage roles apply to videos")
+        return self
 
     @field_validator("mime_type")
     @classmethod

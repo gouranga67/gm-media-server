@@ -860,7 +860,13 @@ export function mediaTypeForFile(file: File): string {
   return inferred;
 }
 
-export function registerAsset(projectId: string, jobId: string | null, file: File, id?: string) {
+export type LibraryIntakePreferences = {
+  readonly collection_id?: string;
+  readonly display_name?: string;
+  readonly media_role: MediaRole;
+};
+
+export function registerAsset(projectId: string, jobId: string | null, file: File, id?: string, libraryIntake?: LibraryIntakePreferences) {
   const mimeType = mediaTypeForFile(file);
 
   return apiRequest<Asset>(`projects/${projectId}/assets`, {
@@ -871,8 +877,43 @@ export function registerAsset(projectId: string, jobId: string | null, file: Fil
       source_name: file.name,
       mime_type: mimeType,
       byte_size: file.size,
+      library_intake: libraryIntake,
     }),
   });
+}
+
+export type LibraryIntakeItem = {
+  readonly id: string; readonly source_name: string; readonly display_name: string;
+  readonly project_name: string; readonly mime_type: string; readonly byte_size: number;
+  readonly media_role: MediaRole; readonly media_category: MediaCategory;
+  readonly thumbnail_available: boolean; readonly intake_status: "uploading" | "processing" | "ready" | "failed";
+  readonly error: string; readonly folders: readonly { readonly id: string; readonly name: string }[];
+};
+export function getLibraryIntake(query = "", offset = 0) {
+  return apiRequest<{ readonly items: readonly LibraryIntakeItem[]; readonly total: number; readonly inbox_count: number }>(
+    `library/intake?${new URLSearchParams({ query, offset: String(offset), limit: "60" })}`, { cache: "no-store" });
+}
+export function reviewLibraryIntake(assetIds: readonly string[], action: "review" | "dismiss" = "review") {
+  return apiRequest<{ readonly updated: number }>("library/intake/review", { method: "POST", body: JSON.stringify({ asset_ids: assetIds, action }) });
+}
+export function getLibraryIntakeStatus(assetIds: readonly string[]) {
+  const params = new URLSearchParams();
+  for (const id of assetIds) params.append("asset_ids", id);
+  return apiRequest<readonly Pick<LibraryIntakeItem, "id" | "intake_status" | "error">[]>(`library/intake/status?${params}`, { cache: "no-store" });
+}
+
+export function browseLibrary(options: {
+  view: string; category: string; favorite: boolean; collectionId: string; unfiled: boolean;
+  query: string; matchIds: readonly string[]; copies: boolean; sort: string; offset: number;
+}) {
+  const params = new URLSearchParams({ view: options.view, category: options.category, favorite: String(options.favorite),
+    unfiled: String(options.unfiled), query: options.query, copies: String(options.copies), sort: options.sort,
+    limit: "60", offset: String(options.offset) });
+  if (options.collectionId) params.set("collection_id", options.collectionId);
+  for (const id of options.matchIds.slice(0, 100)) params.append("match_ids", id);
+  return apiRequest<{ readonly items: readonly ManagedLibraryAsset[]; readonly total: number;
+    readonly summary: { readonly active: number; readonly trash: number; readonly stored_bytes: number } }>(
+      `library/browse?${params}`, { cache: "no-store" });
 }
 
 export function getAsset(assetId: string) {

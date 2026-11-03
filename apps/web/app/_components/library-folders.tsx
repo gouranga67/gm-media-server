@@ -11,6 +11,7 @@ export function LibraryFolders({ folders, active, busy, onOpen, onNew }: {
   const [expanded, setExpanded] = useState(false);
   const shortcuts = [
     { id: "home", name: "Folders", Icon: FolderOpenIcon },
+    { id: "inbox", name: "Inbox", Icon: InboxIcon },
     { id: "all", name: "All media", Icon: ImagesIcon },
     { id: "unfiled", name: "Not in folders", Icon: InboxIcon },
     { id: "favorites", name: "Favourites", Icon: HeartIcon },

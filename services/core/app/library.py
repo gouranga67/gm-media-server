@@ -24,6 +24,9 @@ from app.schemas import (
 
 router = APIRouter(prefix="/api/v1/library", tags=["library"])
 
+from app.library_intake import router as intake_router
+router.include_router(intake_router)
+
 
 MANAGED_ASSET_SELECT = """
     SELECT assets.id, assets.project_id, projects.name AS project_name,

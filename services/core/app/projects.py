@@ -1290,6 +1290,27 @@ def create_asset(project_id: UUID, payload: AssetCreate) -> dict[str, Any]:
                     "INSERT INTO job_assets (job_id, asset_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
                     (payload.job_id, asset_id),
                 )
+            if payload.library_intake is not None:
+                preferences = payload.library_intake
+                if preferences.collection_id is not None:
+                    folder = database.execute(
+                        "SELECT id FROM library_collections WHERE id = %s FOR KEY SHARE",
+                        (preferences.collection_id,),
+                    ).fetchone()
+                    if folder is None:
+                        raise HTTPException(status_code=409, detail="destination folder no longer exists; choose another folder")
+                    database.execute(
+                        "INSERT INTO library_collection_assets (collection_id, asset_id) VALUES (%s, %s)",
+                        (preferences.collection_id, asset_id),
+                    )
+                database.execute(
+                    "INSERT INTO asset_library_metadata (asset_id, display_name, media_role) VALUES (%s, %s, %s)",
+                    (asset_id, preferences.display_name, preferences.media_role),
+                )
+                database.execute(
+                    "INSERT INTO library_intakes (asset_id, preferences) VALUES (%s, %s)",
+                    (asset_id, Jsonb(preferences.model_dump(mode="json"))),
+                )
     except ForeignKeyViolation as error:
         raise HTTPException(status_code=404, detail="project not found") from error
     except UniqueViolation:
@@ -1302,6 +1323,14 @@ def create_asset(project_id: UUID, payload: AssetCreate) -> dict[str, Any]:
             or row["byte_size"] != payload.byte_size
         ):
             raise HTTPException(status_code=409, detail="asset ID is already in use") from None
+        # Registration retries never overwrite later library edits or reopen the Inbox.
+        if payload.library_intake is not None:
+            with connection() as database:
+                intake = database.execute(
+                    "SELECT preferences FROM library_intakes WHERE asset_id = %s", (asset_id,),
+                ).fetchone()
+            if intake is None or intake["preferences"] != payload.library_intake.model_dump(mode="json"):
+                raise HTTPException(status_code=409, detail="asset ID was registered with different library preferences") from None
         if payload.job_id is not None:
             with connection() as database:
                 job = database.execute(
