@@ -6,8 +6,12 @@ export default defineTool({
     "Inspect the latest ready version, stable clip handles, allowed attached picture sources and local finishing settings before proposing a precise edit. No hosted editing request.",
   inputSchema: z.object({ jobId: z.string().uuid() }).strict(),
   async execute({ jobId }) {
-    return mediaApi(
+    const result = await mediaApi(
       `/api/v1/jobs/${encodeURIComponent(jobId)}/finishing-tools`,
     );
+    // These are server measurements, not editable instructions. Auto recomputes
+    // them locally when the retained configuration creates a new preview.
+    if (result.settings) delete result.settings.voice_cleanup_profiles;
+    return result;
   },
 });

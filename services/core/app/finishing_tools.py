@@ -85,6 +85,16 @@ class AudioJoin(ToolModel):
     tail_seconds: float = Field(default=0, ge=0, le=1)
 
 
+class VoiceCleanupProfile(ToolModel):
+    asset_id: UUID
+    status: Literal["measured", "unavailable", "skipped"]
+    noise_reduction_db: Literal[0, 6] = 0
+    noise_floor_dbfs: float = Field(default=-60, ge=-80, le=-20)
+    balance_gain_db: float = Field(default=0, ge=-6, le=6)
+    compress: bool = False
+    note: str = Field(default="", max_length=300)
+
+
 class FinishingTools(ToolModel):
     callouts: list[Callout] = Field(default_factory=list, max_length=8)
     pointers: list[Pointer] = Field(default_factory=list, max_length=8)
@@ -96,6 +106,11 @@ class FinishingTools(ToolModel):
         for name in ("callouts", "pointers", "music_regions"):
             if not data.get(name):
                 data.pop(name, None)
+        # Keep hashes and playback of previously saved plans unchanged.
+        if data.get("voice_cleanup") == "off":
+            data.pop("voice_cleanup", None)
+        if not data.get("voice_cleanup_profiles"):
+            data.pop("voice_cleanup_profiles", None)
         return data
 
     motions: list[ClipMotion] = Field(default_factory=list, max_length=24)
@@ -105,6 +120,8 @@ class FinishingTools(ToolModel):
     layers: list[PictureLayer] = Field(default_factory=list, max_length=4)
     music_start_seconds: float = Field(default=0, ge=0, le=86400)
     voice_denoise: bool = False
+    voice_cleanup: Literal["off", "auto"] = "off"
+    voice_cleanup_profiles: list[VoiceCleanupProfile] = Field(default_factory=list, max_length=48)
     audio_joins: list[AudioJoin] = Field(default_factory=list, max_length=8)
 
 
@@ -284,10 +301,42 @@ def voice_finishing_filter(plan: Any) -> str:
     if plan.finishing is None:
         return ""
     filters = ["afftdn=nr=10:nf=-40"] if plan.finishing.voice_denoise else []
+    if filters and plan.finishing.voice_cleanup == "auto":
+        total = sum(float(c.duration if hasattr(c, "duration") else c.source_out - c.source_in) for c in plan.clips)
+        filters = [timed_denoise_filter(10, -40, total)]
     for region in plan.finishing.audio_regions:
         filters.append(
             f"volume={region.gain_db:.4f}dB:enable='gte(t,{region.start:.3f})*lt(t,{region.end:.3f})'"
         )
+    return ",".join(filters)
+
+
+def timed_denoise_filter(reduction: int, floor: float, duration: float) -> str:
+    # afftdn's overlap window delays audio by two 12.5ms advances. Feed a
+    # bounded tail through its FFT/FIFO before restoring the original clock.
+    # https://github.com/FFmpeg/FFmpeg/blob/n4.4/libavfilter/af_afftdn.c
+    # Keep historical manual-denoise plans unchanged unless explicitly opted in.
+    return (f"apad=pad_dur=0.075,afftdn=nr={reduction}:nf={floor:.1f},"
+            f"atrim=start=0.025:end={duration + .025:.3f},asetpts=PTS-STARTPTS")
+
+
+def clip_voice_cleanup_filter(plan: Any, index: int, *, duration: float | None = None) -> str:
+    tools = plan.finishing
+    if tools is None or tools.voice_cleanup != "auto":
+        return ""
+    clip = plan.clips[index]
+    profile = next((p for p in tools.voice_cleanup_profiles if p.asset_id == clip.asset_id), None)
+    if profile is None or profile.status != "measured":
+        return ""
+    filters = []
+    if profile.noise_reduction_db and not tools.voice_denoise:
+        length = duration if duration is not None else float(clip.duration if hasattr(clip, "duration") else clip.source_out - clip.source_in)
+        filters.extend(["highpass=f=70", timed_denoise_filter(6, profile.noise_floor_dbfs, length)])
+    # Explicit phrase/take level edits always win over automatic balance.
+    if profile.balance_gain_db and not clip.source_audio_gain_db and not tools.audio_regions:
+        filters.append(f"volume={profile.balance_gain_db:.1f}dB")
+    if profile.compress:
+        filters.append("acompressor=threshold=0.125:ratio=2:attack=15:release=200:makeup=1")
     return ",".join(filters)
 
 
@@ -347,6 +396,12 @@ def apply_graph_finishing(
     parts = graph.split(";")
     appended = []
     for index, _clip in enumerate(plan.clips):
+        audio = clip_voice_cleanup_filter(plan, index)
+        if audio:
+            for i, part in enumerate(parts):
+                if part.endswith(f"[a{index}]"):
+                    parts[i] = part[:-len(f"[a{index}]")] + "," + audio + f"[a{index}]"
+                    break
         chain = clip_finishing_filter(plan, index, width=width, height=height, fps=fps)
         if chain:
             suffix = f"[v{index}]"
@@ -375,8 +430,10 @@ def apply_graph_finishing(
         for index, source in enumerate(joins):
             delay = round(source["start"] * 48000)
             duration = source["duration"]
+            cleanup = clip_voice_cleanup_filter(plan, source["clip_index"], duration=duration)
+            cleanup = "," + cleanup if cleanup else ""
             appended.append(
-                f"[{source['input_index']}:a:0]aresample=48000,atrim=duration={duration:.3f},asetpts=PTS-STARTPTS,aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo,volume={source.get('gain_db', 0):.3f}dB,afade=t=in:st=0:d=0.025,afade=t=out:st={max(0, duration - 0.025):.3f}:d=0.025,adelay={delay}S:all=1[join{index}]"
+                f"[{source['input_index']}:a:0]aresample=48000,atrim=duration={duration:.3f},asetpts=PTS-STARTPTS,aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo,volume={source.get('gain_db', 0):.3f}dB{cleanup},afade=t=in:st=0:d=0.025,afade=t=out:st={max(0, duration - 0.025):.3f}:d=0.025,adelay={delay}S:all=1[join{index}]"
             )
             labels.append(f"[join{index}]")
         total = sum(
@@ -619,6 +676,7 @@ def audio_join_sources(plan: Any, paths: list[Any], first_index: int) -> list[di
         result.append(
             {
                 "path": paths[join.clip_index],
+                "clip_index": join.clip_index,
                 "input_index": first_index + index,
                 "source_in": float(clip.source_in) - join.lead_seconds,
                 "duration": duration + join.lead_seconds + join.tail_seconds,

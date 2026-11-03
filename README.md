@@ -55,6 +55,14 @@ python3 scripts/verify-speech-precision.py
 
 `backfilling` is normal while old sources are processed. `source_statuses.unavailable` means some sources retained estimates because alignment could not run; inspect worker logs before assuming everything was aligned. Test a **new job** to use improved timings; exact re-renders deliberately retain a saved plan's timing. Set `SPEECH_ALIGNMENT_ENABLED=false` to keep future jobs on legacy timing, or `SPEECH_ALIGNMENT_DEVICE=cpu` to run new alignment on CPU. Existing snapshot-backed edits continue to use their saved analysis regardless of the toggle.
 
+### Automatic voice cleanup and balance
+
+New speech edits inspect short source samples locally before saving the plan. When the measurements support it, the pass applies gentle steady-noise/rumble reduction, modest compression for uneven speech and up to 6 dB of take balancing. Clean or uncertain sources retain their processing; final output loudness normalization still runs. Manual phrase/take levels take priority. Music, effects, picture timing and captions are unchanged. Whisper/ASMR and preserve-original-audio briefs avoid automatic opt-in; montage source sound is processed only when explicitly requested.
+
+On an existing ready reel, choose **Clean up & balance audio** in **Voice cleanup & balance**. This creates a new local preview with zero AI tokens. **What was checked** explains the source decisions; **Turn off automatic cleanup** makes a comparison version. Previous versions/approvals remain available. Saved profiles carry through exports, delivery variants and exact re-renders, so old approved edits do not silently acquire a different audio treatment.
+
+Inspection is capped at eight speech sources, 18 seconds per source and a 12-second analysis budget, with reusable local measurement caches. This is conservative signal processing, not a speech-reconstruction model: it cannot restore clipped detail or reliably remove competing voices, heavy echo or noise masking the words. Listen before approving.
+
 ### Editing subtitles
 
 On a ready preview, choose **Edit subtitles** beneath the video. The editor shows the reel's actual timed caption cards beside the saved video. Click a timestamp to listen, correct text directly, find and replace phrases, hide individual captions, split at the text cursor, merge neighbouring cards, or move captions to lower-safe, middle or upper positions. Undo and **Reset draft** affect only the draft. A split estimates its timing inside the original caption interval; listen before applying it. Editing text preserves that card's time range.

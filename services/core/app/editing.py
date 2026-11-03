@@ -1306,6 +1306,7 @@ def inspect_finishing_tools(job_id: UUID):
         "capabilities": {
             "keyframes": True,
             "phrase_audio": True,
+            "automatic_voice_cleanup": True,
             "cue_captions": True,
             "picture_layers": True,
             "animated_callouts": True, "fixed_pointers": True, "music_only_pauses": True,

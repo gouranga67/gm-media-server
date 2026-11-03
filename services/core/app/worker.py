@@ -1342,6 +1342,9 @@ def process_one_edit(state: WorkerState) -> bool:
                 plan = validate_edit_plan(plan.model_copy(update=changes, deep=True).model_dump(mode="json"), context["assets"],
                     allow_post_copy=bool(context["project"]["ai_copy_allowed"]), creative_direction=context["job"],
                     music_tracks=context["music_library"], creative_effects=context["creative_effect_library"])
+            from app.audio_cleanup import prepare_voice_cleanup
+            plan = prepare_voice_cleanup(context, plan,
+                new_edit=not bool(run.get("based_on_run_id")))
             _persist_generated_plan(run, plan, provenance)
 
         from app.story_contract import check_story_contract

@@ -18,6 +18,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { HookAuditions } from "./hook-auditions";
 import { FinishingWorkspace } from "./finishing-workspace";
+import { AudioCleanupControls } from "./audio-cleanup-controls";
 import { TreatmentTimeline } from "./treatment-timeline";
 import { PreciseClipEditor } from "./precise-clip-editor";
 import { EditFeedbackCard } from "@/app/_components/edit-feedback-card";
@@ -135,6 +136,7 @@ export function JobReviewControls({
   const plannedBroll = Array.isArray(run.manifest.broll)
     ? run.manifest.broll as readonly Record<string, unknown>[] : [];
   const finishing = run.manifest.finishing as {
+    audio_cleanup?: Parameters<typeof AudioCleanupControls>[0]["report"];
     mode?: string; rhythmic_punch_beats?: readonly number[]; treatment_timeline?: unknown;
     local_tools?: { callouts?: readonly unknown[]; pointers?: readonly unknown[] };
   } | undefined;
@@ -391,6 +393,7 @@ export function JobReviewControls({
         <summary className="min-h-11 cursor-pointer content-center text-sm font-bold text-[#173F5F]">Make another version</summary>
         <p className="my-3 text-xs leading-5 text-[#666862]">A new preview keeps this delivery available. Review the new version before exporting again.</p>
         <HookAuditions key={`delivery-hooks-${run.version}`} jobId={jobId} version={run.version} onUpdated={onUpdated} />
+        <AudioCleanupControls key={`delivery-audio-${run.version}`} jobId={jobId} version={run.version} report={finishing?.audio_cleanup} onUpdated={onUpdated} />
         <FinishingWorkspace key={`delivery-tools-${run.version}`} jobId={jobId} version={run.version} clips={editorialTimeline} onUpdated={onUpdated} />
         {editorialTimeline.map((clip) => <PreciseClipEditor key={`delivery-clip-${run.version}-${clip.clip_id}`} jobId={jobId} version={run.version} clip={clip} onUpdated={onUpdated} />)}
       </details>
@@ -424,6 +427,7 @@ export function JobReviewControls({
       ) : null}
 
       <RenderQualityCard review={run.manifest.quality_review} storyContract={run.manifest.story_contract_review} storyFinishing={run.manifest.story_finishing} storySequence={run.manifest.story_sequence_review} />
+      <AudioCleanupControls key={`audio-${run.version}`} jobId={jobId} version={run.version} report={finishing?.audio_cleanup} onUpdated={onUpdated} />
       <TreatmentTimeline report={finishing?.treatment_timeline} onSeek={onSeek} />
       <section className="rounded-md border border-[#D7D9D3] bg-white p-5">
         {storyAssessment ? (

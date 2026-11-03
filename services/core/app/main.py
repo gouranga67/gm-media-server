@@ -104,6 +104,7 @@ def system_information() -> dict[str, Any]:
         "build_id": deployed_build_id(settings),
         "render_timing_pipeline": RENDER_TIMING_VERSION,
         "speech_precision": {"version": "speech_precision_v1", "enabled": getattr(settings, "speech_alignment_enabled", False)},
+        "voice_cleanup": {"version": "voice_cleanup_v1", "automatic_new_speech_edits": True, "hosted_model_calls": 0},
         "subtitle_editor": {"version": 1, "timed_cards": True, "explicit_draft_and_apply": True, "hosted_model_calls": 0},
         "environment": settings.app_env,
         "content_policy": {

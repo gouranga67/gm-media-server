@@ -125,5 +125,6 @@ export const finishingToolsSchema = z
       .max(4),
     music_start_seconds: z.number().min(0).max(86400),
     voice_denoise: z.boolean(),
+    voice_cleanup: z.enum(["off", "auto"]).optional(),
   })
   .strict();

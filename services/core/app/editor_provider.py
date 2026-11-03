@@ -202,6 +202,9 @@ def _public_context(context: dict[str, Any], max_characters: int) -> dict[str, A
     # Alignment provenance belongs to deterministic cut/caption handling, not
     # the hosted story planner's token budget. Refined segment times remain.
     public.pop("speech_precision", None)
+    previous_tools = ((public.get("revision") or {}).get("previous_plan") or {}).get("finishing")
+    if isinstance(previous_tools, dict):
+        previous_tools.pop("voice_cleanup_profiles", None)  # Replay locally; not story-planning evidence.
     for key in list(public):
         if key.startswith("_"):
             public.pop(key)

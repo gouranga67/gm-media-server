@@ -79,6 +79,7 @@ const { MediaLibrary } = require(path.join(repo, "apps/web/app/_components/media
 const { LearningLabPanel } = require(path.join(repo, "apps/web/app/_components/learning-lab.tsx"));
 const { PreciseClipEditor } = require(path.join(repo, "apps/web/app/_components/precise-clip-editor.tsx"));
 const { FinishingWorkspace } = require(path.join(repo, "apps/web/app/_components/finishing-workspace.tsx"));
+const { AudioCleanupControls } = require(path.join(repo, "apps/web/app/_components/audio-cleanup-controls.tsx"));
 const { SourceKnowledge } = require(path.join(repo, "apps/web/app/_components/source-knowledge.tsx"));
 const { SourceRanges } = require(path.join(repo, "apps/web/app/_components/source-ranges.tsx"));
 const { SubtitleEditor } = require(path.join(repo, "apps/web/app/_components/subtitle-editor.tsx"));
@@ -685,6 +686,35 @@ test("finishing choices make no request until explicit submission and preserve l
  assert.equal(body.base_version,2);assert.equal(body.note,"");
  assert.equal(body.finishing_settings.motions[0].points[1].zoom,1.15);
  assert.equal(body.finishing_settings.motions[0].points[1].time,3.99);
+});
+test("voice cleanup runs only on explicit click and retains the saved finishing configuration",async()=>{
+ await act(async()=>root.render(React.createElement(AudioCleanupControls,{jobId,version:2,onUpdated:()=>{readyEvents+=1;}})));
+ assert.equal(posts(`jobs/${jobId}/revisions`).length,0);
+ await click(button("Clean up & balance audio"));
+ await waitFor(()=>readyEvents===1);
+ const body=posts(`jobs/${jobId}/revisions`)[0].body;
+ assert.equal(body.base_version,2);assert.equal(body.note,"");
+ assert.equal(body.finishing_settings.voice_cleanup,"auto");
+ assert.deepEqual(body.finishing_settings.voice_cleanup_profiles,[]);
+ assert.deepEqual(body.finishing_settings.audio_joins,[]);
+ assert.deepEqual(body.finishing_settings.layers,[]);
+});
+test("voice cleanup explains source decisions and can be disabled without a model request",async()=>{
+ await act(async()=>root.render(React.createElement(AudioCleanupControls,{jobId,version:2,
+   report:{mode:"auto",profiles:[{asset_id:serverId,status:"measured",note:"No cleanup needed in the inspected passage."}]},onUpdated:()=>{readyEvents+=1;}})));
+ assert.ok(document.body.textContent.includes("No cleanup needed"));
+ assert.equal(posts(`jobs/${jobId}/revisions`).length,0);
+ await click(button("Turn off automatic cleanup"));
+ await waitFor(()=>readyEvents===1);
+ assert.equal(posts(`jobs/${jobId}/revisions`)[0].body.finishing_settings.voice_cleanup,"off");
+});
+test("voice cleanup refuses to apply to a stale version",async()=>{
+ await act(async()=>root.render(React.createElement(AudioCleanupControls,{jobId,version:1,onUpdated:()=>{readyEvents+=1;}})));
+ await click(button("Clean up & balance audio"));
+ await waitFor(()=>document.querySelector('[role="alert"]'));
+ assert.ok(document.body.textContent.includes("A newer edit is available"));
+ assert.equal(posts(`jobs/${jobId}/revisions`).length,0);
+ assert.equal(readyEvents,0);
 });
 test("source dictionary saves names and aliases only after submit",async()=>{
  await act(async()=>root.render(React.createElement(SourceKnowledge)));
