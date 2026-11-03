@@ -65,6 +65,8 @@ app.include_router(publishing_router)
 app.include_router(publishing_captions_router)
 app.include_router(duration_router)
 app.include_router(subtitle_editor_router)
+from app.learning_cases import router as learning_cases_router
+app.include_router(learning_cases_router)
 
 
 @app.get("/health/live")
@@ -108,6 +110,9 @@ def system_information() -> dict[str, Any]:
         "library_intake": {"version": 1, "durable_registration": True, "folder_upload": True,
             "reviewable_inbox": True, "server_pagination": True, "page_size": 60,
             "upload_concurrency": 2, "automatic_hosted_model_calls": 0},
+        "learning_evaluation": {"version": 2,"saved_test_cases":True,"recording_groups":True,
+            "paired_checklist":True,"usage_qualification":True,"promotion_history":True,
+            "automatic_paid_trials":False,"automatic_promotion":False},
         "visual_finishing": {"version": "selected_visual_v1", "single_face_follow": True,
             "detector": "yunet_2023mar",
             "small_exposure_match": True, "explicit_opt_in": True, "hosted_model_calls": 0,
@@ -158,6 +163,15 @@ def library_intake_information() -> dict[str, Any]:
         row = database.execute("SELECT to_regclass('library_intakes') IS NOT NULL AS ready").fetchone()
     return {"version": 1, "schema_ready": bool(row and row["ready"]),
         "durable_registration": True, "server_pagination": True, "automatic_hosted_model_calls": 0}
+
+
+@app.get("/api/v1/system/learning-evaluation")
+def learning_evaluation_information() -> dict[str, Any]:
+    from app.database import connection
+    with connection() as database:
+        row = database.execute("SELECT to_regclass('learning_cases') IS NOT NULL AND "
+            "to_regclass('learning_lesson_events') IS NOT NULL AS ready").fetchone()
+    return {"version":2,"schema_ready":bool(row and row["ready"]),"automatic_model_calls":0}
 
 
 def deployed_build_id(settings: Any) -> str:

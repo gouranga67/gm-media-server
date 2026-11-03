@@ -321,7 +321,8 @@ def _storage_totals(database: Any) -> dict[str, int]:
 LEARNING_PREVIEW_GUARD = """NOT EXISTS (
     SELECT 1 FROM edit_runs trial JOIN learning_lessons lesson ON lesson.id=trial.evaluation_lesson_id
     WHERE lesson.status='proposed' AND trial.status IN ('pending','planning','rendering','ready')
-    AND (trial.id=edit_runs.id OR trial.based_on_run_id=edit_runs.id))"""
+    AND (trial.id=edit_runs.id OR trial.based_on_run_id=edit_runs.id))
+    AND NOT EXISTS (SELECT 1 FROM learning_cases saved WHERE saved.baseline_run_id=edit_runs.id AND saved.archived_at IS NULL)"""
 
 
 def _retention_candidates(database: Any, settings: dict[str, Any]) -> dict[str, Any]:

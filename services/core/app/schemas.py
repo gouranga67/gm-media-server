@@ -792,6 +792,7 @@ class RevisionCreate(BaseModel):
     restore_version: int | None = Field(default=None, gt=0)
     finishing_settings: FinishingTools | None = None
     evaluation_lesson_id: UUID | None = None
+    evaluation_case_id: UUID | None = None
     repair_kind: Literal["tighten_pauses", "denoise"] | None = None
     caption_corrections: list[CaptionCorrection] = Field(
         default_factory=list, max_length=50
@@ -811,6 +812,8 @@ class RevisionCreate(BaseModel):
 
     @model_validator(mode="after")
     def has_requested_change(self) -> "RevisionCreate":
+        if self.evaluation_case_id is not None and self.evaluation_lesson_id is None:
+            raise ValueError("a saved test case can only be used for a lesson trial")
         if self.restore_version is not None and (
             self.note
             or self.clip_adjustments

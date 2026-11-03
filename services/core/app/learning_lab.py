@@ -12,7 +12,8 @@ from app.database import connection
 from app.productization import actor_login, require_owner
 from app.take_quality import editing_policy
 from app.config import get_settings
-from app.learning_evidence import comparison_evidence, evaluation_result, known_hashes, preview_available, usage_for_runs
+from app.edit_plan import document_sha256
+from app.learning_evidence import comparison_evidence, evaluation_result, known_hashes, preview_available, usage_for_runs, with_trial_readiness, usage_snapshot
 
 router = APIRouter(prefix="/api/v1/learning/lab", tags=["evaluated learning"])
 NOTE_RULES = {
@@ -145,19 +146,26 @@ def lab():
             ).fetchall()
         )
         trials = list(
-            database.execute("""SELECT r.id,r.job_id,r.version,r.status,r.preview_path,r.evaluation_lesson_id,r.based_on_run_id,b.version AS baseline_version,
+            database.execute("""SELECT r.id,r.job_id,r.version,r.status,r.preview_path,r.evaluation_lesson_id,r.evaluation_case_id,r.based_on_run_id,b.version AS baseline_version,
             b.status AS baseline_status,b.preview_path AS baseline_path,p.name AS project_name,
-            b.manifest->'quality_review'->>'status' AS baseline_quality,r.manifest->'quality_review'->>'status' AS candidate_quality
+            b.provider AS baseline_provider,r.provider AS candidate_provider,
+            b.manifest->'quality_review'->>'status' AS baseline_quality,r.manifest->'quality_review'->>'status' AS candidate_quality,
+            CASE WHEN saved.id IS NOT NULL THEN jsonb_build_object('id',saved.id,'label',saved.label,'category',saved.category,
+                'expectations',saved.expectations,'max_candidate_tokens',saved.max_candidate_tokens) END AS test_case
             FROM edit_runs r JOIN edit_runs b ON b.id=r.based_on_run_id JOIN jobs j ON j.id=r.job_id JOIN projects p ON p.id=j.project_id
+            LEFT JOIN learning_cases saved ON saved.id=r.evaluation_case_id
             WHERE r.evaluation_lesson_id IS NOT NULL ORDER BY r.created_at DESC LIMIT 100""").fetchall()
         )
         jobs = list(database.execute(JOBS_SQL).fetchall())
         previous = list(database.execute(TRIAL_SOURCES_SQL, ([item["id"] for item in lessons],)).fetchall())
         usage = usage_for_runs(database, list({identity for trial in trials for identity in (trial["id"],trial["based_on_run_id"])}))
+        from app.learning_cases import CASES_SQL
+        cases = list(database.execute(CASES_SQL).fetchall())
+        history = list(database.execute("SELECT * FROM learning_lesson_events ORDER BY created_at DESC,id LIMIT 100").fetchall())
     for item in lessons:
-        item["evaluation"] = evaluation_result(
-            [e for e in evaluations if e["lesson_id"] == item["id"]], item=item,
-        )
+        scored = [e for e in evaluations if e["lesson_id"] == item["id"]]
+        item["evaluation"] = with_trial_readiness(evaluation_result(scored,item=item),item,
+            [trial for trial in trials if trial["evaluation_lesson_id"] == item["id"]],scored)
         item["trial_options"] = []
         for job in jobs:
             if str(job["recipe"]) != item["recipe"] or str(job["edit_style"]) != item["edit_style"]:
@@ -166,21 +174,41 @@ def lab():
             if not reason and not preview_available(job, media_root):
                 reason = "The exact baseline preview has expired or is unavailable."
             item["trial_options"].append({"job_id": str(job["id"]), "eligible": reason is None, "reason": reason})
+        item["case_options"] = []
+        for case in cases:
+            if str(case["recipe"]) != item["recipe"] or str(case["edit_style"]) != item["edit_style"]:
+                continue
+            task = {**case,"id":case["job_id"],"source_hashes":[source["sha256"] for source in case["sources"]]}
+            reason = trial_block_reason(item,task,[row for row in previous if row["evaluation_lesson_id"] == item["id"]])
+            if case["archived_at"] or case["job_archived_at"]:
+                reason = "Restore the saved case and its job before starting a trial."
+            elif not preview_available(case,media_root):
+                reason = "The saved baseline preview is unavailable."
+            item["case_options"].append({"case_id":str(case["id"]),"eligible":reason is None,"reason":reason})
     for trial in trials:
         trial["baseline_available"] = preview_available({"status":trial.pop("baseline_status"),"preview_path":trial.pop("baseline_path")},media_root)
         trial["candidate_available"] = preview_available(trial,media_root)
         trial.pop("preview_path",None)
-        trial["baseline_usage"] = usage.get(str(trial["based_on_run_id"]))
-        trial["candidate_usage"] = usage.get(str(trial["id"]))
+        trial["baseline_usage"] = usage_snapshot({"provider":trial.get("baseline_provider")},usage.get(str(trial["based_on_run_id"])))
+        trial["candidate_usage"] = usage_snapshot({"provider":trial.get("candidate_provider")},usage.get(str(trial["id"])))
         saved = next((e for e in evaluations if e["candidate_run_id"] == trial["id"]),None)
-        trial["comparison"] = {key:saved[key] for key in ("baseline_rating","candidate_rating","note")} if saved else None
+        trial["comparison"] = {**{key:saved[key] for key in ("baseline_rating","candidate_rating","note")},
+            "rubric":(saved.get("evidence") or {}).get("rubric")} if saved else None
         trial["executable_changed"] = (saved.get("evidence") or {}).get("executable_changed") if saved else None
+        case = next((case for case in cases if case["id"] == trial.get("evaluation_case_id")),None)
+        trial["test_case"] = {key:case[key] for key in ("id","label","category","expectations","max_candidate_tokens")} if case else trial.get("test_case")
+    for case in cases:
+        case["baseline_available"] = preview_available(case,media_root)
+        case["source_count"] = len(case.pop("sources"))
+        case.pop("preview_path",None)
     return {
-        "version": 2,
+        "version": 3,
+        "cases":cases,"history":history,
         "lessons": lessons,
         "evaluations": evaluations,
         "trials": trials,
-        "jobs": [{key:job[key] for key in ("id","name","recipe","edit_style","version")} for job in jobs],
+        "jobs": [{**{key:job[key] for key in ("id","name","recipe","edit_style","version")},
+            "ordinary":not bool(job.get("evaluation_lesson_id"))} for job in jobs],
         "hosted_model_calls": 0,
         "note": "Proposals and scoring run locally. Trying a lesson is an explicit normal editor revision and uses model tokens. Promotion never changes model weights or application code.",
     }
@@ -223,6 +251,7 @@ class TrialRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     job_id: UUID
     base_version: int = Field(gt=0)
+    case_id: UUID | None = None
 
 
 def assert_holdout(database: Any, item: dict, job_id: UUID, *, scoring=False):
@@ -256,9 +285,19 @@ def trial(
     return request_revision(
         payload.job_id,
         RevisionCreate(
-            base_version=payload.base_version, evaluation_lesson_id=lesson_id
+            base_version=payload.base_version, evaluation_lesson_id=lesson_id, evaluation_case_id=payload.case_id
         ),
     )
+
+
+class PlaybackRubric(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    brief: Literal["better", "same", "worse", "not_applicable"]
+    story: Literal["better", "same", "worse", "not_applicable"]
+    speech: Literal["better", "same", "worse", "not_applicable"]
+    captions: Literal["better", "same", "worse", "not_applicable"]
+    visuals: Literal["better", "same", "worse", "not_applicable"]
+    audio: Literal["better", "same", "worse", "not_applicable"]
 
 
 class EvaluationCreate(BaseModel):
@@ -267,6 +306,8 @@ class EvaluationCreate(BaseModel):
     baseline_rating: int = Field(ge=1, le=5)
     candidate_rating: int = Field(ge=1, le=5)
     note: str = Field(default="", max_length=1200)
+    rubric: PlaybackRubric | None = None
+    reviewed_both: bool = False
 
 
 @router.post("/lessons/{lesson_id}/evaluate")
@@ -299,7 +340,16 @@ def evaluate(
                 status_code=409, detail="the trial baseline is unavailable"
             )
         assert_holdout(database, item, candidate["job_id"], scoring=True)
-        evidence = comparison_evidence(database,item,baseline,candidate,get_settings().media_root)
+        case = None
+        if candidate.get("evaluation_case_id"):
+            from app.learning_cases import assert_case
+            case = assert_case(database,candidate["evaluation_case_id"],candidate["job_id"],baseline)
+            if not payload.reviewed_both or payload.rubric is None:
+                raise HTTPException(422, "review both exact previews and complete the playback checklist")
+        elif item.get("evaluation_protocol", 1) >= 2:
+            raise HTTPException(409, "this legacy trial has no saved test case; use a new independent saved-case trial")
+        evidence = comparison_evidence(database,item,baseline,candidate,get_settings().media_root,**(
+            {"case":case,"rubric":payload.rubric.model_dump(),"reviewed_both":True} if case else {}))
         database.execute(
             """INSERT INTO learning_evaluations(id,lesson_id,job_id,baseline_run_id,candidate_run_id,baseline_rating,candidate_rating,note,reviewer,evidence)
             VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT(lesson_id,job_id) DO UPDATE SET
@@ -329,7 +379,7 @@ def evaluate(
 
 class LessonAction(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    action: Literal["promote", "rollback"]
+    action: Literal["promote", "rollback", "upgrade"]
 
 
 @router.post("/lessons/{lesson_id}/status")
@@ -338,7 +388,8 @@ def change_status(
     payload: LessonAction,
     x_gm_user_login: str | None = Header(default=None),
 ):
-    require_owner(actor_login(x_gm_user_login))
+    actor = actor_login(x_gm_user_login)
+    require_owner(actor)
     with connection() as database:
         item = lesson(database, lesson_id, lock=True)
         rows = list(
@@ -346,14 +397,25 @@ def change_status(
                 "SELECT * FROM learning_evaluations WHERE lesson_id=%s", (lesson_id,)
             ).fetchall()
         )
-        if payload.action == "promote" and not evaluation_result(rows,item=item)["can_promote"]:
+        report = with_trial_readiness(evaluation_result(rows,item=item),item,
+            list(database.execute("SELECT id,status,evaluation_case_id FROM edit_runs WHERE evaluation_lesson_id=%s",(lesson_id,)).fetchall()),rows)
+        if payload.action == "promote" and not report["can_promote"]:
             raise HTTPException(
                 status_code=409,
                 detail="this lesson has not passed held-out playback evaluation",
             )
-        state = "promoted" if payload.action == "promote" else "rolled_back"
+        if payload.action == "upgrade" and item["status"] == "promoted":
+            raise HTTPException(409, "roll back the active lesson before changing its evaluation protocol")
+        state = "promoted" if payload.action == "promote" else "proposed" if payload.action == "upgrade" else "rolled_back"
+        if (payload.action == "upgrade" and item.get("evaluation_protocol",1) >= 2) or (payload.action != "upgrade" and state == item["status"]):
+            return {"id":str(lesson_id),"status":item["status"],"hosted_model_calls":0}
+        version = int(item.get("deployment_version",0)) + 1
         database.execute(
-            "UPDATE learning_lessons SET status=%s,updated_at=now() WHERE id=%s",
-            (state, lesson_id),
+            "UPDATE learning_lessons SET status=%s,deployment_version=%s,evaluation_protocol=%s,updated_at=now() WHERE id=%s",
+            (state,version,2 if payload.action == "upgrade" else item.get("evaluation_protocol",1),lesson_id),
         )
-    return {"id": str(lesson_id), "status": state, "hosted_model_calls": 0}
+        database.execute("""INSERT INTO learning_lesson_events(id,lesson_id,deployment_version,action,previous_status,
+            status,directive_hash,actor,evaluation) VALUES(%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+            (uuid4(),lesson_id,version,payload.action,item["status"],state,
+             document_sha256({"directive":item["directive"]}),actor,Jsonb({**report,"case_ids":sorted({str((row.get("evidence") or {}).get("case_id")) for row in rows if (row.get("evidence") or {}).get("case_id")})})))
+    return {"id": str(lesson_id), "status": state, "deployment_version":version,"hosted_model_calls": 0}

@@ -89,6 +89,7 @@ const { splitSubtitle, mergeSubtitles } = require(path.join(repo, "apps/web/lib/
 const { LibraryUpload } = require(path.join(repo, "apps/web/app/_components/library-upload.tsx"));
 
 let intakeItems = [];
+let caseSaveFailure=false;
 globalThis.fetch = async (url, options = {}) => {
   const route = String(url).replace("/api/media/", "");
   const body = options.body instanceof File ? options.body : options.body ? JSON.parse(options.body) : undefined;
@@ -119,10 +120,19 @@ globalThis.fetch = async (url, options = {}) => {
   else if (/^publishing\/drafts\/[^/?]+$/.test(route)) { if(options.method==="PATCH"){publishingFixture.draft.caption=body.caption;publishingFixture.draft.revision+=1;}payload=publishingFixture.draft; }
   else if (route === "publishing/meta/complete") payload={connected:2};
   else if (route === "learning/lab") payload = labFixture ?? { lessons: lessonProposed ? [{ id:serverId,recipe:"talking_head",edit_style:"high_impact",status:"proposed",directive:"Keep complete clean speech.",training_job_ids:[jobId,"training-b","training-c"],evaluation:{held_out_jobs:0,can_promote:false,rating_delta:null,regressions:0} }] : [],trials:[],jobs:[] };
+  else if (route === "learning/lab/cases") {
+    if(caseSaveFailure)return {ok:false,status:409,json:async()=>({detail:"The baseline changed. No test was saved."})};
+    labFixture.cases ??= [];
+    labFixture.cases.push({...body,job_id:body.job_id,version:body.base_version,source_count:3,recipe:"talking_head",edit_style:"clean",archived_at:null,baseline_available:true,brief:"Use recorded speech."});
+    payload={id:body.id,hosted_model_calls:0};
+  }
+  else if (/^learning\/lab\/cases\/[^/]+\/status$/.test(route)) {
+    const saved=labFixture.cases.find(item=>item.id===route.split("/")[3]);saved.archived_at=body.action==="archive"?"2026-11-03T00:00:00Z":null;payload={id:saved.id};
+  }
   else if (route === "learning/lab/propose") { lessonProposed=true;payload={matched_proposals:1,hosted_model_calls:0}; }
   else if (/^learning\/lab\/lessons\/[^/]+\/trial$/.test(route)) payload={id:"trial",status:"pending",version:2};
   else if (/^learning\/lab\/lessons\/[^/]+\/evaluate$/.test(route)) payload={can_promote:false};
-  else if (/^learning\/lab\/lessons\/[^/]+\/status$/.test(route)) {labFixture.lessons[0].status=body.action==="promote"?"promoted":"rolled_back";payload={status:labFixture.lessons[0].status};}
+  else if (/^learning\/lab\/lessons\/[^/]+\/status$/.test(route)) {labFixture.lessons[0].status=body.action==="promote"?"promoted":body.action==="upgrade"?"proposed":"rolled_back";if(body.action==="upgrade")labFixture.lessons[0].evaluation_protocol=2;payload={status:labFixture.lessons[0].status};}
   else if (route === "library/knowledge") payload = { products: [], evidence_version: "1.0" };
   else if (/^library\/products\//.test(route)) payload = { ...body, id: route.split("/").at(-1) };
   else if (route.endsWith("/ranges") && route.startsWith("library/assets/")) payload = [];
@@ -285,7 +295,7 @@ beforeEach(() => {
   ].map((item) => ({ notes: "", tags: [], favorite: false, library_status: "active", collection_count: 0, visual_status: "ready", updated_at: item.created_at, ...item }));
   lessonProposed=false;labFixture=null;
   assemblySettings={assembly_mode:"auto",pacing_mode:"auto",edit_style:"energetic",reel_intent:"auto"}; assemblyError=null; assemblyLocked=false; profiles=[]; previewFixture=null;
-  intakeItems = [];
+  intakeItems = []; caseSaveFailure=false;
   window.sessionStorage.clear();
   document.body.innerHTML = '<div id="root"></div>';
   root = createRoot(document.getElementById("root"));
@@ -837,7 +847,7 @@ test("learning eligibility blocks reused footage and refresh never starts an exp
   labFixture=learningFixture();
   await act(async()=>root.render(React.createElement(LearningLabPanel)));
   await waitFor(()=>document.body.textContent.includes("Independent footage"));
-  const select=document.querySelector('select');
+  const select=document.querySelector('select[aria-label="Independent ready job for lesson"]');
   assert.equal([...select.options].find(option=>option.value==="overlap").disabled,true);
   assert.equal(posts("trial").length,0);
   await act(async()=>{select.value=jobId;select.dispatchEvent(new Event("change",{bubbles:true}));});
@@ -871,7 +881,7 @@ test("learning compares exact versions with costs and saves only reviewed explic
   assert.equal(document.body.textContent.includes("Saved comparison: baseline 4/5 · trial 5/5"),true);
   assert.equal(document.body.textContent.includes("executable edit was unchanged"),true);
   assert.equal(button("Save playback comparison").disabled,true);
-  await type('textarea',"Better timing, same words.");
+  await type('textarea[aria-label="Playback comparison note"]',"Better timing, same words.");
   assert.equal(posts("evaluate").length,0);
   await click(document.querySelector('input[type="checkbox"]'));
   await click(button("Save playback comparison"));
@@ -889,7 +899,7 @@ test("learning cannot score an expired comparison preview",async()=>{
   await act(async()=>root.render(React.createElement(LearningLabPanel)));
   await waitFor(()=>document.body.textContent.includes("One is unavailable"));
   assert.equal(document.querySelectorAll('video').length,0);
-  assert.equal(document.querySelectorAll('textarea').length,0);
+  assert.equal(document.querySelectorAll('textarea[aria-label="Playback comparison note"]').length,0);
   assert.equal(calls.some(call=>call.method==="POST"),false);
 });
 
@@ -1611,4 +1621,77 @@ test("Inbox dismiss requires confirmation, never deletes and reopens without rep
   await click(button('Inbox'));await waitFor(()=>document.querySelector('input[aria-label="Review Cream close-up"]'));
   assert.equal(document.querySelector('[aria-label="Selected imports"]'),null);
   assert.equal(managedAssets.length,3);
+});
+
+function savedCaseFixture(){return {id:'saved-case',job_id:jobId,version:1,baseline_run_id:'baseline',label:'Complete five points',recording_group:'Monday product shoot',category:'story',expectations:'Keep all five recorded points and the ending; no clipped words.',max_candidate_tokens:1500,source_count:3,recipe:'talking_head',edit_style:'clean',archived_at:null,baseline_available:true};}
+
+test('saving a reusable playback task is explicit, uses no trial and reuses its request after an error',async()=>{
+  labFixture=learningFixture();labFixture.cases=[];caseSaveFailure=true;
+  await act(async()=>root.render(React.createElement(LearningLabPanel)));
+  await waitFor(()=>document.querySelector('select[aria-label="Test case baseline"]'));
+  await chooseOption('select[aria-label="Test case baseline"]',jobId);
+  await type('input[aria-label="Test case name"]','Complete five points');
+  await type('input[aria-label="Test recording group"]','Monday product shoot');
+  await type('textarea[aria-label="Test case expectations"]','Keep all five points and the ending.');
+  assert.equal(calls.filter(c=>c.method==='POST').length,0);
+  await click(button('Save playback test case · no AI'));
+  await waitFor(()=>document.querySelector('[role="alert"]')?.textContent.includes('baseline changed'));
+  const first=posts('learning/lab/cases')[0].body;
+  assert.equal(posts('trial').length,0);
+  caseSaveFailure=false;
+  await click(button('Save playback test case · no AI'));
+  await waitFor(()=>labFixture.cases.length===1);
+  assert.deepEqual(posts('learning/lab/cases')[1].body,first);
+  assert.equal(first.recording_group,'Monday product shoot');assert.equal(first.base_version,1);
+  assert.equal(first.max_candidate_tokens,null);
+  assert.equal(calls.some(c=>c.route.endsWith('/preview')||c.route.endsWith('/revisions')),false);
+});
+
+test('saved-case lesson trial selects an eligible exact baseline and requires explicit token confirmation',async()=>{
+  labFixture=learningFixture();labFixture.cases=[savedCaseFixture(),{...savedCaseFixture(),id:'reused-case',label:'Reused take'}];
+  Object.assign(labFixture.lessons[0],{evaluation_protocol:2,case_options:[{case_id:'saved-case',eligible:true,reason:null},{case_id:'reused-case',eligible:false,reason:'Training footage is excluded'}]});
+  await act(async()=>root.render(React.createElement(LearningLabPanel)));
+  await waitFor(()=>document.querySelector('select[aria-label="Saved test case for lesson"]'));
+  const picker=document.querySelector('select[aria-label="Saved test case for lesson"]');
+  assert.equal([...picker.options].find(option=>option.value==='reused-case').disabled,true);
+  await chooseOption('select[aria-label="Saved test case for lesson"]','saved-case');
+  const original=window.confirm;
+  try{
+    window.confirm=()=>false;await click(button('Create trial preview · uses model tokens'));assert.equal(posts('trial').length,0);
+    window.confirm=()=>true;await click(button('Create trial preview · uses model tokens'));
+    assert.deepEqual(posts('trial')[0].body,{job_id:jobId,base_version:1,case_id:'saved-case'});
+  }finally{window.confirm=original;}
+  assert.equal(posts('evaluate').length,0);
+});
+
+test('saved-case scoring requires every playback check and attestation without auto-promotion',async()=>{
+  labFixture=learningFixture();labFixture.cases=[savedCaseFixture()];
+  Object.assign(labFixture.lessons[0],{evaluation_protocol:2,case_options:[],evaluation:{...labFixture.lessons[0].evaluation,blockers:['Review three independent footage groups.']}});
+  labFixture.trials=[{id:'strict-trial',job_id:jobId,version:2,baseline_version:1,status:'ready',evaluation_lesson_id:serverId,evaluation_case_id:'saved-case',test_case:savedCaseFixture(),project_name:'Independent footage',baseline_available:true,candidate_available:true,comparison:{baseline_rating:4,candidate_rating:5,note:''}}];
+  await act(async()=>root.render(React.createElement(LearningLabPanel)));
+  await waitFor(()=>document.querySelector('select[aria-label="Compare brief"]'));
+  await click(document.querySelector('input[type="checkbox"]'));
+  assert.equal(button('Save playback comparison').disabled,true);
+  const expected={brief:'same',story:'better',speech:'same',captions:'same',visuals:'same',audio:'same'};
+  for(const [key,value]of Object.entries(expected))await chooseOption(`select[aria-label="Compare ${key}"]`,value);
+  assert.equal(posts('evaluate').length,0);
+  await click(button('Save playback comparison'));
+  assert.deepEqual(posts('evaluate')[0].body,{candidate_run_id:'strict-trial',baseline_rating:4,candidate_rating:5,note:'',rubric:expected,reviewed_both:true});
+  assert.equal(posts('status').length,0);assert.equal(posts('trial').length,0);
+  assert.equal(button('Promote passed lesson').disabled,true);
+});
+
+test('archiving a playback case and upgrading an old lesson remain separate local actions',async()=>{
+  labFixture=learningFixture();labFixture.cases=[savedCaseFixture()];
+  labFixture.history=[{id:'event',lesson_id:serverId,deployment_version:2,action:'rollback',previous_status:'promoted',status:'rolled_back',created_at:'2026-11-03T00:00:00Z',directive_hash:'a'.repeat(64)}];
+  await act(async()=>root.render(React.createElement(LearningLabPanel)));
+  await waitFor(()=>document.body.textContent.includes('Promotion and rollback history'));
+  assert.equal(document.querySelector('a[href*="preview/file?version=1"]').getAttribute('target'),'_blank');
+  await click(button('Archive case'));await waitFor(()=>Boolean(labFixture.cases[0].archived_at));
+  await click(button('Restore case'));await waitFor(()=>!labFixture.cases[0].archived_at);
+  const original=window.confirm;
+  try{window.confirm=()=>true;await click(button('Upgrade to saved-case evaluation'));}finally{window.confirm=original;}
+  assert.equal(posts('status').at(-1).body.action,'upgrade');
+  assert.equal(posts('trial').length,0);assert.equal(posts('evaluate').length,0);
+  assert.equal(calls.some(c=>c.method==='DELETE'),false);
 });

@@ -1548,23 +1548,40 @@ export type FinishingInspection = { readonly version: number; readonly settings:
 export const getFinishingTools = (id: string) => apiRequest<FinishingInspection>(`jobs/${id}/finishing-tools`);
 
 export type LearningLesson = { readonly id: string; readonly directive: string; readonly recipe: string; readonly edit_style: string; readonly status: "proposed" | "promoted" | "rolled_back"; readonly training_job_ids: readonly string[];
+  readonly evaluation_protocol?: number; readonly deployment_version?: number;
+  readonly case_options?: readonly { readonly case_id: string; readonly eligible: boolean; readonly reason: string | null }[];
   readonly trial_options?: readonly { readonly job_id: string; readonly eligible: boolean; readonly reason: string | null }[];
   readonly evaluation: { readonly held_out_jobs: number; readonly can_promote: boolean; readonly rating_delta: number | null; readonly regressions: number;
     readonly rated_jobs?: number; readonly excluded_comparisons?: number; readonly overlapping_comparisons?: number;
-    readonly token_delta?: number | null; readonly costed_comparisons?: number; readonly note?: string } };
+    readonly token_delta?: number | null; readonly costed_comparisons?: number; readonly note?: string; readonly blockers?: readonly string[];
+    readonly rubric_regressions?: number; readonly unmeasured_pairs?: number; readonly budget_exceeded_pairs?: number; readonly technical_regressions?: number } };
+export type PlaybackDimension = "brief" | "story" | "speech" | "captions" | "visuals" | "audio";
+export type PlaybackVerdict = "better" | "same" | "worse" | "not_applicable";
+export type PlaybackRubric = Readonly<Record<PlaybackDimension, PlaybackVerdict>>;
+export type LearningCase = { readonly id: string; readonly job_id: string; readonly baseline_run_id: string;
+  readonly version: number; readonly label: string; readonly recording_group: string; readonly category: string;
+  readonly expectations: string; readonly max_candidate_tokens: number | null; readonly recipe: string; readonly edit_style: string;
+  readonly source_count: number; readonly brief: string; readonly archived_at: string | null; readonly baseline_available: boolean };
 export type LearningUsage = { readonly requests: number; readonly total_tokens: number; readonly model_latency_ms: number };
 export type LearningTrial = { readonly id: string; readonly job_id: string; readonly version: number; readonly baseline_version: number; readonly status: string; readonly evaluation_lesson_id: string; readonly project_name: string;
   readonly baseline_available?: boolean; readonly candidate_available?: boolean;
   readonly baseline_usage?: LearningUsage | null; readonly candidate_usage?: LearningUsage | null;
   readonly baseline_quality?: string | null; readonly candidate_quality?: string | null;
   readonly executable_changed?: boolean | null;
-  readonly comparison?: { readonly baseline_rating: number; readonly candidate_rating: number; readonly note: string } | null };
-export type LearningLab = { readonly lessons: readonly LearningLesson[]; readonly trials: readonly LearningTrial[]; readonly jobs: readonly { readonly id: string; readonly name: string; readonly recipe: string; readonly edit_style: string; readonly version: number }[]; readonly note: string };
+  readonly evaluation_case_id?: string | null;
+  readonly test_case?: Pick<LearningCase, "id" | "label" | "category" | "expectations" | "max_candidate_tokens"> | null;
+  readonly comparison?: { readonly baseline_rating: number; readonly candidate_rating: number; readonly note: string; readonly rubric?: PlaybackRubric | null } | null };
+export type LearningLab = { readonly lessons: readonly LearningLesson[]; readonly trials: readonly LearningTrial[];
+  readonly cases?: readonly LearningCase[];
+  readonly history?: readonly { readonly id: string; readonly lesson_id: string; readonly deployment_version: number; readonly action: string; readonly created_at: string; readonly directive_hash: string; readonly actor: string; readonly previous_status: string; readonly status: string }[];
+  readonly jobs: readonly { readonly id: string; readonly name: string; readonly recipe: string; readonly edit_style: string; readonly version: number; readonly ordinary?: boolean }[]; readonly note: string };
 export const getLearningLab = () => apiRequest<LearningLab>("learning/lab");
 export const proposeLearningLessons = () => apiRequest("learning/lab/propose",{method:"POST"});
-export const tryLearningLesson = (lessonId: string, jobId: string, version: number) => apiRequest(`learning/lab/lessons/${lessonId}/trial`,{method:"POST",body:JSON.stringify({job_id:jobId,base_version:version})});
-export const evaluateLearningLesson = (lessonId: string, candidateId: string, baseline: number, candidate: number, note = "") => apiRequest(`learning/lab/lessons/${lessonId}/evaluate`,{method:"POST",body:JSON.stringify({candidate_run_id:candidateId,baseline_rating:baseline,candidate_rating:candidate,note})});
-export const setLearningLessonStatus = (lessonId: string, action: "promote" | "rollback") => apiRequest(`learning/lab/lessons/${lessonId}/status`,{method:"POST",body:JSON.stringify({action})});
+export const tryLearningLesson = (lessonId: string, jobId: string, version: number, caseId?: string) => apiRequest(`learning/lab/lessons/${lessonId}/trial`,{method:"POST",body:JSON.stringify({job_id:jobId,base_version:version,case_id:caseId})});
+export const evaluateLearningLesson = (lessonId: string, candidateId: string, baseline: number, candidate: number, note = "", assessment?: { rubric: PlaybackRubric; reviewed_both: boolean }) => apiRequest(`learning/lab/lessons/${lessonId}/evaluate`,{method:"POST",body:JSON.stringify({candidate_run_id:candidateId,baseline_rating:baseline,candidate_rating:candidate,note,...assessment})});
+export const setLearningLessonStatus = (lessonId: string, action: "promote" | "rollback" | "upgrade") => apiRequest(`learning/lab/lessons/${lessonId}/status`,{method:"POST",body:JSON.stringify({action})});
+export const saveLearningCase = (payload: { id: string; job_id: string; base_version: number; label: string; recording_group: string; category: string; expectations: string; max_candidate_tokens: number | null }) => apiRequest("learning/lab/cases",{method:"POST",body:JSON.stringify(payload)});
+export const setLearningCaseStatus = (id: string, action: "archive" | "restore") => apiRequest(`learning/lab/cases/${id}/status`,{method:"POST",body:JSON.stringify({action})});
 
 export const requestLocalRepair = (jobId: string, version: number, action: "tighten_pauses" | "denoise") => apiRequest(`jobs/${jobId}/local-repair`,{method:"POST",body:JSON.stringify({base_version:version,action})});
 

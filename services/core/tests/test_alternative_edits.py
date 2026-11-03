@@ -222,7 +222,11 @@ class AlternativeRequestTests(unittest.TestCase):
         self.assertEqual(values[2], self.reference)
         self.assertIs(values[6], False)
         self.assertIs(values[10], False)
-        self.assertEqual(values[-4:-2], ("different_cut", self.payload.request_id))
+        columns = inserts[0].args[0].split("INSERT INTO edit_runs (", 1)[1].split(")", 1)[0]
+        bound = dict(zip((column.strip() for column in columns.split(",")), values))
+        self.assertEqual(bound["alternative_kind"], "different_cut")
+        self.assertEqual(bound["alternative_request_id"], self.payload.request_id)
+        self.assertIsNone(bound["evaluation_case_id"])
         self.assertIsNone(values[-1])  # Alternative requests do not freeze a precise quote resolution.
         self.assertFalse(
             any(

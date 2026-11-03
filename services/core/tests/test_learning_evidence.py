@@ -195,7 +195,7 @@ class LearningEvidenceTests(unittest.TestCase):
             database.execute.side_effect=query
             with patch("app.learning_lab.connection",return_value=database),patch("app.learning_lab.get_settings",return_value=SimpleNamespace(media_root=root)):
                 report=learning_lab.lab()
-            self.assertEqual(report["version"],2)
+            self.assertEqual(report["version"],3)
             self.assertEqual(report["hosted_model_calls"],0)
             self.assertTrue(report["trials"][0]["baseline_available"])
             self.assertTrue(report["trials"][0]["candidate_available"])

@@ -714,7 +714,8 @@ def _request_revision(job_id: UUID, payload: RevisionCreate,
                 (job_id,payload.evaluation_lesson_id),
             ).fetchone()
             if existing:
-                if existing["baseline_version"] != payload.base_version:
+                if (existing["baseline_version"] != payload.base_version
+                        or str(existing.get("evaluation_case_id")) != str(payload.evaluation_case_id)):
                     raise HTTPException(409,"this lesson already has a trial on this job; review it or choose fresh footage")
                 return _response(existing)
         assert_job_capacity(database, job_id)
@@ -753,6 +754,14 @@ def _request_revision(job_id: UUID, payload: RevisionCreate,
             # planner may reconsider footage/treatment, never reverse a removal.
             payload.effects_enabled = based_on.get("effects_enabled")
             payload.broll_enabled = based_on.get("broll_enabled")
+        if payload.evaluation_case_id is not None:
+            based_on = database.execute(
+                "SELECT r.* FROM edit_runs r JOIN learning_cases c ON c.baseline_run_id=r.id "
+                "WHERE c.id=%s AND r.job_id=%s AND r.status='ready' AND r.edit_plan_id IS NOT NULL",
+                (payload.evaluation_case_id,job_id),
+            ).fetchone()
+            if not based_on:
+                raise HTTPException(409, "the saved test baseline is unavailable")
         if (
             payload.base_version is not None
             and payload.base_version != based_on["version"]
@@ -856,6 +865,11 @@ def _request_revision(job_id: UUID, payload: RevisionCreate,
             from app.learning_evidence import preview_available
             if based_on.get("evaluation_lesson_id") or not preview_available(based_on,get_settings().media_root):
                 raise HTTPException(409,"a playable ordinary baseline preview is required for a lesson trial")
+            if candidate_lesson.get("evaluation_protocol", 1) >= 2 and payload.evaluation_case_id is None:
+                raise HTTPException(409, "choose a saved playback test case before starting this lesson trial")
+            if payload.evaluation_case_id is not None:
+                from app.learning_cases import assert_case
+                assert_case(database,payload.evaluation_case_id,job_id,based_on,new_trial=True)
             payload.note = candidate_lesson["directive"]
         if payload.repair_kind is not None:
             existing_repair = database.execute(
@@ -896,8 +910,8 @@ def _request_revision(job_id: UUID, payload: RevisionCreate,
             INSERT INTO edit_runs (
                 job_id, version, based_on_run_id, revision_note, caption_corrections,
                 caption_settings, effects_enabled, clip_adjustments, locked_elements, revision_mode, broll_enabled, finishing_settings, evaluation_lesson_id, repair_kind,
-                alternative_kind, alternative_request_id, duration_policy, revision_resolution
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                alternative_kind, alternative_request_id, evaluation_case_id, duration_policy, revision_resolution
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING *
             """,
             (
@@ -919,6 +933,7 @@ def _request_revision(job_id: UUID, payload: RevisionCreate,
                 payload.repair_kind,
                 alternative.kind if alternative else None,
                 alternative.request_id if alternative else None,
+                payload.evaluation_case_id,
                 Jsonb(based_on["duration_policy"]) if (not payload.note or grounded) and based_on.get("duration_policy") else None,
                 Jsonb(resolution) if resolution else None,
             ),

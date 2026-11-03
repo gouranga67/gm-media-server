@@ -89,7 +89,7 @@ export function LearningDashboard() {
                   <p className="font-mono text-xs font-bold tracking-wide text-[#173F5F] uppercase">Learning controls</p>
                   <p className="mt-2 text-sm text-[#666862]">The safety threshold prevents one-off opinions from changing future plans.</p>
                 </div>
-                <Button disabled={saving} onClick={() => void saveSettings(!summary.settings.enabled, summary.settings.minimum_samples)} type="button" variant={summary.settings.enabled ? "outline" : "default"}>
+                <Button className="min-h-11" disabled={saving} onClick={() => void saveSettings(!summary.settings.enabled, summary.settings.minimum_samples)} type="button" variant={summary.settings.enabled ? "outline" : "default"}>
                   {saving ? <LoaderCircleIcon className="animate-spin" /> : summary.settings.enabled ? <PauseCircleIcon /> : <BrainCircuitIcon />}
                   {summary.settings.enabled ? "Pause learning" : "Resume learning"}
                 </Button>

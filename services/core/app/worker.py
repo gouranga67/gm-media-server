@@ -999,6 +999,15 @@ def process_one_edit(state: WorkerState) -> bool:
         apply_duration_snapshot(context, run)
         context["duration_guidance"] = duration_preflight(context)
 
+        if run.get("evaluation_case_id"):
+            from app.learning_cases import assert_case
+            with connection() as database:
+                baseline = database.execute("SELECT * FROM edit_runs WHERE id=%s", (run["based_on_run_id"],)).fetchone()
+                if not baseline:
+                    raise RuntimeError("the saved test baseline is unavailable")
+                # Decline changed tasks before a new paid editor request.
+                assert_case(database,run["evaluation_case_id"],run["job_id"],baseline)
+
         if run.get("alternative_kind"):
             from app.alternative_edits import prepare_alternative
             with connection() as database:
