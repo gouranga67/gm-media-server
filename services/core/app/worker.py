@@ -1103,8 +1103,14 @@ def process_one_edit(state: WorkerState) -> bool:
                     and not run.get("alternative_kind") and not run.get("evaluation_lesson_id")
                     and run.get("finishing_settings") is None and not adjustments):
                 from app.revision_intent import local_revision
-                resolved_revision = local_revision(context["revision"]["previous_plan"],
-                    run["revision_note"], run.get("locked_elements") or [])
+                if run.get("revision_resolution"):
+                    from app.grounded_revision import replay_resolution
+                    resolved_revision = replay_resolution(run["revision_resolution"], context["revision"]["previous_plan"])
+                    if run["revision_resolution"].get("subtitle_document"):
+                        context["_subtitle_document"] = run["_subtitle_document"] = run["revision_resolution"]["subtitle_document"]
+                else:
+                    resolved_revision = local_revision(context["revision"]["previous_plan"],
+                        run["revision_note"], run.get("locked_elements") or [])
                 if resolved_revision and resolved_revision[1]["scope"] in {"broll", "effects"}:
                     scope = resolved_revision[1]["scope"]
                     run[f"{scope}_enabled"] = False
@@ -1343,8 +1349,9 @@ def process_one_edit(state: WorkerState) -> bool:
                     allow_post_copy=bool(context["project"]["ai_copy_allowed"]), creative_direction=context["job"],
                     music_tracks=context["music_library"], creative_effects=context["creative_effect_library"])
             from app.audio_cleanup import prepare_voice_cleanup
-            plan = prepare_voice_cleanup(context, plan,
-                new_edit=not bool(run.get("based_on_run_id")))
+            if not deterministic_revision or run.get("finishing_settings") is not None:
+                plan = prepare_voice_cleanup(context, plan,
+                    new_edit=not bool(run.get("based_on_run_id")))
             _persist_generated_plan(run, plan, provenance)
 
         from app.story_contract import check_story_contract
@@ -1367,7 +1374,7 @@ def process_one_edit(state: WorkerState) -> bool:
                 )
                 context["revision_report"]["mode"] = run.get("revision_mode") or "targeted"
                 context["revision_report"]["instruction"] = run.get("revision_note") or ""
-                context["revision_report"]["execution"] = context.get("revision_resolution") or {
+                context["revision_report"]["execution"] = context.get("revision_resolution") or (run.get("revision_resolution") or {}).get("execution") or {
                     "route": "local" if provider.startswith("local_") else "model",
                     "scope": "explicit_tools" if not run.get("revision_note") else "editorial",
                 }

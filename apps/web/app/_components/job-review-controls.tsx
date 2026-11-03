@@ -120,8 +120,14 @@ export function JobReviewControls({
   const revisionReport = run.manifest.revision_report as {
     changed?: boolean; changes?: readonly string[]; notice?: string;
     editor_explanation?: string; instruction?: string;
-    execution?: { route?: string; scope?: string };
+    execution?: { route?: string; scope?: string; summary?: string;
+      target?: { clip_index: number; phrase: string; start_seconds: number; end_seconds: number;
+        retained_pause_seconds?: number; requested_pause_seconds?: number } };
   } | undefined;
+  const target = revisionReport?.execution?.target;
+  const revisionTarget = target && typeof target.phrase === "string" && Number.isInteger(target.clip_index)
+    && target.clip_index >= 0 && Number.isFinite(target.start_seconds) && target.start_seconds >= 0
+    ? target : undefined;
   const [coverTime, setCoverTime] = useState(initialCoverTime);
   const [captionPosition, setCaptionPosition] = useState<"lower_safe" | "middle" | "upper">(
     run.caption_settings.position ?? "lower_safe",
@@ -172,6 +178,7 @@ export function JobReviewControls({
     try {
       await requestRevision(jobId, {
         note: cleanNote,
+        baseVersion: run.version,
         revisionMode,
         captionCorrections: [],
         lockedElements: revisionMode === "rebuild_story"
@@ -650,6 +657,12 @@ export function JobReviewControls({
           <p className="font-bold">What changed in version {run.version}</p>
           {revisionReport.instruction ? <p className="mt-2">Your request: {revisionReport.instruction}</p> : null}
           {revisionReport.execution ? <p className="mt-2 text-xs font-bold">{revisionReport.execution.route === "local" ? "Applied locally · zero AI editing calls" : "Planned by the editor model"}</p> : null}
+          {revisionReport.execution?.summary ? <p className="mt-2">{revisionReport.execution.summary}</p> : null}
+          {revisionTarget ? <div className="mt-2 text-xs leading-5">
+            <p>Matched recorded words: “{revisionTarget.phrase}” · clip {revisionTarget.clip_index + 1}</p>
+            <button className="min-h-11 underline underline-offset-4" type="button" disabled={!onSeek} onClick={() => onSeek?.(revisionTarget.start_seconds)}>Listen at {revisionTarget.start_seconds.toFixed(1)}s</button>
+            {typeof revisionTarget.retained_pause_seconds === "number" && Number.isFinite(revisionTarget.retained_pause_seconds) ? <p>Retained pause: {revisionTarget.retained_pause_seconds.toFixed(2)}s. Extra word handles or non-quiet reactions are preserved when needed.</p> : null}
+          </div> : null}
           {revisionReport.changes?.length ? <ul className="mt-2 list-disc space-y-1 pl-5">{revisionReport.changes.map((change) => <li key={change}>{change}</li>)}</ul> : null}
           {revisionReport.notice ? <p className="mt-2">{revisionReport.notice}</p> : null}
           {revisionReport.editor_explanation ? <p className="mt-2">Editor explanation: {revisionReport.editor_explanation}</p> : null}
@@ -659,7 +672,7 @@ export function JobReviewControls({
           <option value="targeted">Adjust this edit</option>
           <option value="rebuild_story">Rebuild the story from the footage</option>
         </select>
-        <p className="mt-2 text-xs leading-relaxed text-[#666862]">{revisionMode === "rebuild_story" ? "Reconsiders the source dialogue and your original brief. Clip order and spoken selections are unlocked; other protections stay active." : "Describe a specific change and the parts you want to keep. Exact commands such as ‘Make clip 2 louder by 6 dB’, ‘Move captions to the top’, ‘Remove effects’, or ‘Remove B-roll’ run locally. Other requests use the editor model."} Nothing runs until you submit. Use the rating card below to teach future edits.</p>
+        <p className="mt-2 text-xs leading-relaxed text-[#666862]">{revisionMode === "rebuild_story" ? "Reconsiders the source dialogue and your original brief. Clip order and spoken selections are unlocked; other protections stay active." : 'Describe a specific change and what to keep. Exact requests such as Make “your recorded words” louder by 3 dB or Shorten the pause after “your recorded words” to 0.5 seconds run locally. Add in clip 2 if a quote repeats. A pause is shortened only where quiet audio is verified. Clip volume, caption position and removal commands also run locally; other requests use the editor model.'} Nothing runs until you submit. Use the rating card below to teach future edits.</p>
         <label className="mt-4 block text-sm font-bold text-[#20211F]" htmlFor="revision-note">What should the editor change?</label>
         <Textarea
           className="mt-2 min-h-28"

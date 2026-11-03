@@ -332,8 +332,9 @@ def clip_voice_cleanup_filter(plan: Any, index: int, *, duration: float | None =
     if profile.noise_reduction_db and not tools.voice_denoise:
         length = duration if duration is not None else float(clip.duration if hasattr(clip, "duration") else clip.source_out - clip.source_in)
         filters.extend(["highpass=f=70", timed_denoise_filter(6, profile.noise_floor_dbfs, length)])
-    # Explicit phrase/take level edits always win over automatic balance.
-    if profile.balance_gain_db and not clip.source_audio_gain_db and not tools.audio_regions:
+    # Phrase automation is additive over the saved take balance. Adding a gain
+    # region must not silently disable balancing on unrelated clips.
+    if profile.balance_gain_db and not clip.source_audio_gain_db:
         filters.append(f"volume={profile.balance_gain_db:.1f}dB")
     if profile.compress:
         filters.append("acompressor=threshold=0.125:ratio=2:attack=15:release=200:makeup=1")

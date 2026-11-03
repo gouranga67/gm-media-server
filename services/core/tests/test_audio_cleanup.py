@@ -113,7 +113,7 @@ class VoiceCleanupTests(unittest.TestCase):
         self.assertEqual(clip_voice_cleanup_filter(result, 0), "")
         result.clips[0].source_audio_gain_db = 0
         result.finishing = FinishingTools.model_validate({**tools.model_dump(), "audio_regions": [dict(start=0, end=1, gain_db=3)]})
-        self.assertEqual(clip_voice_cleanup_filter(result, 0), "")
+        self.assertEqual(clip_voice_cleanup_filter(result, 0), "volume=6.0dB")
 
     def test_source_cleanup_precedes_music_and_covers_independent_audio_joins(self):
         profile = choose_profile(self.asset_id, inspect_pcm(pcm_fixture(), [(.5, 2.5)]), None)

@@ -66,9 +66,28 @@ def add_narrative_links(public, max_characters):
         hints.pop()
 
 
+def _qualifying_context(words, first, previous_entry, identity):
+    preceding = [w for w in words if w["end"] <= first["start"] and first["start"] - w["end"] <= 1.2]
+    if not preceding or _END.search(str(preceding[-1].get("text", "")).strip()):
+        return None
+    boundary = max((index for index, word in enumerate(preceding) if _END.search(str(word.get("text", "")).strip())), default=-1)
+    preceding = preceding[boundary + 1:]
+    # A previous retained selection may already supply this context. Do not
+    # flag a sentence split by an explicit quiet cut as an omitted qualifier.
+    if previous_entry and previous_entry["asset_id"] == identity and previous_entry["source_in"] <= preceding[-1]["start"] < previous_entry["source_out"]:
+        return None
+    text = " ".join(str(w.get("text", w.get("word", ""))).strip() for w in preceding[-6:])
+    if re.search(r"\b(?:not|never|without|unless|only|if|isn't|doesn't|don't|cannot|can't)\b", text, re.I):
+        return text[:120]
+    return None
+
+
 def story_sequence_review(plan, assets, *, bloopers=False):
     inventory = {str(a["asset_id"]): a for a in assets}
     entries, findings, timeline, seen = [], [], 0.0, set()
+    selected_speech = set()
+    source_key = lambda asset: str(asset.get("sha256") or asset.get("asset_id"))
+    available_speech = {source_key(a) for a in assets if a.get("has_audio") and any(str(s.get("text", "")).strip() or s.get("words") for s in _timed(a.get("transcript_segments", [])))}
     for index, clip in enumerate(plan.clips):
         identity = str(clip.asset_id)
         asset = inventory.get(identity, {})
@@ -76,7 +95,8 @@ def story_sequence_review(plan, assets, *, bloopers=False):
         duration = float(getattr(clip, "duration", right - left))
         audible = plan.recipe != "montage" or bool(clip.include_source_audio)
         segments = _timed(asset.get("transcript_segments", []))
-        words = [w for w in _timed([w for s in segments for w in (s.get("words") or [])])
+        all_words = _timed([w for s in segments for w in (s.get("words") or [])])
+        words = [w for w in all_words
                  if left <= (w["start"] + w["end"]) / 2 < right] if audible else []
         text = " ".join(str(w.get("text", w.get("word", ""))).strip() for w in words)
         approximate = False
@@ -84,10 +104,16 @@ def story_sequence_review(plan, assets, *, bloopers=False):
             text = " ".join(str(s.get("text", "")) for s in segments
                 if left <= float(s.get("start", 0)) and float(s.get("end", 0)) <= right)
             approximate = bool(text)
+        if text and audible:
+            selected_speech.add(source_key(asset))
         entry = {"clip_index": index, "asset_id": identity, "start_seconds": round(timeline, 3),
                  "end_seconds": round(timeline + duration, 3), "source_in": left, "source_out": right,
                  "role": clip.story_role, "text": text[:360], "word_timed": bool(words),
                  "partial_transcript": approximate}
+        qualifier = _qualifying_context(all_words, words[0], entries[-1] if entries else None, identity) if words else None
+        if qualifier:
+            entry["preceding_qualifier"] = qualifier
+            findings.append(f"Clip {index + 1}: its recorded lead-in contains qualifying language (\"{qualifier}\") outside this selection. Check whether removing it changes the meaning; this is a text hint, not a semantic verdict.")
         if words and (float(words[0]["start"]) < left - 0.03 or float(words[-1]["end"]) > right + 0.03):
             findings.append(f"Clip {index + 1}: the cut may overlap a recorded word boundary; listen at the join.")
         tokens = re.findall(r"[a-z0-9']+", text.lower())
@@ -101,6 +127,13 @@ def story_sequence_review(plan, assets, *, bloopers=False):
         timeline += duration
     if plan.finishing and plan.finishing.audio_joins:
         findings.append("Audio leads or tails overlap neighbouring picture clips; the outline shows picture source passages. Review the complete spoken joins in playback.")
-    return {"version": 1, "status": "attention" if findings else "checked", "outline": entries,
+    pictures = {str(c.asset_id) for c in plan.broll}
+    if plan.finishing:
+        pictures.update(str(layer.asset_id) for layer in plan.finishing.layers)
+    return {"version": 2, "status": "attention" if findings else "checked", "outline": entries,
             "findings": findings[:8], "hosted_model_calls": 0,
+            "source_coverage": {"available_speech_recordings": len(available_speech), "selected_speech_recordings": len(selected_speech),
+                "supporting_picture_sources": len({source_key(inventory.get(identity, {"asset_id": identity})) for identity in pictures}),
+                "unused_speech_recordings": len(available_speech - selected_speech),
+                "note": "Counts unique source checksums when available. Selection is not a quota: using every recording does not establish a better story."},
             "semantic_judgement": "human_review_required", "intent": "bloopers" if bloopers else "story"}

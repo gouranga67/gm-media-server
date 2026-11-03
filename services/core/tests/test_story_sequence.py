@@ -8,6 +8,37 @@ from test_revision_precision import fixture
 
 
 class StorySequenceTests(unittest.TestCase):
+    def test_source_coverage_counts_unique_recordings_and_actual_supporting_sources(self):
+        plan,asset=fixture()
+        asset["sha256"]="a"*64
+        duplicate={**deepcopy(asset),"asset_id":"duplicate"}
+        unused={**deepcopy(asset),"asset_id":"unused","sha256":"b"*64}
+        result=story_sequence_review(plan,[asset,duplicate,unused])
+        self.assertEqual(result["source_coverage"]["available_speech_recordings"],2)
+        self.assertEqual(result["source_coverage"]["selected_speech_recordings"],1)
+        self.assertEqual(result["source_coverage"]["unused_speech_recordings"],1)
+        self.assertEqual(result["hosted_model_calls"],0)
+
+    def test_omitted_qualifier_is_a_review_hint_not_a_silent_rewrite(self):
+        plan,asset=fixture()
+        asset["transcript_segments"]=[dict(start=.2,end=3,text="This does not work for everyone.",words=[
+            dict(start=.2+n*.4,end=.5+n*.4,text=text) for n,text in enumerate("This does not work for everyone.".split())])]
+        plan.clips[0].source_in=1.35  # Starts on 'work', after 'not'.
+        before=plan.model_dump(mode="json")
+        result=story_sequence_review(plan,[asset])
+        self.assertIn("qualifying language"," ".join(result["findings"]))
+        self.assertIn("not",result["outline"][0]["preceding_qualifier"])
+        self.assertEqual(plan.model_dump(mode="json"),before)
+        self.assertEqual(result["semantic_judgement"],"human_review_required")
+
+    def test_previous_sentence_qualifier_does_not_contaminate_the_next_thought(self):
+        plan,asset=fixture()
+        asset["transcript_segments"]=[dict(start=.1,end=3,text="Not that. This works.",words=[
+            dict(start=.1+n*.3,end=.3+n*.3,text=text) for n,text in enumerate("Not that. This works.".split())])]
+        plan.clips[0].source_in=.95
+        result=story_sequence_review(plan,[asset])
+        self.assertNotIn("preceding_qualifier",result["outline"][0])
+
     def test_context_links_remain_same_source_balanced_and_within_budget(self):
         assets = [dict(asset_id=str(n), transcript_segments=[dict(start=0,end=2,text="This is unfinished"),
             dict(start=2.1,end=4,text="because this explains it."), dict(start=4.1,end=6,text="It works.")]) for n in range(20)]

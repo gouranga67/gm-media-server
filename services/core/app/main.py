@@ -105,6 +105,7 @@ def system_information() -> dict[str, Any]:
         "render_timing_pipeline": RENDER_TIMING_VERSION,
         "speech_precision": {"version": "speech_precision_v1", "enabled": getattr(settings, "speech_alignment_enabled", False)},
         "voice_cleanup": {"version": "voice_cleanup_v1", "automatic_new_speech_edits": True, "hosted_model_calls": 0},
+        "grounded_revisions": {"version": 1, "quoted_phrase_audio": True, "verified_quiet_pause": True, "server_preflight": True, "hosted_model_calls": 0},
         "subtitle_editor": {"version": 1, "timed_cards": True, "explicit_draft_and_apply": True, "hosted_model_calls": 0},
         "environment": settings.app_env,
         "content_policy": {
@@ -122,6 +123,20 @@ def speech_precision_information() -> dict[str, Any]:
     from app.database import connection
     from app.speech_status import speech_precision_status
     return speech_precision_status(get_settings(), connection)
+
+
+@app.get("/api/v1/system/grounded-revisions")
+def grounded_revision_information() -> dict[str, Any]:
+    from app.database import connection
+    with connection() as database:
+        row = database.execute("""SELECT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema=current_schema() AND table_name='edit_runs'
+              AND column_name='revision_resolution') AS ready""").fetchone()
+    return {"version": 1, "schema_ready": bool(row and row["ready"]), "hosted_model_calls": 0,
+        "quoted_phrase_audio": True, "verified_quiet_pause": True, "frozen_resolution": True,
+        "subtitle_corrections_retimed": True, "story_review_version": 2,
+        "semantic_judgement": "human_review_required"}
 
 
 def deployed_build_id(settings: Any) -> str:

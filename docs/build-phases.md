@@ -1,8 +1,25 @@
 # Build phases and live status
 
-Updated: 2026-11-02 (Australia/Brisbane)
+Updated: 2026-11-03 (UTC)
 
 This is the working plan for turning the Lenovo into a private media-editing appliance. A phase is complete only when its exit checks pass. Discussion, generated files, and installed packages do not count as a completed phase by themselves.
+
+## Active large build phases — 26–31
+
+The owner has confirmed that the direct subtitle editor works well in playback. Speech alignment, folder browsing and measured automatic voice cleanup are implemented; the new audio pass still needs owner playback acceptance. Older dated checkpoints below are historical evidence, not current claims about every deployed feature.
+
+These six phases group the remaining work into substantial deliveries. Each has focused regression checks before deployment, followed by real-footage acceptance. The final phase adds the broad cross-flow/soak pass; testing is not deferred until then. Preserve the current successful editor model, cached source analysis, immutable originals, approved versions and explicit posting approval.
+
+| Phase | Large delivery | Exit evidence | Current status |
+|---|---|---|---|
+| **26 — Dependable stories and revisions** | Ground precise revision instructions in the actual saved speech; protect unaffected choices; show what changed; strengthen evidence/continuity review for multi-source stories without imposing an ad shape | Quoted-phrase and pause edits resolve to a unique recorded interval; ambiguity is explained before queueing; exact local changes use zero editor calls; good story/body/caption versions remain intact; multi-source playback review | First source checkpoint implemented and tested; deployment/playback and broader story acceptance pending |
+| **27 — Better context and useful bloopers** | Find a specific recorded incident with its setup and real reaction, compare alternate takes, improve product/reference continuity and decline unsupported joke candidates | Known outtakes work; repeated clean takes do not become invented jokes; no unrelated reaction stitching or duration padding; ordinary stories retain usable speech | Planned after 26 |
+| **28 — Smart visual finishing** | Selected-shot tracking/reframing, caption/graphic avoidance, restrained shot matching, optional stabilization and a measured background-cutout prototype | Tracked subjects/products stay framed; readable overlays; no audio/timeline changes; expensive work limited to selected ranges; licensed cutout model remains gated unless quality/compute acceptance passes | Planned; fixed camera tools, picture layers and real green-screen keying already exist |
+| **29 — Organised library intake at scale** | Upload directly to folders, a reviewable intake Inbox, suggested names/roles/folders, efficient server-side browsing/filter pagination; consider nested folders once the basic flow is proven | Mixed bulk imports are easy to review and find; filing preserves originals and historical references; large-library browsing stays responsive; no duplicate reanalysis for cached material | Planned; folder/grid/list browsing already exists |
+| **30 — Demonstrated learning improvements** | Reusable representative edit tasks, clear paired baseline/trial review, versioned rule promotion/rollback and bounded objective repairs | Fresh independent footage, human playback preference and recorded cost support each promoted change; no training/test overlap, self-scored promotion or unbounded critique loop | Planned; existing lesson/trial framework is retained |
+| **31 — Publishing and release acceptance** | Finish owner Meta configuration and real approved-post checks, test the whole workflow under load/recovery, consolidate operator diagnostics and pilot onboarding | Actual approved post and scheduling acceptance, downloaded phone playback, restore/recovery evidence and representative user tasks; public customer workspaces require a separate isolation implementation before any public launch | Planned; publishing/scheduling code and private pilot tools already exist |
+
+Phase 26's [first checkpoint](phase-reports/phase-26-revision-reliability.md) adds source-grounded phrase/pause revisions and executable change receipts. Semantic story quality and humour remain human playback criteria; a local check is not proof that an edit tells a good story. Later phase work is authorised as the continuing build direction, not recorded as already delivered.
 
 ## Reliability and efficiency sprint — source checkpoint
 

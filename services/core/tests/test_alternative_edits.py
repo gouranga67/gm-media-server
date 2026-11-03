@@ -222,7 +222,8 @@ class AlternativeRequestTests(unittest.TestCase):
         self.assertEqual(values[2], self.reference)
         self.assertIs(values[6], False)
         self.assertIs(values[10], False)
-        self.assertEqual(values[-3:-1], ("different_cut", self.payload.request_id))
+        self.assertEqual(values[-4:-2], ("different_cut", self.payload.request_id))
+        self.assertIsNone(values[-1])  # Alternative requests do not freeze a precise quote resolution.
         self.assertFalse(
             any(
                 "UPDATE edit_plans" in call.args[0] or "DELETE" in call.args[0]

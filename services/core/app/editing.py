@@ -663,7 +663,15 @@ def request_alternative(job_id: UUID, payload: AlternativeCreate) -> dict[str, A
 
 def _request_revision(job_id: UUID, payload: RevisionCreate,
                       *, alternative: AlternativeCreate | None = None) -> dict[str, Any]:
-    context = _context_or_http(job_id)
+    from app.grounded_revision import revision_spec, resolve_revision
+    grounded = revision_spec(payload.note) if payload.revision_mode == "targeted" and not alternative and not payload.evaluation_lesson_id else None
+    if grounded and payload.base_version is None:
+        raise HTTPException(422, "A quoted revision requires the version currently being reviewed; refresh and submit again.")
+    if grounded and (payload.caption_corrections or payload.caption_settings or payload.finishing_settings is not None
+                     or payload.effects_enabled is not None or payload.broll_enabled is not None):
+        raise HTTPException(422, "Apply a quoted phrase or pause change separately from other changes.")
+    context = _context_or_http(job_id, internal=bool(grounded and grounded["kind"] == "phrase_pause"))
+    resolution = None
     if not context["ready_for_editing"]:
         raise HTTPException(status_code=409, detail="source analysis is not ready")
     corrections = [item.model_dump() for item in payload.caption_corrections]
@@ -673,7 +681,7 @@ def _request_revision(job_id: UUID, payload: RevisionCreate,
     ]
     _validate_caption_corrections(context, corrections)
     if context["project"]["privacy_mode"] == "local_only" and (
-        payload.note or payload.evaluation_lesson_id
+        (payload.note and not grounded) or payload.evaluation_lesson_id
     ):
         raise HTTPException(
             status_code=409,
@@ -774,12 +782,12 @@ def _request_revision(job_id: UUID, payload: RevisionCreate,
             payload.effects_enabled = based_on.get("effects_enabled")
         if payload.broll_enabled is None:
             payload.broll_enabled = based_on.get("broll_enabled")
-        if not payload.note and not alternative:
+        if (not payload.note or grounded) and not alternative:
             from app.duration_policy import apply_duration_snapshot
             apply_duration_snapshot(context, based_on)
-        if payload.finishing_settings is not None or adjustments:
+        if payload.finishing_settings is not None or adjustments or grounded:
             source_plan = database.execute(
-                "SELECT document FROM edit_plans WHERE id=%s",
+                "SELECT document, speech_precision_snapshot, subtitle_document FROM edit_plans WHERE id=%s",
                 (based_on["edit_plan_id"],),
             ).fetchone()
             if not source_plan:
@@ -793,6 +801,20 @@ def _request_revision(job_id: UUID, payload: RevisionCreate,
                     music_tracks=context["music_library"],
                     creative_effects=context["creative_effect_library"],
                 )
+                if grounded:
+                    from app.speech_precision import apply_snapshot
+                    snapshot = source_plan.get("speech_precision_snapshot") or {}
+                    if snapshot:
+                        apply_snapshot(context, snapshot, get_settings())
+                    resolution = resolve_revision(previous_document, payload.note, context["assets"], payload.locked_elements)
+                    # Bind to the actual immutable parent document, including
+                    # legacy defaults repaired only for execution/validation.
+                    resolution["base_plan_sha256"] = document_sha256(source_plan["document"])
+                    previous_document = resolution["document"]
+                    if source_plan.get("subtitle_document") and resolution.get("timeline_mapping"):
+                        from app.subtitle_document import remap_document
+                        resolution["subtitle_document"] = remap_document(source_plan["subtitle_document"], source_plan["document"],
+                            resolution["document"], resolution["timeline_mapping"])
                 options = {
                     "allow_post_copy": bool(context["project"]["ai_copy_allowed"]),
                     "creative_direction": context["job"],
@@ -812,7 +834,10 @@ def _request_revision(job_id: UUID, payload: RevisionCreate,
                         schema_version="1.5",
                         finishing=payload.finishing_settings.model_dump(mode="json"),
                     )
-                validate_edit_plan(document, context["assets"], **options)
+                validated = validate_edit_plan(document, context["assets"], **options)
+                if resolution:
+                    resolution["document"] = validated.model_dump(mode="json")
+                    resolution["document_sha256"] = document_sha256(resolution["document"])
             except (ValueError, ValidationError) as error:
                 raise HTTPException(status_code=422, detail=str(error)[:500]) from error
         if payload.evaluation_lesson_id is not None:
@@ -868,8 +893,8 @@ def _request_revision(job_id: UUID, payload: RevisionCreate,
             INSERT INTO edit_runs (
                 job_id, version, based_on_run_id, revision_note, caption_corrections,
                 caption_settings, effects_enabled, clip_adjustments, locked_elements, revision_mode, broll_enabled, finishing_settings, evaluation_lesson_id, repair_kind,
-                alternative_kind, alternative_request_id, duration_policy
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                alternative_kind, alternative_request_id, duration_policy, revision_resolution
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING *
             """,
             (
@@ -891,7 +916,8 @@ def _request_revision(job_id: UUID, payload: RevisionCreate,
                 payload.repair_kind,
                 alternative.kind if alternative else None,
                 alternative.request_id if alternative else None,
-                Jsonb(based_on["duration_policy"]) if not payload.note and based_on.get("duration_policy") else None,
+                Jsonb(based_on["duration_policy"]) if (not payload.note or grounded) and based_on.get("duration_policy") else None,
+                Jsonb(resolution) if resolution else None,
             ),
         ).fetchone()
         database.execute(
@@ -917,6 +943,7 @@ def _request_revision(job_id: UUID, payload: RevisionCreate,
                         "effects_enabled": payload.effects_enabled,
                         "broll_enabled": payload.broll_enabled,
                         "timeline_adjustment_count": len(adjustments),
+                        "grounded_revision": resolution["execution"] if resolution else None,
                         "locked_elements": payload.locked_elements,
                     }
                 ),

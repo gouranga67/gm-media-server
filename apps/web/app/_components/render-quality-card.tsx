@@ -71,7 +71,8 @@ export function RenderQualityCard({
         })
       : undefined;
   const sequence = storySequence && typeof storySequence === "object"
-    ? storySequence as { findings?: readonly string[]; outline?: readonly unknown[] } : undefined;
+    ? storySequence as { findings?: readonly string[]; outline?: readonly unknown[];
+      source_coverage?: { available_speech_recordings?: number; selected_speech_recordings?: number; supporting_picture_sources?: number } } : undefined;
   const sequenceFindings = Array.isArray(sequence?.findings)
     ? sequence.findings.filter((line) => typeof line === "string") : [];
   const outline = Array.isArray(sequence?.outline) ? sequence.outline.filter(isStoryBeat).slice(0, 48) : [];
@@ -124,6 +125,9 @@ export function RenderQualityCard({
       {outline.length ? <details className="mt-4 border-t border-[#D7D9D3] pt-3">
         <summary className="min-h-11 cursor-pointer text-sm font-bold text-[#173F5F]">Recorded story outline</summary>
         <p className="mt-2 text-xs text-[#53646F]">These are the selected source passages. Roles describe the edit plan; they do not prove that the story or joke works.</p>
+        {typeof sequence?.source_coverage?.available_speech_recordings === "number" ? <p className="mt-2 text-xs text-[#53646F]">
+          Speech from {sequence.source_coverage.selected_speech_recordings ?? 0} of {sequence.source_coverage.available_speech_recordings} available recordings · {sequence.source_coverage.supporting_picture_sources ?? 0} supporting picture sources. Each source should earn its place; using every file is not required.
+        </p> : null}
         <ol className="mt-3 space-y-3 text-xs text-[#53646F]">{outline.map((beat) => <li key={beat.clip_index}>
           <p className="font-bold">Clip {beat.clip_index + 1} · {beat.start_seconds.toFixed(1)}–{beat.end_seconds.toFixed(1)}s · {beat.role}</p>
           <p className="mt-1">{beat.text || "Picture-only passage or speech without usable transcript timing."}</p>

@@ -144,6 +144,37 @@ def retime_document(document, plan):
     return result
 
 
+def remap_document(document, previous, current, mapping):
+    """Carry text/hidden/position edits through an explicit verified quiet cut.
+
+    Arbitrary story changes still reset overrides. Only surviving intervals from
+    this exact saved cut can carry their user's caption edits forward.
+    """
+    if not matches(document, previous):
+        raise ValueError("The edited subtitles no longer match this saved media cut.")
+    result = retime_document(document, previous)
+    cues = []
+    for cue in result["cues"]:
+        fragments = []
+        for old_start, old_end, new_start in mapping:
+            left, right = max(cue["start"], old_start), min(cue["end"], old_end)
+            if right - left < .0009:
+                continue
+            start, end = round(new_start + left - old_start, 3), round(new_start + right - old_start, 3)
+            if fragments and abs(fragments[-1]["end"] - start) < .002:
+                fragments[-1]["end"] = end
+            else:
+                fragments.append({**cue, "start": start, "end": end})
+        for index, item in enumerate(fragments):
+            if index:
+                item["id"] = cue["id"][:90] + f"-p{index}"
+            cues.append(item)
+    result.update(basis=basis(current), audio_joins=(current.get("finishing") or {}).get("audio_joins", []),
+        duration=duration(current), timing_offset_seconds=float(current.get("caption_timing_offset_seconds") or 0),
+        cues=validate_cues(sorted(cues, key=lambda c: c["start"]), duration(current)))
+    return result
+
+
 def corrected_document(document, corrections):
     from app.caption_text import replace_caption_phrase
     result = deepcopy(document)

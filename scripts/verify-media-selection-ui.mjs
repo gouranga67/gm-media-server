@@ -24,6 +24,7 @@ const Module = require("node:module");
 const originalLoad = Module._load;
 let lessonProposed = false, labFixture = null;
 let assemblySettings, assemblyError, assemblyLocked, profiles, previewFixture;
+let revisionFailure = false;
 function assemblyPreview() { return {ready: !assemblyError, locked: assemblyLocked, error:assemblyError, settings:assemblySettings, decision:assemblyError ? null : {recipe:assemblySettings.assembly_mode === "auto" ? "talking_head" : assemblySettings.assembly_mode,edit_style:assemblySettings.edit_style,purpose:assemblySettings.reel_intent === "auto" ? "story" : assemblySettings.reel_intent,label:"Speech with supporting pictures",reason:"Keep recorded speech continuous.",hosted_model_calls:0}}; }
 let publishingFixture, alternativeFailure, durationFixture, durationFailure;
 let subtitleFixture, subtitleFailure = false;
@@ -125,7 +126,10 @@ globalThis.fetch = async (url, options = {}) => {
   else if (route.endsWith("/ranges") && route.startsWith("library/assets/")) payload = [];
   else if (route.includes("/ranges/") && route.startsWith("library/assets/")) payload = body;
   else if (route === `jobs/${jobId}/review`) payload=previewFixture;
-  else if (route === `jobs/${jobId}/revisions`) payload = { id: "revision", version: 3, status: "pending" };
+  else if (route === `jobs/${jobId}/revisions`) {
+    if (revisionFailure) return {ok:false,status:422,json:async()=>({detail:"That quote occurs more than once. Add in clip N; no new edit was queued."})};
+    payload = { id: "revision", version: 3, status: "pending" };
+  }
   else if (route === `jobs/${jobId}/alternatives`) {
     if (alternativeFailure) return {ok:false,status:409,json:async()=>({detail:"This alternative could not be queued. Your original is unchanged."})};
     payload={id:"alternative",version:3,status:"pending"};
@@ -245,6 +249,7 @@ beforeEach(() => {
   creativeImportAttempts = new Map();
   alternativeFailure=false;
   durationFailure=false;
+  revisionFailure=false;
   durationFixture={settings:{duration_mode:"aim",target_duration_seconds:60,max_duration_seconds:90},assessment:{mode:"aim",preferred_seconds:60,maximum_seconds:72,available_speech_seconds:85,warning:"About 85s of speech includes possible repeated takes; this is not a required-script measurement."}};
   publishingFixture={config:{configured:true,redirect_uri:"https://studio.example.invalid/publishing/connect"},accounts:[{id:serverId,platform:"instagram",display_name:"Studio",active:true,token_expires_at:null}],draft:null,failPublish:false};
   managedAssets = [
@@ -1000,6 +1005,41 @@ test("review recognises generated graphics and removes them only on request", as
   assert.equal(posts("revisions").length,1);
   assert.equal(posts("revisions")[0].body.effects_enabled,false);
   assert.equal(updates,1);
+});
+
+test("quoted revision sends the displayed version only on submit and preserves rejected input",async()=>{
+  let updates=0;revisionFailure=true;
+  const run={id:"ready",version:2,status:"ready",caption_settings:{},manifest:{}};
+  await act(async()=>root.render(React.createElement(JobReviewControls,{jobId,run,finalExport:null,outputAspect:"vertical",recipe:"talking_head",
+    targetDuration:30,deliveryVariants:[],editorialTimeline:[],initialCoverTime:0,initialFeedback:null,onUpdated:()=>updates++})));
+  const note='Make "cream works" louder by 3 dB';
+  await type('#revision-note',note);
+  assert.equal(posts("revisions").length,0);
+  await act(async()=>document.querySelector('#revision-note').closest('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+  await waitFor(()=>document.body.textContent.includes('That quote occurs more than once'));
+  assert.equal(document.querySelector('#revision-note').value,note);
+  assert.equal(updates,0);assert.equal(posts("revisions")[0].body.base_version,2);
+  revisionFailure=false;
+  await act(async()=>document.querySelector('#revision-note').closest('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+  await waitFor(()=>updates===1);
+  assert.equal(document.querySelector('#revision-note').value,"");
+});
+
+test("grounded receipt names the recorded phrase and seeks without another edit request",async()=>{
+  const seeks=[];
+  const run={id:"ready",version:3,status:"ready",caption_settings:{},manifest:{revision_report:{changed:true,changes:[],execution:{route:"local",scope:"phrase_pause",
+    summary:"Removed measured quiet audio only.",target:{clip_index:0,phrase:"cream works.",start_seconds:.7,end_seconds:1.5,retained_pause_seconds:.5}}}}};
+  await act(async()=>root.render(React.createElement(JobReviewControls,{jobId,run,finalExport:null,outputAspect:"vertical",recipe:"talking_head",
+    targetDuration:30,deliveryVariants:[],editorialTimeline:[],initialCoverTime:0,initialFeedback:null,onUpdated:()=>{},onSeek:seconds=>seeks.push(seconds)})));
+  assert.ok(document.body.textContent.includes('Matched recorded words: “cream works.”'));
+  assert.ok(document.body.textContent.includes('Retained pause: 0.50s'));
+  await click(button('Listen at 0.7s'));
+  assert.deepEqual(seeks,[.7]);assert.equal(posts('revisions').length,0);
+  run.manifest.revision_report.execution.target={phrase:'Legacy malformed target',clip_index:0,start_seconds:null};
+  await act(async()=>root.render(React.createElement(JobReviewControls,{jobId,run,finalExport:null,outputAspect:"vertical",recipe:"talking_head",
+    targetDuration:30,deliveryVariants:[],editorialTimeline:[],initialCoverTime:0,initialFeedback:null,onUpdated:()=>{},onSeek:seconds=>seeks.push(seconds)})));
+  assert.equal([...document.querySelectorAll('button')].some(e=>e.textContent.startsWith('Listen at')),false);
+  assert.deepEqual(seeks,[.7]);assert.equal(posts('revisions').length,0);
 });
 
 test("publishing opens without side effects and posts only the saved caption after an explicit click", async () => {
