@@ -222,3 +222,7 @@ The preflight speech estimate includes repeated takes and is not a verified meas
 | FX6 | Add a short callout or list counter in Finishing tools | Only explicit submission creates a local preview; the words appear at the chosen reel time, clear of dialogue captions. |
 | FX7 | Add a fixed arrow/circle | It points at the intended detail during its interval. It does not claim to follow moving objects. |
 | FX8 | Add a one-second music pause on a reel with music | Music fades down and returns, speech continues normally, and the exported MP4 matches the preview. |
+
+## Save the release results
+
+After deployment, use **Studio → Pilot acceptance** to record these observations against the displayed build. Select the exact edit version or published result, describe what happened, confirm you checked it, then Save. Unlike the earlier page checkboxes, these records survive leaving the page. Record failures too. A new deployed build needs fresh checks; earlier records remain in history. The machine evidence section links to System, Operations and Publishing and distinguishes missing setup from completed real tests. Full instructions and read-only acceptance commands are in the Phase 31 section of [the technical testing plan](testing-plan.md).

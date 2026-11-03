@@ -47,6 +47,7 @@ class Settings(BaseSettings):
     visual_framing_model_path: Path = Path("/models/face_detection_yunet_2023mar.onnx")
     appliance_status_path: Path = Path("/host-status/appliance-health.json")
     tailscale_owner_login: str = ""
+    tailscale_auth_required: bool = False
     access_internal_secret: str = Field(default="development-access-secret-change-me", min_length=16)
     meta_publishing_enabled: bool = False
     meta_app_id: str = ""

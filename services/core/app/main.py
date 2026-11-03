@@ -1,6 +1,5 @@
 from contextlib import asynccontextmanager
 import json
-import os
 from typing import Any
 
 import psycopg
@@ -67,6 +66,9 @@ app.include_router(duration_router)
 app.include_router(subtitle_editor_router)
 from app.learning_cases import router as learning_cases_router
 app.include_router(learning_cases_router)
+from app.build_info import deployed_build_id
+from app.release_acceptance import router as release_acceptance_router
+app.include_router(release_acceptance_router)
 
 
 @app.get("/health/live")
@@ -104,6 +106,8 @@ def system_information() -> dict[str, Any]:
         "service": "gm-media-api",
         "version": app.version,
         "build_id": deployed_build_id(settings),
+        "release_acceptance": {"version":1,"durable_observations":True,"build_bound":True,
+            "recovery_evidence":True,"automatic_posts":False,"public_customer_launch_ready":False},
         "render_timing_pipeline": RENDER_TIMING_VERSION,
         "speech_precision": {"version": "speech_precision_v1", "enabled": getattr(settings, "speech_alignment_enabled", False)},
         "voice_cleanup": {"version": "voice_cleanup_v1", "automatic_new_speech_edits": True, "hosted_model_calls": 0},
@@ -172,16 +176,6 @@ def learning_evaluation_information() -> dict[str, Any]:
         row = database.execute("SELECT to_regclass('learning_cases') IS NOT NULL AND "
             "to_regclass('learning_lesson_events') IS NOT NULL AS ready").fetchone()
     return {"version":2,"schema_ready":bool(row and row["ready"]),"automatic_model_calls":0}
-
-
-def deployed_build_id(settings: Any) -> str:
-    try:
-        path = settings.appliance_status_path.parent / "build.json"
-        if path.stat().st_size < 4096:
-            return str(json.loads(path.read_text()).get("commit") or "unknown")[:64]
-    except (OSError, ValueError):
-        pass
-    return os.environ.get("GM_BUILD_ID", "development")
 
 
 @app.get("/api/v1/system/performance")

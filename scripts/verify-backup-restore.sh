@@ -16,13 +16,47 @@ if ! flock --nonblock 9; then
 fi
 
 restore_root=$(mktemp --directory --tmpdir gm-media-restore.XXXXXX)
+status_directory=/var/lib/gm-media-server
+restore_state=failed
+original_count=0
+started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+write_restore_status() {
+  local result=$1
+  install -d -o root -g root -m 0755 "$status_directory"
+  python3 - "$status_directory" "$result" "$original_count" "$started_at" <<'PY'
+import json, os, sys, tempfile
+from datetime import datetime, timezone
+from pathlib import Path
+directory,state,count,started = sys.argv[1:]
+document = dict(version=1,status=state,original_count=int(count),started_at=started,
+    completed_at=datetime.now(timezone.utc).isoformat() if state != 'running' else None,
+    method='isolated file restore and database-dump listing')
+fd,name = tempfile.mkstemp(prefix='.restore-status-',dir=directory)
+try:
+    with os.fdopen(fd,'w') as stream:
+        json.dump(document,stream); stream.write('\n'); stream.flush(); os.fsync(stream.fileno())
+    os.chmod(name,0o644)
+    os.replace(name,Path(directory)/'restore-verification.json')
+finally:
+    if os.path.exists(name): os.unlink(name)
+PY
+}
 cleanup() {
   case "$restore_root" in
     /tmp/gm-media-restore.*) rm -rf -- "$restore_root" ;;
     *) printf 'Refusing unsafe temporary cleanup path: %s\n' "$restore_root" >&2 ;;
   esac
 }
-trap cleanup EXIT
+finish() {
+  local result=$?
+  trap - EXIT
+  if (( result != 0 )); then restore_state=failed; fi
+  write_restore_status "$restore_state" || printf 'Could not save restore verification status.\n' >&2
+  cleanup || true
+  exit "$result"
+}
+trap finish EXIT
+write_restore_status running
 
 cd "$project_root"
 printf 'Restoring the latest database dump into an isolated temporary directory...\n'
@@ -52,6 +86,7 @@ if (( original_count < 1 )); then
   exit 1
 fi
 
-printf 'PASS  Restored database dump is valid and %d original media files were recovered in isolation.\n' \
+restore_state=passed
+printf 'PASS  The database dump listing is readable and %d original media files were recovered in isolation.\n' \
   "$original_count"
 

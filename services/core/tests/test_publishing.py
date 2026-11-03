@@ -298,6 +298,27 @@ class DraftApprovalTests(unittest.TestCase):
             )
         )
 
+    def test_scheduled_approval_retry_after_due_time_returns_existing_result(self):
+        when = datetime.now(timezone.utc) - timedelta(hours=1)
+        payload = self.payload.model_copy(update={"publish_at":when})
+        prior = [dict(connection_id=self.account["id"],approval_request_id=payload.request_id,
+            approved_revision=2,publish_at=when,schedule_requested=True)]
+        with patch.object(pub,"_posts",return_value=prior),patch.object(meta,"api") as remote:
+            self.assertEqual(pub.approve_post(self.draft["id"],payload)["id"],self.draft["id"])
+            with self.assertRaises(HTTPException):
+                pub.approve_post(self.draft["id"],payload.model_copy(update={"publish_at":when+timedelta(minutes=1)}))
+            with self.assertRaises(HTTPException):
+                pub.approve_post(self.draft["id"],self.payload)
+        remote.assert_not_called()
+        self.assertFalse(any("INSERT INTO publishing_posts" in call.args[0] for call in self.database.execute.call_args_list))
+
+    def test_scheduling_intent_is_saved_only_by_an_explicit_approval(self):
+        payload = self.payload.model_copy(update={"publish_at":datetime.now(timezone.utc)+timedelta(hours=1)})
+        pub.approve_post(self.draft["id"],payload)
+        insert=next(call for call in self.database.execute.call_args_list if "INSERT INTO publishing_posts" in call.args[0])
+        self.assertIs(insert.args[1][-1],True)
+        self.assertEqual(insert.args[1][-2],payload.publish_at)
+
     def test_preview_square_and_missing_files_are_not_publishable(self):
         for change in ("square", "missing"):
             with self.subTest(change=change):

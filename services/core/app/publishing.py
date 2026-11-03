@@ -20,7 +20,7 @@ from app import meta_publishing as meta
 router = APIRouter(prefix="/api/v1/publishing", tags=["publishing"])
 ACTIVE = ("queued", "uploading", "processing", "publishing", "unknown")
 SCOPES = "pages_show_list,pages_read_engagement,pages_manage_posts,instagram_basic,instagram_content_publish"
-POST_FIELDS = "p.id,p.draft_id,p.connection_id,p.approval_request_id,p.approved_revision,p.approved_by,p.publish_at,p.status,p.remote_container_id,p.remote_media_id,p.publish_started_at,p.permalink,p.error,p.created_at,p.updated_at,c.platform,c.display_name AS account_name"
+POST_FIELDS = "p.id,p.draft_id,p.connection_id,p.approval_request_id,p.approved_revision,p.approved_by,p.publish_at,p.schedule_requested,p.status,p.remote_container_id,p.remote_media_id,p.publish_started_at,p.permalink,p.error,p.created_at,p.updated_at,c.platform,c.display_name AS account_name"
 
 
 class Closed(BaseModel):
@@ -482,10 +482,6 @@ def approve_post(
     settings = get_settings()
     require_configured(settings)
     when = payload.publish_at or datetime.now(timezone.utc)
-    if when > datetime.now(timezone.utc) + timedelta(days=30) or when < datetime.now(
-        timezone.utc
-    ) - timedelta(minutes=2):
-        raise HTTPException(422, "Choose a posting time within the next 30 days.")
     with connection() as database:
         draft = _draft(database, draft_id, lock=True)
         previous = _posts(database, draft_id)
@@ -497,6 +493,8 @@ def approve_post(
                 and all(
                     str(p["approval_request_id"]) == str(payload.request_id)
                     and p["approved_revision"] == payload.revision
+                    and (p.get("schedule_requested") is None or p["schedule_requested"] == (payload.publish_at is not None))
+                    and (payload.publish_at is None or p.get("publish_at") == payload.publish_at)
                     for p in previous
                 )
             ):
@@ -505,6 +503,10 @@ def approve_post(
                 409,
                 "This draft already has posting records. Check their status before creating another post.",
             )
+        # An identical lost-response retry remains idempotent after its scheduled
+        # time has passed. Only a new approval is subject to the time window.
+        if when > datetime.now(timezone.utc) + timedelta(days=30) or when < datetime.now(timezone.utc) - timedelta(minutes=2):
+            raise HTTPException(422, "Choose a posting time within the next 30 days.")
         if draft["revision"] != payload.revision:
             raise HTTPException(
                 409, "The caption changed. Review the current draft before posting."
@@ -529,8 +531,8 @@ def approve_post(
         for account in accounts:
             validate_platform_rights(export, account["platform"])
             database.execute(
-                """INSERT INTO publishing_posts(draft_id,connection_id,approval_request_id,approved_revision,approved_by,publish_at,next_check_at)
-                VALUES (%s,%s,%s,%s,%s,%s,%s)""",
+                """INSERT INTO publishing_posts(draft_id,connection_id,approval_request_id,approved_revision,approved_by,publish_at,next_check_at,schedule_requested)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s)""",
                 (
                     draft_id,
                     account["id"],
@@ -539,6 +541,7 @@ def approve_post(
                     actor,
                     when,
                     when,
+                    payload.publish_at is not None,
                 ),
             )
         _audit(

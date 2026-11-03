@@ -53,7 +53,7 @@ sudo ./scripts/install-service.sh
 python3 scripts/verify-publishing.py
 ```
 
-The read-only verifier passes with publishing unconfigured too, and reports `meta_configured: false` until setup is complete. It never creates captions, connects accounts or publishes a post.
+The read-only verifier passes with publishing unconfigured too, and reports `meta_configured: false` until setup is complete. It never creates captions, connects accounts or publishes a post. Studio → Pilot acceptance now keeps build-specific observations separately. `python3 scripts/verify-phase31.py --require-publishing` requires recorded acceptance; an ordinary readiness pass is not proof of a successful Meta post.
 
 ## 3. Connect accounts in GM Studio
 
@@ -62,6 +62,8 @@ Open Jobs → Publishing → Connect or reconnect Meta. Sign in through Meta and
 Page tokens can be invalidated by Meta even before the displayed expiry. Reconnect when requested. Expiry uses the associated long-lived user-token lifetime conservatively; this release does not promise permanent connections or silently renew every kind of Meta credential.
 
 ## 4. Prepare and publish one post
+
+After an approved real test, record the matching published result in Studio → Pilot acceptance. For scheduling, use a new deliberately future-dated approval after deploying migration 046; older records have unknown scheduling intent and cannot establish that check. Saving acceptance records never posts. If an approval response is lost, retry its identical request or inspect Publishing; changing the time is not an idempotent retry. A request already accepted is returned even if its scheduled time has since passed.
 
 1. Open an approved reel with a finished full-quality vertical export.
 2. Choose Prepare a post. Merely opening it performs read-only requests.

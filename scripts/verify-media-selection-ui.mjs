@@ -90,12 +90,20 @@ const { LibraryUpload } = require(path.join(repo, "apps/web/app/_components/libr
 
 let intakeItems = [];
 let caseSaveFailure=false;
+let releaseFixture, releaseFailure=false;
+const { PilotChecklist } = require(path.join(repo, "apps/web/app/_components/pilot-checklist.tsx"));
 globalThis.fetch = async (url, options = {}) => {
   const route = String(url).replace("/api/media/", "");
   const body = options.body instanceof File ? options.body : options.body ? JSON.parse(options.body) : undefined;
   calls.push({ route, method: options.method ?? "GET", body });
   let payload;
-  if (/^jobs\/[^/]+\/edits\/[^/]+\/subtitles(?:\/apply)?$/.test(route)) {
+  if (route === "release/readiness") payload=releaseFixture;
+  else if (route === "release/acceptance") {
+    if(releaseFailure)return {ok:false,status:409,json:async()=>({detail:"The deployed build changed. Refresh before saving acceptance."})};
+    const record={...body,created_at:"2026-11-03T00:00:00Z",recorded_by:"owner"};
+    releaseFixture.history.unshift(record);releaseFixture.checks.find(item=>item.key===body.check_key).observation=record;payload={id:body.id,recorded:true};
+  }
+  else if (/^jobs\/[^/]+\/edits\/[^/]+\/subtitles(?:\/apply)?$/.test(route)) {
     if (subtitleFailure && options.method === "PUT") return { ok:false,status:409,json:async()=>({detail:"These subtitles changed in another tab. Reload before saving your draft."}) };
     if (options.method === "PUT") subtitleFixture = { ...subtitleFixture, revision: subtitleFixture.revision + 1, cues: body.cues, saved: true };
     payload = options.method === "POST" ? { id:"caption-render",version:3,status:"pending" } : structuredClone(subtitleFixture);
@@ -1694,4 +1702,68 @@ test('archiving a playback case and upgrading an old lesson remain separate loca
   assert.equal(posts('status').at(-1).body.action,'upgrade');
   assert.equal(posts('trial').length,0);assert.equal(posts('evaluate').length,0);
   assert.equal(calls.some(c=>c.method==='DELETE'),false);
+});
+
+function releaseReadinessFixture(){return {version:1,build_id:'a'.repeat(40),generated_at:'2026-11-03T00:00:00Z',schema_ready:true,
+  private_pilot_complete:false,publishing_acceptance_complete:false,public_customer_launch_ready:false,automatic_model_calls:0,automatic_posts:0,
+  checks:[{key:'story_playback',label:'Downloaded final reel',scope:'private',evidence_kind:'edit',allow_na:false,observation:null},
+    {key:'library_intake',label:'Library intake',scope:'private',evidence_kind:'note',allow_na:false,observation:null},
+    {key:'scheduled_post',label:'Scheduled post',scope:'publishing',evidence_kind:'post',allow_na:false,observation:null}],
+  technical:[{key:'meta',label:'Meta app configured',scope:'publishing',status:'pending',detail:'Connect the account.'}],
+  queues:{edits:1,analysis:0,exports:0,posts:0,failed_posts:0,uncertain_posts:0},history:[],
+  playback_options:[{job_id:jobId,version:3,project_name:'Good product edit',has_final:true},{job_id:serverId,version:1,project_name:'Preview only',has_final:false}],
+  published_posts:[{id:'scheduled',platform:'instagram',account_name:'Studio',version:3,job_id:jobId,schedule_requested:true,publish_at:'2026-11-02T01:00:00Z'},
+    {id:'legacy',platform:'instagram',account_name:'Earlier post',version:2,job_id:jobId,schedule_requested:null,publish_at:'2026-11-01T01:00:00Z'}]};}
+async function mountRelease(){releaseFailure=false;releaseFixture=releaseReadinessFixture();await act(async()=>root.render(React.createElement(PilotChecklist)));await waitFor(()=>document.querySelector('[aria-label="Acceptance check"]'));}
+
+test('release acceptance stays read-only until an explicit, complete observed result',async()=>{
+  await mountRelease();assert.equal(calls.filter(c=>c.method!=='GET').length,0);
+  assert.equal(button('Save acceptance observation').disabled,true);
+  assert.equal([...document.querySelector('select[aria-label="Acceptance preview"]').options].some(o=>o.textContent==='Preview only · version 1'),false);
+  await chooseOption('select[aria-label="Acceptance preview"]',`${jobId}/3`);
+  await type('textarea[aria-label="Acceptance observation note"]','Downloaded and watched the final reel on my phone.');
+  assert.equal(button('Save acceptance observation').disabled,true);
+  await click(document.querySelector('[aria-label="Confirm actual observation"]'));
+  assert.equal(calls.filter(c=>c.method==='POST').length,0);
+  await click(button('Save acceptance observation'));
+  assert.equal(posts('release/acceptance').length,1);
+  assert.equal(posts('release/acceptance')[0].body.job_id,jobId);
+  assert.equal(posts('release/acceptance')[0].body.version,3);
+  assert.equal(posts('publish').length,0);assert.equal(posts('trial').length,0);
+  assert.ok(document.body.textContent.includes('Observation saved'));
+});
+
+test('release saving failures preserves the note and stable retry identity',async()=>{
+  await mountRelease();await chooseOption('select[aria-label="Acceptance check"]','library_intake');
+  await type('textarea[aria-label="Acceptance observation note"]','Mixed media landed in the chosen folder.');
+  await click(document.querySelector('[aria-label="Confirm actual observation"]'));
+  releaseFailure=true;await click(button('Save acceptance observation'));
+  assert.equal(document.querySelector('[aria-label="Acceptance observation note"]').value,'Mixed media landed in the chosen folder.');
+  const id=posts('release/acceptance')[0].body.id;
+  releaseFailure=false;await click(button('Save acceptance observation'));
+  assert.equal(posts('release/acceptance')[1].body.id,id);
+  await act(async()=>root.unmount());root=createRoot(document.getElementById('root'));
+  await act(async()=>root.render(React.createElement(PilotChecklist)));await waitFor(()=>document.body.textContent.includes('Mixed media landed'));
+  assert.equal(posts('release/acceptance').length,2,'Opening stored history does not save again');
+});
+
+test('scheduled acceptance offers only explicitly scheduled published evidence and never posts',async()=>{
+  await mountRelease();await chooseOption('select[aria-label="Acceptance check"]','scheduled_post');
+  const values=[...document.querySelector('select[aria-label="Acceptance published post"]').options].map(o=>o.value);
+  assert.deepEqual(values,['','scheduled']);
+  await chooseOption('select[aria-label="Acceptance published post"]','scheduled');
+  await type('textarea[aria-label="Acceptance observation note"]','The intended account published after the chosen local time.');
+  await click(document.querySelector('[aria-label="Confirm actual observation"]'));await click(button('Save acceptance observation'));
+  assert.equal(posts('release/acceptance')[0].body.publishing_post_id,'scheduled');
+  assert.equal(calls.filter(c=>c.method!=='GET').length,1);
+});
+
+test('new build refresh resets acceptance confirmation without carrying old observations',async()=>{
+  await mountRelease();await chooseOption('select[aria-label="Acceptance check"]','library_intake');
+  await type('textarea[aria-label="Acceptance observation note"]','This was observed on the prior build.');
+  await click(document.querySelector('[aria-label="Confirm actual observation"]'));
+  releaseFixture.build_id='b'.repeat(40);await click(button('Refresh readiness'));
+  assert.equal(document.querySelector('[aria-label="Acceptance observation note"]').value,'');
+  assert.equal(document.querySelector('[aria-label="Confirm actual observation"]').checked,false);
+  assert.equal(posts('release/acceptance').length,0);
 });

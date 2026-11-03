@@ -52,6 +52,7 @@ def pilot_readiness():
             "silent_layer_retiming_freeze": True,
             "ai_segmentation": False,
             "automatic_tracking": False,
+            "optional_single_face_follow": True,
             "independent_dialogue_joins": True,
         },
         "learning": {
@@ -69,4 +70,5 @@ def pilot_readiness():
             "review library import, concept selection, local edits and export with a new tester",
         ],
         "hosted_model_calls": 0,
+        "durable_acceptance_path": "/studio/pilot",
     }
