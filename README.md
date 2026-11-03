@@ -55,6 +55,14 @@ python3 scripts/verify-speech-precision.py
 
 `backfilling` is normal while old sources are processed. `source_statuses.unavailable` means some sources retained estimates because alignment could not run; inspect worker logs before assuming everything was aligned. Test a **new job** to use improved timings; exact re-renders deliberately retain a saved plan's timing. Set `SPEECH_ALIGNMENT_ENABLED=false` to keep future jobs on legacy timing, or `SPEECH_ALIGNMENT_DEVICE=cpu` to run new alignment on CPU. Existing snapshot-backed edits continue to use their saved analysis regardless of the toggle.
 
+### Editing subtitles
+
+On a ready preview, choose **Edit subtitles** beneath the video. The editor shows the reel's actual timed caption cards beside the saved video. Click a timestamp to listen, correct text directly, find and replace phrases, hide individual captions, split at the text cursor, merge neighbouring cards, or move captions to lower-safe, middle or upper positions. Undo and **Reset draft** affect only the draft. A split estimates its timing inside the original caption interval; listen before applying it. Editing text preserves that card's time range.
+
+**Save draft** persists to the server without rendering. **Apply subtitles** saves outstanding changes and creates one new local preview from the same media edit and frozen speech timing. It uses no hosted editing request and preserves earlier previews and approvals. Two-tab conflicts keep unsaved text on screen; duplicate Apply requests return the same queued run. Captions are burned into the current video, so the player shows the saved wording until the new preview finishes. Draft text is plain text, not an executable subtitle filter.
+
+Corrected captions carry through exact re-renders, approved exports, VTT/package downloads and shorter prefix delivery variants. A different media cut resets timed caption overrides to the new speech and reports that reset. Existing source transcripts and library search text remain unchanged. Migration **042** adds versioned caption documents and drafts. The read-only deployment check is `python3 scripts/verify-subtitle-editor.py`; it never saves captions or starts a render.
+
 ## Requirements
 
 - Linux host with Docker Engine and Docker Compose v2

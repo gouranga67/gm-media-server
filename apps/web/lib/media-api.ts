@@ -1534,3 +1534,39 @@ export function getJobDuration(jobId: string) {
 export function updateJobDuration(jobId: string, settings: DurationSettings) {
   return apiRequest<DurationPreview>(`jobs/${jobId}/duration`, { method: "PUT", body: JSON.stringify(settings) });
 }
+
+export type SubtitleCue = {
+  readonly id: string;
+  readonly start: number;
+  readonly end: number;
+  readonly text: string;
+  readonly position: "lower_safe" | "middle" | "upper" | null;
+  readonly hidden: boolean;
+};
+export type SubtitleDraft = {
+  readonly run_id: string;
+  readonly version: number;
+  readonly base_hash: string;
+  readonly revision: number;
+  readonly cues: readonly SubtitleCue[];
+  readonly baseline: readonly SubtitleCue[];
+  readonly position: "lower_safe" | "middle" | "upper";
+  readonly duration: number;
+  readonly saved: boolean;
+  readonly applied_run_id: string | null;
+  readonly hosted_model_calls: number;
+  readonly notice: string;
+};
+export function getSubtitles(jobId: string, runId: string) {
+  return apiRequest<SubtitleDraft>(`jobs/${jobId}/edits/${runId}/subtitles`, { cache: "no-store" });
+}
+export function saveSubtitles(jobId: string, runId: string, base: SubtitleDraft, cues: readonly SubtitleCue[]) {
+  return apiRequest<SubtitleDraft>(`jobs/${jobId}/edits/${runId}/subtitles`, {
+    method: "PUT", body: JSON.stringify({ base_hash: base.base_hash, revision: base.revision, cues }),
+  });
+}
+export function applySubtitles(jobId: string, runId: string, draft: SubtitleDraft) {
+  return apiRequest<EditRun>(`jobs/${jobId}/edits/${runId}/subtitles/apply`, {
+    method: "POST", body: JSON.stringify({ base_hash: draft.base_hash, revision: draft.revision }),
+  });
+}

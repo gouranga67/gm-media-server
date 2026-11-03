@@ -846,13 +846,19 @@ def _persist_generated_plan(
     model = str(provenance["model"])
     reasoning_effort = provenance.get("reasoning_effort")
     document = plan.model_dump(mode="json")
+    from app.subtitle_document import matches, retime_document
+    subtitles = run.get("_subtitle_document")
+    if subtitles and not matches(subtitles, document):
+        subtitles = None
+    elif subtitles:
+        subtitles = retime_document(subtitles, document)
     with connection() as database:
         plan_row = database.execute(
             """
             INSERT INTO edit_plans (
                 job_id, version, schema_version, document, provider, model, document_sha256,
-                speech_precision_snapshot
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                speech_precision_snapshot, subtitle_document
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
             """,
             (
@@ -864,6 +870,7 @@ def _persist_generated_plan(
                 model,
                 document_sha256(document),
                 Jsonb(run.get("_speech_precision_snapshot") or {}),
+                Jsonb(subtitles) if subtitles is not None else None,
             ),
         ).fetchone()
         database.execute(
@@ -932,13 +939,17 @@ def prepare_run_speech_precision(context: dict, run: dict) -> None:
     if reference:
         with connection() as database:
             row = database.execute(
-                "SELECT speech_precision_snapshot FROM edit_plans WHERE id=%s"
+                "SELECT speech_precision_snapshot, subtitle_document FROM edit_plans WHERE id=%s"
                 if run.get("edit_plan_id") else
-                """SELECT p.speech_precision_snapshot FROM edit_runs r
+                """SELECT p.speech_precision_snapshot, p.subtitle_document FROM edit_runs r
                    JOIN edit_plans p ON p.id=r.edit_plan_id WHERE r.id=%s""",
                 (reference,),
             ).fetchone()
         snapshot = row.get("speech_precision_snapshot") if isinstance(row, dict) else {}
+        if isinstance(row, dict) and row.get("subtitle_document"):
+            from app.subtitle_document import corrected_document
+            subtitles = corrected_document(row["subtitle_document"], run.get("caption_corrections") or [])
+            context["_subtitle_document"] = run["_subtitle_document"] = subtitles
         if snapshot:
             apply_snapshot(context, snapshot, get_settings())
     elif any(a.get("_transcript_key") and a.get("sha256") for a in context["assets"]):
@@ -1369,6 +1380,10 @@ def process_one_edit(state: WorkerState) -> bool:
                     context["revision_report"]["changes"].append("Caption text corrections changed.")
                     context["revision_report"]["changed"] = True
                     context["revision_report"]["notice"] = ""
+                if provider == "local_subtitles":
+                    context["revision_report"]["changes"].append("Updated subtitle text/layout locally; the saved media edit was preserved.")
+                    context["revision_report"]["changed"] = True
+                    context["revision_report"]["notice"] = ""
 
         if isinstance(plan, MontageEditPlan):
             with measure_processing("rendering") as timing:
@@ -1505,12 +1520,15 @@ def process_one_final_export(state: WorkerState) -> bool:
     try:
         with connection() as database:
             plan_row = database.execute(
-                "SELECT document, speech_precision_snapshot FROM edit_plans WHERE id = %s",
+                "SELECT document, speech_precision_snapshot, subtitle_document FROM edit_plans WHERE id = %s",
                 (export["edit_plan_id"],),
             ).fetchone()
         if plan_row is None:
             raise RuntimeError("the approved edit plan was not found")
         context = build_editor_context(export["job_id"], include_internal_paths=True)
+        if plan_row.get("subtitle_document"):
+            from app.subtitle_document import corrected_document
+            context["_subtitle_document"] = corrected_document(plan_row["subtitle_document"], export.get("caption_corrections") or [])
         if plan_row.get("speech_precision_snapshot"):
             from app.speech_precision import apply_snapshot
             apply_snapshot(context, plan_row["speech_precision_snapshot"], get_settings())
@@ -1683,12 +1701,16 @@ def process_one_delivery_variant(state: WorkerState) -> bool:
     try:
         with connection() as database:
             plan_row = database.execute(
-                "SELECT document, speech_precision_snapshot FROM edit_plans WHERE id = %s",
+                "SELECT document, speech_precision_snapshot, subtitle_document FROM edit_plans WHERE id = %s",
                 (variant["edit_plan_id"],),
             ).fetchone()
         if plan_row is None:
             raise RuntimeError("the approved edit plan was not found")
         context = build_editor_context(variant["job_id"], include_internal_paths=True)
+        if plan_row.get("subtitle_document"):
+            from app.subtitle_document import corrected_document
+            context["_subtitle_document"] = corrected_document(plan_row["subtitle_document"], variant.get("caption_corrections") or [])
+            context["_subtitle_prefix_variant"] = True
         if plan_row.get("speech_precision_snapshot"):
             from app.speech_precision import apply_snapshot
             apply_snapshot(context, plan_row["speech_precision_snapshot"], get_settings())

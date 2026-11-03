@@ -552,6 +552,8 @@ def render_montage_preview(
         float(plan.caption_timing_offset_seconds),
     )
     events = finish_caption_events(events, plan.finishing)
+    from app.subtitle_document import resolve_events, document_fingerprint
+    events = resolve_events(context, plan, events)
     has_overlays = bool(events or (plan.finishing and (plan.finishing.callouts or plan.finishing.pointers)))
     if has_overlays:
         _atomic_text(
@@ -587,6 +589,9 @@ def render_montage_preview(
         settings,
     )
     manifest["manifest_path"] = manifest_path.relative_to(settings.media_root).as_posix()
+    manifest["subtitle_document_sha256"] = document_fingerprint(context, plan)
+    manifest["subtitle_events"] = events
+    manifest["subtitle_notice"] = context.get("subtitle_notice")
     manifest["captions"] = {
         "style": "clean_blue_v1",
         "events": len(events),
@@ -634,6 +639,8 @@ def render_montage_delivery(
         float(plan.caption_timing_offset_seconds),
     )
     events = finish_caption_events(events, plan.finishing)
+    from app.subtitle_document import resolve_events, document_fingerprint
+    events = resolve_events(context, plan, events)
     _atomic_text(captions, render_webvtt(events))
     has_overlays = bool(events or (plan.finishing and (plan.finishing.callouts or plan.finishing.pointers)))
     if has_overlays:
@@ -714,6 +721,9 @@ def render_montage_delivery(
     manifest.update(
         {
             "approved_at": approved_at,
+            "subtitle_document_sha256": document_fingerprint(context, plan),
+            "subtitle_events": events,
+            "subtitle_notice": context.get("subtitle_notice"),
             "captions": {
                 "style": "clean_blue_v1",
                 "events": len(events),

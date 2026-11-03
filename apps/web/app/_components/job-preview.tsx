@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { SubtitleEditor } from "./subtitle-editor";
 import { JobDurationSettings } from "./job-duration-settings";
 import { AssemblyReadiness } from "./assembly-readiness";
 import { EditProgress } from "./edit-progress";
@@ -213,6 +214,9 @@ export function JobPreview({ jobId }: { readonly jobId: string }) {
               >
                 Your browser cannot play this preview.
               </video>
+              {run ? <SubtitleEditor key={run.id} jobId={jobId} runId={run.id} version={run.version} videoUrl={fileUrl}
+                onOpen={() => previewVideo.current?.pause()} onApplied={() => setPollGeneration((current) => current + 1)} /> : null}
+              {typeof run?.manifest.subtitle_notice === "string" ? <p className="rounded border border-[#D7D9D3] bg-white p-3 text-sm text-[#173F5F]">{run.manifest.subtitle_notice}</p> : null}
               <Button asChild className="h-14 w-full bg-[#173F5F] text-white hover:bg-[#12344F]">
                 <a href={downloadUrl}>
                   <DownloadIcon aria-hidden="true" /> Download MP4

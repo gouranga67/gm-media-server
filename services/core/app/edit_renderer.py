@@ -687,6 +687,8 @@ def render_edit_preview(
         float(plan.caption_timing_offset_seconds),
     )
     events = finish_caption_events(events, plan.finishing)
+    from app.subtitle_document import resolve_events, document_fingerprint
+    events = resolve_events(context, plan, events)
     _atomic_text(
         captions_path,
         render_ass(
@@ -752,6 +754,9 @@ def render_edit_preview(
         "finishing": finishing_manifest(context, plan),
         "brand_kit": context.get("brand_kit"),
         "caption_corrections": caption_corrections or [],
+        "subtitle_document_sha256": document_fingerprint(context, plan),
+        "subtitle_events": events,
+        "subtitle_notice": context.get("subtitle_notice"),
         "captions": {
             "style": "clean_blue_v1",
             "events": len(events),
@@ -910,6 +915,8 @@ def render_final_delivery(
         float(plan.caption_timing_offset_seconds),
     )
     events = finish_caption_events(events, plan.finishing)
+    from app.subtitle_document import resolve_events, document_fingerprint
+    events = resolve_events(context, plan, events)
     _atomic_text(
         captions_ass_path,
         render_ass(
@@ -1042,6 +1049,9 @@ def render_final_delivery(
             "stream_timing_verified": True,
         },
         "caption_corrections": caption_corrections,
+        "subtitle_document_sha256": document_fingerprint(context, plan),
+        "subtitle_events": events,
+        "subtitle_notice": context.get("subtitle_notice"),
         "captions": {
             "style": "clean_blue_v1",
             "events": len(events),

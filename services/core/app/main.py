@@ -28,6 +28,7 @@ from app.publishing import router as publishing_router
 from app.publishing_captions import router as publishing_captions_router
 from app.duration_routes import router as duration_router
 from app.render_integrity import RENDER_TIMING_VERSION
+from app.subtitle_editor import router as subtitle_editor_router
 
 
 @asynccontextmanager
@@ -63,6 +64,7 @@ app.include_router(brand_kits_router)
 app.include_router(publishing_router)
 app.include_router(publishing_captions_router)
 app.include_router(duration_router)
+app.include_router(subtitle_editor_router)
 
 
 @app.get("/health/live")
@@ -102,6 +104,7 @@ def system_information() -> dict[str, Any]:
         "build_id": deployed_build_id(settings),
         "render_timing_pipeline": RENDER_TIMING_VERSION,
         "speech_precision": {"version": "speech_precision_v1", "enabled": getattr(settings, "speech_alignment_enabled", False)},
+        "subtitle_editor": {"version": 1, "timed_cards": True, "explicit_draft_and_apply": True, "hosted_model_calls": 0},
         "environment": settings.app_env,
         "content_policy": {
             "synthetic_image": False,

@@ -355,3 +355,16 @@ After the service rebuild applies migration 041, run `python3 scripts/verify-spe
 4. Use a source twice across jobs. Its cached alignment should be reused without a hosted request. Mixed-language or uncertain words should retain estimates and conservative margins rather than altered transcript text.
 
 The core suite covers CTC repeated-letter alignment, uncertain/interpolated fallback, cache reuse and corruption recovery, immutable partial snapshots, source identity/path checks, background manifest updates, legacy behavior, shared-word joins, rendered audio through picture dips, and advisory output measurements. Real-model checks on private source audio supplement those tests; neither model confidence nor synthetic audio fixtures establish human-labelled timing accuracy.
+
+## Direct subtitle editor acceptance — 2026-11-03
+
+Deploy migration 042 with the normal installer, then run `python3 scripts/verify-subtitle-editor.py`. This check reads the capability and one ready version's caption cards; it does not save a draft, approve a reel, or start a render.
+
+1. Open a ready reel and choose **Edit subtitles** beneath the player. Check that the displayed text matches that version's visible captions, including a legacy preview created before this build. Click timestamps to listen; the current card should highlight during playback. Check both a phone and a desktop.
+2. Correct a misspelling in several cards. Typing must not start work. Save the draft, close, refresh and reopen: the corrected text should remain while the video still shows its saved wording. Changing a draft must leave the original transcript and library search untouched.
+3. Try find/replace, split at the text cursor, merge next, hide, per-caption position, Undo and Reset draft. A split estimates timing inside the previous interval; listen to check it. Hiding a caption must leave the recorded voice intact. Opening the editor on a phone should show a caption without first requiring a long scroll; Save and Apply should remain reachable.
+4. Apply the draft. Exactly one local preview should be queued, with no AI editing request. Compare the finished version: corrected text/positions should appear, hidden captions should disappear, and the media cut, music and effects should stay intact. Earlier previews and approvals should remain available.
+5. Re-render the exact edit, export it and download the VTT/package. Check corrected text in each output. Make a shorter delivery variant and check that it uses the corresponding corrected prefix without captions extending beyond the video.
+6. Open the same subtitle draft in two tabs. Save in the first, then try saving in the second: the second must retain its unsaved text and report a conflict. A newer story version must prevent applying an older draft over it. Duplicate Apply requests must point to the same queued run.
+
+Timed user captions are tied to their saved source selections and audio joins. A changed cut resets overrides and shows a notice; this protects against attaching a caption to different speech. Text-only corrections preserve the existing interval; this build does not promise new per-word timing for rewritten text. The saved video remains burned-in until a local render completes.

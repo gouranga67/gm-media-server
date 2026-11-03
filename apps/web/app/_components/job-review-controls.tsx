@@ -102,8 +102,6 @@ export function JobReviewControls({
   readonly onSeek?: (seconds: number) => void;
 }) {
   const [note, setNote] = useState("");
-  const [originalText, setOriginalText] = useState("");
-  const [replacementText, setReplacementText] = useState("");
   const [submitting, setSubmitting] = useState<"revision" | "approval" | "caption">();
   const [error, setError] = useState<string>();
   const [profileName, setProfileName] = useState("");
@@ -163,14 +161,8 @@ export function JobReviewControls({
   const submitRevision = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const cleanNote = note.trim();
-    const cleanOriginal = originalText.trim();
-    const cleanReplacement = replacementText.trim();
-    if (!cleanNote && !cleanOriginal && !cleanReplacement) {
-      setError("Describe an edit change or enter a caption correction.");
-      return;
-    }
-    if ((cleanOriginal && !cleanReplacement) || (!cleanOriginal && cleanReplacement)) {
-      setError("Enter both the current caption text and its replacement.");
+    if (!cleanNote) {
+      setError("Describe what the editor should change. Use Edit subtitles to correct on-screen words.");
       return;
     }
     setSubmitting("revision");
@@ -179,17 +171,12 @@ export function JobReviewControls({
       await requestRevision(jobId, {
         note: cleanNote,
         revisionMode,
-        captionCorrections:
-          cleanOriginal && cleanReplacement
-            ? [{ original_text: cleanOriginal, replacement_text: cleanReplacement }]
-            : [],
+        captionCorrections: [],
         lockedElements: revisionMode === "rebuild_story"
           ? lockedElements.filter((item) => item !== "clip order" && item !== "spoken phrases")
           : lockedElements,
       });
       setNote("");
-      setOriginalText("");
-      setReplacementText("");
       onUpdated();
     } catch (revisionError) {
       setError(message(revisionError));
@@ -678,18 +665,7 @@ export function JobReviewControls({
           placeholder={revisionMode === "rebuild_story" ? "For example: tell the story in the brief. Start with the problem, keep the explanation together, and finish with the result. Preserve complete sentences." : "For example: shorten the pause after ‘…’ to half a second. Keep the rest of the story."}
           value={note}
         />
-        {recipe === "talking_head" ? (
-          <fieldset className="mt-5 border-t border-[#D7D9D3] pt-5">
-            <legend className="pr-2 text-sm font-bold text-[#20211F]">Optional caption correction</legend>
-            <p className="mt-2 text-xs leading-relaxed text-[#666862]">
-              This changes only the matching on-screen words. Capitalization and trailing punctuation do not need to match.
-            </p>
-            <label className="mt-3 block text-xs text-[#666862]" htmlFor="caption-original">Current on-screen caption text</label>
-            <Input id="caption-original" maxLength={300} onChange={(event) => setOriginalText(event.target.value)} placeholder="Incorrect name or phrase" value={originalText} />
-            <label className="mt-3 block text-xs text-[#666862]" htmlFor="caption-replacement">Replace with</label>
-            <Input id="caption-replacement" maxLength={300} onChange={(event) => setReplacementText(event.target.value)} placeholder="Correct text" value={replacementText} />
-          </fieldset>
-        ) : null}
+        <p className="mt-4 text-xs text-[#666862]">To correct on-screen words, use Edit subtitles beneath the video. Subtitle changes keep this cut and run locally.</p>
         {error ? <p className="mt-4 text-xs text-[#A23B2A]" role="alert">{error}</p> : null}
         <Button className="mt-5 h-12 w-full" disabled={submitting !== undefined} type="submit" variant="outline">
           {submitting === "revision" ? <LoaderCircleIcon aria-hidden="true" className="animate-spin" /> : <SendIcon aria-hidden="true" />}

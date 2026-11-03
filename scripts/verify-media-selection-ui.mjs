@@ -10,9 +10,10 @@ import { Window } from "happy-dom";
 const require = createRequire(import.meta.url);
 const repo = path.resolve(import.meta.dirname, "..");
 const dom = new Window({ url: "http://localhost/jobs/new" });
-for (const name of ["window", "document", "navigator", "HTMLElement", "HTMLInputElement", "HTMLTextAreaElement", "File", "FormData"]) {
+for (const name of ["window", "document", "navigator", "HTMLElement", "HTMLInputElement", "HTMLTextAreaElement", "File", "FormData", "MutationObserver", "Node", "NodeFilter", "CustomEvent", "Event", "HTMLSelectElement", "HTMLButtonElement"]) {
   Object.defineProperty(globalThis, name, { configurable: true, value: name === "window" ? dom : dom[name] });
 }
+globalThis.getComputedStyle = dom.getComputedStyle.bind(dom);
 const { Event } = dom;
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const React = require("react");
@@ -25,6 +26,7 @@ let lessonProposed = false, labFixture = null;
 let assemblySettings, assemblyError, assemblyLocked, profiles, previewFixture;
 function assemblyPreview() { return {ready: !assemblyError, locked: assemblyLocked, error:assemblyError, settings:assemblySettings, decision:assemblyError ? null : {recipe:assemblySettings.assembly_mode === "auto" ? "talking_head" : assemblySettings.assembly_mode,edit_style:assemblySettings.edit_style,purpose:assemblySettings.reel_intent === "auto" ? "story" : assemblySettings.reel_intent,label:"Speech with supporting pictures",reason:"Keep recorded speech continuous.",hosted_model_calls:0}}; }
 let publishingFixture, alternativeFailure, durationFixture, durationFailure;
+let subtitleFixture, subtitleFailure = false;
 let folderList = [], folderMembers = new Map(), folderFailure = false;
 let creativeImportAttempts = new Map();
 URL.createObjectURL = () => "blob:synthetic-preview";
@@ -79,6 +81,8 @@ const { PreciseClipEditor } = require(path.join(repo, "apps/web/app/_components/
 const { FinishingWorkspace } = require(path.join(repo, "apps/web/app/_components/finishing-workspace.tsx"));
 const { SourceKnowledge } = require(path.join(repo, "apps/web/app/_components/source-knowledge.tsx"));
 const { SourceRanges } = require(path.join(repo, "apps/web/app/_components/source-ranges.tsx"));
+const { SubtitleEditor } = require(path.join(repo, "apps/web/app/_components/subtitle-editor.tsx"));
+const { splitSubtitle, mergeSubtitles } = require(path.join(repo, "apps/web/lib/subtitle-editing.ts"));
 const { LibraryUpload } = require(path.join(repo, "apps/web/app/_components/library-upload.tsx"));
 
 globalThis.fetch = async (url, options = {}) => {
@@ -86,7 +90,12 @@ globalThis.fetch = async (url, options = {}) => {
   const body = options.body instanceof File ? options.body : options.body ? JSON.parse(options.body) : undefined;
   calls.push({ route, method: options.method ?? "GET", body });
   let payload;
-  if (route.startsWith("creative-assets/import?")) {
+  if (/^jobs\/[^/]+\/edits\/[^/]+\/subtitles(?:\/apply)?$/.test(route)) {
+    if (subtitleFailure && options.method === "PUT") return { ok:false,status:409,json:async()=>({detail:"These subtitles changed in another tab. Reload before saving your draft."}) };
+    if (options.method === "PUT") subtitleFixture = { ...subtitleFixture, revision: subtitleFixture.revision + 1, cues: body.cues, saved: true };
+    payload = options.method === "POST" ? { id:"caption-render",version:3,status:"pending" } : structuredClone(subtitleFixture);
+  }
+  else if (route.startsWith("creative-assets/import?")) {
     const filename = new URLSearchParams(route.split("?")[1]).get("filename");
     const attempts = (creativeImportAttempts.get(filename) ?? 0) + 1; creativeImportAttempts.set(filename, attempts);
     if (filename === "existing.ogg") return { ok: false, status: 409, json: async () => ({ detail: "this exact creative file is already in the library" }) };
@@ -228,6 +237,9 @@ beforeEach(() => {
   window.history.replaceState(null, "", "/jobs/new");
   calls = []; transfers = []; navigation = []; readyEvents = 0; analysisStatus = "ready"; batchFailure = false; conceptHistory = []; renderConceptFailure = false; conceptCounter = 0;
   organizationHistory = []; organizationFailure = false;
+  subtitleFailure=false;
+  const subtitleCues=[{id:"cue-0000",start:.1,end:2.5,text:"Costa Royal!",position:null,hidden:false},{id:"cue-0001",start:3.2,end:5.8,text:"Our favourite cream.",position:null,hidden:false}];
+  subtitleFixture={run_id:serverId,version:2,base_hash:"a".repeat(64),revision:0,cues:subtitleCues,baseline:subtitleCues,position:"lower_safe",duration:6,saved:false,applied_run_id:null,hosted_model_calls:0};
   folderList=[];folderMembers=new Map();folderFailure=false;
   creativeImportAttempts = new Map();
   alternativeFailure=false;
@@ -1288,4 +1300,72 @@ test("missing folder shortcut asks for a scope instead of silently generating fr
   await chooseOption('select[aria-label="Concept footage scope"]',"");
   assert.equal(button("Generate reel ideas").disabled,false);
   assert.equal(posts("concepts").length,0);
+});
+
+async function mountSubtitles() {
+  await act(async()=>root.render(React.createElement(SubtitleEditor,{jobId,runId:serverId,version:2,videoUrl:"/fixture.mp4",onApplied:()=>readyEvents++})));
+  await click(button("Edit subtitles"));
+  await waitFor(()=>document.querySelector('textarea[aria-label="Subtitle 1"]'));
+}
+test("subtitle typing never saves or renders; explicit draft save survives reopening",async()=>{
+  await mountSubtitles();
+  await type('textarea[aria-label="Subtitle 1"]',"Castor oil!");
+  assert.equal(calls.filter(call=>call.method!=="GET").length,0);
+  await click(button("Save draft"));
+  await waitFor(()=>subtitleFixture.saved);
+  assert.equal(posts(`subtitles/apply`).length,0);
+  assert.equal(subtitleFixture.cues[0].text,"Castor oil!");
+  assert.equal(subtitleFixture.cues[0].start,.1);
+  assert.equal(subtitleFixture.cues[0].end,2.5);
+  await click(button("Close"));
+  await act(async()=>root.unmount()); root=createRoot(document.getElementById("root"));
+  await mountSubtitles();
+  assert.equal(document.querySelector('textarea[aria-label="Subtitle 1"]').value,"Castor oil!");
+});
+test("apply subtitles saves unsaved edits then requests exactly one local preview",async()=>{
+  await mountSubtitles();
+  await type('textarea[aria-label="Subtitle 2"]',"A better cream.");
+  await click(button("Apply subtitles"));
+  await waitFor(()=>readyEvents===1);
+  const writes=calls.filter(call=>call.method!=="GET");
+  assert.deepEqual(writes.map(call=>call.method),["PUT","POST"]);
+  assert.ok(writes[1].route.endsWith("/subtitles/apply"));
+  assert.equal(writes[1].body.revision,1);
+  assert.equal(writes[0].body.cues[1].text,"A better cream.");
+});
+test("find replace, hide, positioning and undo stay in the subtitle draft",async()=>{
+  await mountSubtitles();
+  await click([...document.querySelectorAll("summary")].find(item=>item.textContent==="Find, replace & move all"));
+  await type('input[aria-label="Find subtitle text"]',"Royal");
+  await type('input[aria-label="Replacement subtitle text"]',"oil");
+  await click(button("Replace all"));
+  assert.equal(document.querySelector('textarea[aria-label="Subtitle 1"]').value,"Costa oil!");
+  const hide=document.querySelector('[aria-label="Timed subtitle transcript"] input[type="checkbox"]');
+  await click(hide);
+  await chooseOption('select[aria-label="Position subtitle 2"]',"upper");
+  await click(button("Save draft"));
+  assert.equal(subtitleFixture.cues[0].hidden,true);
+  assert.equal(subtitleFixture.cues[1].position,"upper");
+  assert.equal(subtitleFixture.cues[1].start,3.2);
+  await click(button("Undo"));
+  assert.equal(document.querySelector('select[aria-label="Position subtitle 2"]').value,"");
+  assert.equal(calls.filter(call=>call.method==="POST").length,0);
+});
+test("subtitle conflict preserves unsaved text and never starts a render",async()=>{
+  await mountSubtitles();subtitleFailure=true;
+  await type('textarea[aria-label="Subtitle 1"]',"My unsaved correction");
+  await click(button("Apply subtitles"));
+  await waitFor(()=>document.querySelector('[role="alert"]')?.textContent.includes("another tab"));
+  assert.equal(document.querySelector('textarea[aria-label="Subtitle 1"]').value,"My unsaved correction");
+  assert.equal(calls.filter(call=>call.method==="POST").length,0);
+});
+test("subtitle split and merge preserve the full interval and words",()=>{
+  const cue={id:"cue-0",start:1,end:3,text:"Really good cream",position:null,hidden:false};
+  const parts=splitSubtitle(cue,6);
+  assert.equal(parts[0].start,1);assert.equal(parts[1].end,3);
+  assert.equal(parts[0].end,parts[1].start);
+  assert.equal(parts.map(part=>part.text).join(" "),cue.text);
+  assert.throws(()=>splitSubtitle({...cue,text:"  cream words"},1),/between two words/);
+  const merged=mergeSubtitles(...parts);
+  assert.equal(merged.start,cue.start);assert.equal(merged.end,cue.end);assert.equal(merged.text,cue.text);
 });
