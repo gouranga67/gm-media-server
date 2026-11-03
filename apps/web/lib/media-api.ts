@@ -1401,6 +1401,7 @@ export function getStudioAudit() {
 }
 
 export type ReelConcept = {
+  readonly blooper_review?: { readonly version: number; readonly incident_count: number; readonly recorded_setup_and_response: boolean };
   readonly reel_kind?: "story" | "bloopers";
   readonly id: string;
   readonly title: string;
@@ -1420,6 +1421,7 @@ export type ConceptSession = {
   readonly coverage: {
     readonly unique_sources_available: number; readonly sources_considered: number;
     readonly speech_passages: number; readonly possible_blooper_passages?: number;
+    readonly complete_incident_bundles?: number; readonly blooper_contract_version?: number;
     readonly retrieval?: {
       readonly focus_applied: boolean;
       readonly focus_matching_sources_available: number;

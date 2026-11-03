@@ -106,6 +106,9 @@ def system_information() -> dict[str, Any]:
         "speech_precision": {"version": "speech_precision_v1", "enabled": getattr(settings, "speech_alignment_enabled", False)},
         "voice_cleanup": {"version": "voice_cleanup_v1", "automatic_new_speech_edits": True, "hosted_model_calls": 0},
         "grounded_revisions": {"version": 1, "quoted_phrase_audio": True, "verified_quiet_pause": True, "server_preflight": True, "hosted_model_calls": 0},
+        "context_intelligence": {"version": 2, "incident_bundle_version": 2, "complete_attempt_and_response": True,
+            "library_context_links": True, "manual_blooper_range_hints": True, "additional_analysis_model_calls": 0,
+            "semantic_judgement": "human_review_required"},
         "subtitle_editor": {"version": 1, "timed_cards": True, "explicit_draft_and_apply": True, "hosted_model_calls": 0},
         "environment": settings.app_env,
         "content_policy": {

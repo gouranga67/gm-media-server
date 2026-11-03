@@ -609,6 +609,21 @@ test("a saved blooper session can honestly decline weak evidence without creatin
   assert.equal(calls.some((call) => call.route.endsWith('/render')), false);
 });
 
+test("modern blooper options explain complete attempt and response bundles without starting work",async()=>{
+  const session=conceptSession(crypto.randomUUID(),"","bloopers");
+  Object.assign(session.coverage,{blooper_contract_version:2,complete_incident_bundles:3});
+  for(const concept of session.concepts)concept.blooper_review={version:2,incident_count:1,recorded_setup_and_response:true};
+  conceptHistory=[session];
+  await mountConcepts();
+  await waitFor(()=>document.body.textContent.includes('3 complete attempt/response bundles'));
+  assert.match(document.body.textContent,/attempted line and real response kept together/);
+  assert.match(document.body.textContent,/transcript clues can be wrong/);
+  const preview=[...document.querySelectorAll('a')].find(e=>e.href.includes('#t=0,6'));
+  assert.ok(preview);
+  assert.equal(posts('concepts').length,0);
+  assert.equal(calls.some(c=>c.route.endsWith('/render')),false);
+});
+
 test("photos can be categorized and filtered without assigning a video footage role", async () => {
   managedAssets.push({ ...managedAssets[0],id:"review-photo",mime_type:"image/png",display_name:"r3.png",source_name:"r3.png",media_role:"auto" });
   await mountBrowser();

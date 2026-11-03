@@ -67,3 +67,12 @@ class ConceptProposal(BaseModel):
 class ConceptProposals(BaseModel):
     model_config = ConfigDict(extra="forbid")
     concepts: list[ConceptProposal] = Field(min_length=0, max_length=3)
+
+
+class BlooperConceptProposal(ConceptProposal):
+    incident_ids: list[str] = Field(min_length=1, max_length=3)
+
+
+class BlooperConceptProposals(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    concepts: list[BlooperConceptProposal] = Field(min_length=0, max_length=3)

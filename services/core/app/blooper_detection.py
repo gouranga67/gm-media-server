@@ -14,6 +14,8 @@ _CLUES = (
     (r"\[(?:laughter|laughing|laughs|chuckles)\]|\((?:laughter|laughing|laughs|chuckles)\)|\b(?:ha[ -]){2,}ha\b|\bhahaha\b", "transcribed_laughter"),
 )
 
+QUESTION_UNCERTAINTY_PATTERN = r"\b(?:i|we) (?:don't|do not) know[.!?]"
+
 
 def has_specific_blooper_clue(item: dict) -> bool:
     """An incident clue is required; repeated takes alone cannot qualify a reel.
@@ -23,6 +25,7 @@ def has_specific_blooper_clue(item: dict) -> bool:
     """
     return bool(item.get("blooper_candidate") and set(item.get("blooper_signals") or []) & {
         "self_correction", "word_stumble", "lost_line", "transcribed_laughter",
+        "question_then_uncertainty",
     })
 
 

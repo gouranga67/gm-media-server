@@ -1,4 +1,3 @@
-from app.source_evidence import product_mentions
 """Compact local discovery inventory and source-backed concept validation."""
 import json
 import math
@@ -8,9 +7,11 @@ from typing import Any
 from uuid import UUID, uuid5
 
 from app.concept_schemas import ConceptProposals, ConceptRequestCreate
-from app.blooper_detection import find_blooper_evidence, has_specific_blooper_clue, transcript_continuations
+from app.source_evidence import product_mentions
+from app.blooper_detection import has_specific_blooper_clue
 from app.take_quality import production_chatter_reason
-from app.blooper_focus import attach_word_times, focus_blooper_passages
+from app.blooper_focus import attach_word_times
+from app.blooper_incidents import build_incidents, validate_incident_selection
 from app.source_retrieval import FOCUSED_TRANSCRIPT_SQL, focus_query, focused_passages, match_score, source_score
 
 MAX_SOURCES = 60
@@ -96,10 +97,12 @@ def public_inventory(inventory: dict) -> dict:
             asset["name"] = asset["name"][:48]
             asset["recognized_text"] = [text[:64] for text in asset["recognized_text"][:1]]
     return {"focus": inventory.get("focus", ""), "audience": inventory.get("audience", ""), "reel_kind": inventory.get("reel_kind", "story"),
-            "metadata_compacted": compact, "product_mentions": inventory.get("product_mentions", []), "assets": assets, "evidence": inventory["evidence"], "recent_concepts": inventory.get("recent_concepts", [])}
+            "metadata_compacted": compact, "product_mentions": inventory.get("product_mentions", []), "assets": assets, "evidence": inventory["evidence"], "recent_concepts": inventory.get("recent_concepts", []),
+            **({"blooper_contract_version": 2} if inventory.get("blooper_contract_version") == 2 else {}),
+            **({"context_links": inventory["context_links"]} if inventory.get("context_links") else {})}
 
 
-def compact_inventory(rows: list[dict], segments: list[dict], payload: ConceptRequestCreate, recent: list[dict] | None = None, products: list[dict] | None = None) -> dict:
+def compact_inventory(rows: list[dict], segments: list[dict], payload: ConceptRequestCreate, recent: list[dict] | None = None, products: list[dict] | None = None, *, avoid_ranges=()) -> dict:
     sources = []
     by_asset = defaultdict(list)
     bloopers = payload.reel_kind == "bloopers"
@@ -107,29 +110,27 @@ def compact_inventory(rows: list[dict], segments: list[dict], payload: ConceptRe
     if not bloopers:
         from app.story_passages import story_passages
         segments = story_passages(segments)
-    clues = find_blooper_evidence(segments) if bloopers else {}
-    continuations = transcript_continuations(segments) if bloopers else {}
-    focused = focus_blooper_passages(segments, clues) if bloopers else {}
+    incidents = build_incidents(segments, avoid_ranges) if bloopers else []
+    if bloopers:
+        for incident in incidents:
+            by_asset[incident["asset_id"]].append(incident)
     for segment in segments:
+        if bloopers:
+            continue
         text = " ".join(str(segment.get("text") or "").split())
         start, end = float(segment["start_seconds"]), float(segment["end_seconds"])
         if not math.isfinite(start + end) or start < 0 or len(text) > 900 or end - start <= 0 or end - start > 25:
-            continue
-        if bloopers and int(segment["id"]) not in focused:
             continue
         if not bloopers and (len(text) < 12 or end - start < 0.5 or production_chatter_reason(text)):
             continue
         evidence = {
             "evidence_id": int(segment["id"]), "asset_id": str(segment["asset_id"]),
-            "start": start, "end": end, "text": text, **clues.get(int(segment["id"]), {}),
-            **focused.get(int(segment["id"]), {}),
+            "start": start, "end": end, "text": text,
         }
         if not bloopers and segment.get("boundary_evidence") != "catalogue_only":
             evidence.update({key: segment[key] for key in ("catalogue_ids", "boundary_evidence", "sentence_end", "needs_context") if key in segment})
         elif not bloopers and segment.get("needs_context"):
             evidence["needs_context"] = True
-        if bloopers and "catalog_range" not in focused.get(int(segment["id"]), {}) and int(segment["id"]) in continuations:
-            evidence["possible_sentence_continuation"] = continuations[int(segment["id"])]
         by_asset[str(segment["asset_id"])].append(evidence)
     for row in rows:
         manifest = row.get("manifest") or {}
@@ -149,6 +150,8 @@ def compact_inventory(rows: list[dict], segments: list[dict], payload: ConceptRe
     inventory = {"focus": payload.focus, "audience": payload.audience, "reel_kind": payload.reel_kind,
                  "assets": sources, "evidence": [], "recent_concepts": (recent or [])[:6],
                  "_retrieval_products": [{"name":p["name"],"aliases":p.get("aliases") or []} for p in (products or [])[:100]]}
+    if bloopers:
+        inventory["blooper_contract_version"] = 2
     text = " ".join([*(str(segment.get("text", "")) for segment in segments), *(str(row.get("display_name", "")) + " " + str(row.get("notes", "")) for row in rows)])
     inventory["product_mentions"] = [item["name"] for item in product_mentions(text, products or [])]
     used = len(json.dumps(public_inventory(inventory), ensure_ascii=False))
@@ -162,9 +165,7 @@ def compact_inventory(rows: list[dict], segments: list[dict], payload: ConceptRe
         if not passages:
             continue
         # Retain candidate anchors before contextual passages under a tight budget.
-        sampled = (_sample([item for item in passages if has_specific_blooper_clue(item)], 6)
-                   + _sample([item for item in passages if item.get("blooper_candidate") and not has_specific_blooper_clue(item)], 2)
-                   + _sample([item for item in passages if not item.get("blooper_candidate")], 4)) if bloopers else focused_passages(passages, query, _sample)
+        sampled = _sample(passages, 6) if bloopers else focused_passages(passages, query, _sample)
         queues.append(deque(sampled))
     # Round-robin means a long first recording cannot crowd every other source out.
     while queues:
@@ -186,6 +187,12 @@ def compact_inventory(rows: list[dict], segments: list[dict], payload: ConceptRe
         "speech_sources_without_passages": sum(not by_asset[source["asset_id"]] for source in eligible),
         "hosted_retrieval_calls": 0,
     }
+    if not bloopers:
+        from app.context_links import context_links
+        budget = MAX_INVENTORY_CHARACTERS - len(json.dumps(public_inventory(inventory), ensure_ascii=False)) - 24
+        links = context_links(inventory["evidence"], products or [], min(3000, budget))
+        if links:
+            inventory["context_links"] = links
     return inventory
 
 
@@ -225,8 +232,8 @@ def load_inventory(database: Any, payload: ConceptRequestCreate) -> tuple[dict, 
     prior = database.execute("SELECT concepts FROM reel_concept_requests WHERE status='ready' AND reel_kind=%s AND (%s::uuid IS NULL OR collection_id=%s) ORDER BY created_at DESC LIMIT 3", (payload.reel_kind, payload.collection_id, payload.collection_id)).fetchall()
     recent = [{"title": option["title"][:100], "speech_evidence_ids": [beat["evidence_id"] for beat in option["script"][:10]]}
               for row in prior for option in row["concepts"]][:6]
-    segments = attach_word_times(chosen, list(segments), all_sources=payload.reel_kind != "bloopers")
-    inventory = compact_inventory(chosen, list(segments), payload, recent=recent, products=products)
+    segments = attach_word_times(chosen, list(segments), all_sources=payload.reel_kind != "bloopers", include_long_incidents=payload.reel_kind == "bloopers")
+    inventory = compact_inventory(chosen, list(segments), payload, recent=recent, products=products, avoid_ranges=excluded)
     coverage = {"unique_sources_available": len({row["sha256"] for row in rows}),
                 "sources_considered": len(chosen), "speech_passages": len(inventory["evidence"]),
                 "inventory_character_limit": MAX_INVENTORY_CHARACTERS,
@@ -240,12 +247,16 @@ def load_inventory(database: Any, payload: ConceptRequestCreate) -> tuple[dict, 
     }
     if payload.reel_kind == "bloopers":
         coverage["possible_blooper_passages"] = sum(bool(item.get("blooper_candidate")) for item in inventory["evidence"])
+        coverage["complete_incident_bundles"] = len(inventory["evidence"])
+        coverage["blooper_contract_version"] = 2
     return inventory, coverage
 
 
 def validate_concepts(document: dict, inventory: dict, request_id: UUID) -> list[dict]:
-    proposals = ConceptProposals.model_validate(document)
     bloopers = inventory.get("reel_kind") == "bloopers"
+    modern_bloopers = bloopers and inventory.get("blooper_contract_version") == 2
+    from app.concept_schemas import BlooperConceptProposals
+    proposals = (BlooperConceptProposals if modern_bloopers else ConceptProposals).model_validate(document)
     if not bloopers and not proposals.concepts:
         raise ValueError("no supported recorded story was proposed")
     evidence = {item["evidence_id"]: item for item in inventory["evidence"]}
@@ -267,6 +278,13 @@ def validate_concepts(document: dict, inventory: dict, request_id: UUID) -> list
             # A plausible title cannot turn ordinary repeated product speech
             # into an incident. Decline weak options without failing valid ones.
             continue
+        if modern_bloopers:
+            try:
+                incident_review = validate_incident_selection(script, proposal.incident_ids)
+            except ValueError:
+                # Decline an incomplete/overlapping option without spending a
+                # repair call or discarding another supported option.
+                continue
         seconds = sum(beat["end"] - beat["start"] for beat in script)
         if not (1 if bloopers else 5) <= seconds <= 55 or sum(len(beat["text"]) for beat in script) > 2200:
             raise ValueError("a concept's recorded script does not fit a short complete reel")
@@ -284,6 +302,8 @@ def validate_concepts(document: dict, inventory: dict, request_id: UUID) -> list
                        "angle": proposal.angle, "script": script, "visuals": visuals,
                        "asset_ids": source_ids, "estimated_seconds": round(seconds, 1),
                        "source_backed": True, "reel_kind": "bloopers" if bloopers else "story"})
+        if modern_bloopers:
+            output[-1].update(incident_ids=proposal.incident_ids, blooper_review=incident_review)
         if not bloopers:
             from app.story_contract import contract_for
             output[-1]["story_contract"] = contract_for(proposal.angle, script)

@@ -126,15 +126,16 @@ class BlooperFocusTests(unittest.TestCase):
         }
         request = ConceptRequestCreate(id=uuid4(), reel_kind="bloopers")
         inventory = compact_inventory([row], self.segments, request)
+        bundle = inventory["evidence"][0]
         proposal = {
             "concepts": [
                 {
                     "title": "The widget stumble",
                     "angle": "Keep the recorded stumble and short recovery.",
                     "script": [
-                        {"evidence_id": 1, "role": "hook"},
-                        {"evidence_id": 2, "role": "ending"},
+                        {"evidence_id": bundle["evidence_id"], "role": "hook"},
                     ],
+                    "incident_ids": [bundle["incident_id"]],
                     "visuals": [],
                 }
             ]
@@ -143,7 +144,7 @@ class BlooperFocusTests(unittest.TestCase):
         self.assertLess(selected["estimated_seconds"], 12)
         self.assertNotIn("catalogue", selected["script"][-1]["text"])
         scope = selected_blooper_scope({"selected_concept": selected})
-        self.assertEqual(len(scope), 2)
+        self.assertEqual(len(scope), 1)
         self.assertTrue(scope[0]["incident"])
         legacy = deepcopy(selected)
         legacy["script"][0].pop("blooper_scope_version")

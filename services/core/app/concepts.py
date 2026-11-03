@@ -89,6 +89,8 @@ def request_concepts(payload: ConceptRequestCreate) -> dict:
             raise HTTPException(status_code=429, detail="two concept requests are already queued; wait for them to finish")
         require_concept_budget(database)
         inventory, coverage = load_inventory(database, payload)
+        if payload.reel_kind == "bloopers" and inventory.get("blooper_contract_version") == 2 and not inventory["evidence"]:
+            raise HTTPException(409, "No complete recorded blooper bundles were found with an attempted line and a nearby real response. Laughter, retake directions and repeated clean takes alone are not enough. Sources without usable word timings and purely visual gags need manual review. No model request was queued. Try another collection or review the raw footage.")
         if payload.reel_kind == "bloopers" and not any(has_specific_blooper_clue(item) for item in inventory["evidence"]):
             raise HTTPException(status_code=409, detail="No possible bloopers with a specific recorded incident clue were found. Repeated takes or retake directions alone are not enough. Long passages without usable word timings need manual review. No model request was queued. Try another collection or review the raw footage manually; purely visual bloopers need manual review.")
         if payload.reel_kind == "story" and len(inventory["evidence"]) < 2:
@@ -167,6 +169,13 @@ def render_selected_concepts(request_id: UUID, payload: ConceptSelection, x_gm_u
         existing = database.execute("SELECT concept_id,job_id FROM reel_concept_jobs WHERE request_id=%s", (request_id,)).fetchall()
         jobs = {str(item["concept_id"]): item["job_id"] for item in existing}
         wanted = [options[str(id)] for id in payload.concept_ids if str(id) not in jobs]
+        if session.get("reel_kind") == "bloopers" and session["inventory"].get("blooper_contract_version") == 2:
+            from app.blooper_incidents import validate_incident_selection
+            for concept in wanted:
+                try:
+                    validate_incident_selection(concept["script"], concept.get("incident_ids"))
+                except ValueError as error:
+                    raise HTTPException(409, "This idea no longer has its complete recorded attempt and response. Generate fresh ideas; existing edits are retained.") from error
         if session.get("reel_kind") == "bloopers" and any(
             not any(has_specific_blooper_clue(beat) for beat in concept["script"]) for concept in wanted
         ):

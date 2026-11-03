@@ -349,7 +349,7 @@ class ConceptTransportTests(unittest.TestCase):
                 self.assertEqual(set(definition["required"]), set(definition["properties"]))
 
 
-class BlooperConceptTests(unittest.TestCase):
+class LegacyBlooperConceptTests(unittest.TestCase):
     def setUp(self):
         self.row = asset(1)
         self.payload = ConceptRequestCreate(id=uuid4(), reel_kind="bloopers")
@@ -357,7 +357,17 @@ class BlooperConceptTests(unittest.TestCase):
                               end_seconds=index*4, text=text)
                          for index, text in enumerate(("Here is the new product name.", "Start that again.",
                                                        "[laughter] I can't say that!", "An unrelated clean product claim."), 1)]
-        self.inventory = compact_inventory([self.row], self.segments, self.payload)
+        # Historical saved sessions retain the v1 selection contract. Fresh
+        # discovery's complete incident bundles have dedicated v2 coverage.
+        from app.blooper_detection import find_blooper_evidence
+        from app.blooper_focus import focus_blooper_passages
+        self.inventory = compact_inventory([self.row], [], self.payload)
+        self.inventory.pop("blooper_contract_version")
+        clues = find_blooper_evidence(self.segments)
+        focused = focus_blooper_passages(self.segments, clues)
+        self.inventory["evidence"] = [{"evidence_id":s["id"],"asset_id":str(s["asset_id"]),
+            "start":s["start_seconds"],"end":s["end_seconds"],"text":s["text"],**clues.get(s["id"],{}),**focused[s["id"]]}
+            for s in self.segments if s["id"] in focused]
         self.document = {"concepts": [dict(title="The tongue twister", angle="An actual recorded restart and recovery.",
                                          script=[dict(evidence_id=1, role="context"), dict(evidence_id=2, role="development"),
                                                  dict(evidence_id=3, role="payoff")], visuals=[])]}
@@ -463,7 +473,9 @@ class BlooperConceptTests(unittest.TestCase):
     def test_blooper_scan_stays_within_the_existing_text_budget(self):
         rows = [asset(index) for index in range(60)]
         segments = [dict(id=index*100+n, asset_id=row["id"], start_seconds=n*4,end_seconds=n*4+4,
-                         text="I can't pronounce that, let's try again. "*8)
+                         text="The new Wobbly Widget, that is hard to say.",
+                         words=[dict(text=w,start=n*4+i*.4,end=n*4+(i+1)*.4)
+                                for i,w in enumerate("The new Wobbly Widget, that is hard to say.".split())])
                     for index, row in enumerate(rows) for n in range(30)]
         inventory = compact_inventory(rows, segments, self.payload)
         self.assertLessEqual(len(json.dumps(public_inventory(inventory), ensure_ascii=False)), MAX_INVENTORY_CHARACTERS)

@@ -95,6 +95,7 @@ run_check "Existing media analysis" timeout --foreground --kill-after=10s 300s p
 run_check "Local speech precision readiness (read-only)" timeout --foreground --kill-after=10s 120s python3 scripts/verify-speech-precision.py
 run_check "Direct subtitle editor readiness (read-only)" timeout --foreground --kill-after=10s 120s python3 scripts/verify-subtitle-editor.py
 run_check "Grounded revision readiness (read-only)" timeout --foreground --kill-after=10s 120s python3 scripts/verify-phase26.py
+run_check "Source context and recorded blooper readiness (read-only)" timeout --foreground --kill-after=10s 120s python3 scripts/verify-phase27.py
 run_check "Reusable server-library references" timeout --foreground --kill-after=10s 300s python3 scripts/verify-phase6c.py
 run_check "Library concept discovery readiness" timeout --foreground --kill-after=10s 120s python3 scripts/verify-library-concepts.py
 run_check "Photo categories and auto-sort readiness" timeout --foreground --kill-after=10s 120s python3 scripts/verify-library-organization.py

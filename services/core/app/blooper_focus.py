@@ -8,6 +8,7 @@ from app.blooper_detection import (
     _CLUES,
     find_blooper_evidence,
     has_specific_blooper_clue,
+    QUESTION_UNCERTAINTY_PATTERN,
 )
 
 
@@ -188,7 +189,7 @@ def focus_blooper_passages(
     return focused
 
 
-def attach_word_times(rows: list[dict], segments: list[dict], *, all_sources: bool = False) -> list[dict]:
+def attach_word_times(rows: list[dict], segments: list[dict], *, all_sources: bool = False, include_long_incidents: bool = False) -> list[dict]:
     """Read only existing transcript derivatives, and keep timings local."""
     from app.content_catalog import _transcript_segments
     from app.config import get_settings
@@ -197,7 +198,9 @@ def attach_word_times(rows: list[dict], segments: list[dict], *, all_sources: bo
     candidates = {
         str(segment["asset_id"])
         for segment in segments
-        if all_sources or has_specific_blooper_clue(clues.get(int(segment["id"]), {}))
+        if all_sources or has_specific_blooper_clue(clues.get(int(segment["id"]), {})) or (
+            include_long_incidents and any(re.search(pattern, str(segment.get("text") or "").lower().replace("’", "'"))
+                for pattern in [*(p for p, r in _CLUES if r != "transcribed_laughter"), QUESTION_UNCERTAINTY_PATTERN]))
     }
     if not candidates:
         return deepcopy(segments)
@@ -250,6 +253,8 @@ def selected_blooper_scope(context: dict) -> list[dict]:
             "start": float(beat["start"]),
             "end": float(beat["end"]),
             "incident": beat.get("incident"),
+            **({"required_ranges": [beat["setup"], beat["incident"], beat["reaction"]]}
+               if beat.get("incident_id") and beat.get("setup") and beat.get("reaction") else {}),
         }
         for beat in script
     ]
@@ -278,19 +283,19 @@ def validate_blooper_scope(plan, direction: dict) -> None:
             )
 
     for item in scope:
-        anchor = item.get("incident")
-        if not anchor:
-            continue
-        covered = sum(
-            max(
-                0,
-                min(float(clip.source_out), anchor["end"])
-                - max(float(clip.source_in), anchor["start"]),
+        for anchor in item.get("required_ranges") or [item.get("incident")]:
+            if not anchor:
+                continue
+            covered = sum(
+                max(
+                    0,
+                    min(float(clip.source_out), anchor["end"])
+                    - max(float(clip.source_in), anchor["start"]),
+                )
+                for clip in plan.clips
+                if str(clip.asset_id) == str(item["asset_id"])
             )
-            for clip in plan.clips
-            if str(clip.asset_id) == str(item["asset_id"])
-        )
-        if covered < max(0.01, anchor["end"] - anchor["start"] - 0.1):
-            raise ValueError(
-                "blooper edit omitted the selected recorded incident; keep the actual stumble or reaction, not only the surrounding setup"
-            )
+            if covered < max(0.01, anchor["end"] - anchor["start"] - 0.1):
+                raise ValueError(
+                    "blooper edit omitted the selected recorded incident/setup/reaction; keep the actual attempt and response together"
+                )

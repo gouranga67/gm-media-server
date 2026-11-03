@@ -331,6 +331,8 @@ def build_editor_context(
                 "reel_kind": selected.get("reel_kind", "story")}
             if selected.get("story_contract"):
                 context["selected_concept"]["story_contract"] = selected["story_contract"]
+            if selected.get("blooper_review"):
+                context["selected_concept"]["blooper_review"] = selected["blooper_review"]
     return context
 
 
