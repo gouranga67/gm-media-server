@@ -39,6 +39,22 @@ On a completed edit, **Make another version** offers a different cut of the same
 
 Duration separates a preference from a limit. **Follow the story** defaults to a 90-second maximum; **Aim for a length** allows up to 20% flexibility within your maximum; **Strict maximum** holds the chosen limit. All modes can finish sooner, and the supported maximum is 120 seconds. **Duration settings** on a saved job lets you change future attempts without uploading again. Saving does not start an edit; completed versions retain their saved policy for exact re-renders and exports.
 
+### Speech precision and natural cuts
+
+New edits refine English word timing locally with a pinned [Wav2Vec2 alignment model](https://huggingface.co/facebook/wav2vec2-base-960h) (Apache-2.0). Whisper still supplies the transcript: alignment adjusts supported word times, never the recorded words or story. Weak matches and interpolated estimates are labelled separately and receive wider cut margins. Unsupported languages and tokens, including numeric spellings the aligner cannot pronounce reliably, retain their existing estimates. Alignment confidence describes model evidence, not a measured accuracy guarantee.
+
+Analysis is cached by source checksum, original transcript and alignment version. New uploads receive bounded analysis; existing library sources are processed during idle worker turns, after editing/export work. Foreground alignment has a small budget and unfinished windows resume later. There are no hosted model requests or additional editing tokens, but initial analysis uses local CPU/GPU time. CUDA is preferred when available; CPU fallback is supported. The first worker rebuild downloads approximately 380 MB of model weights; subsequent inference is offline. The model card is retained with the worker's pinned weights.
+
+Each new edit plan freezes an immutable timing snapshot. Revisions, exact re-renders, approved exports and delivery variants reuse that snapshot even after library backfill completes. Legacy plans retain their previous timing. Migration **041** adds the snapshot reference; ordinary installation applies it. Short audio fades are independent of picture transitions for precision-enabled edits, so a visual dip does not fade out the final syllable. Local quality review samples up to twelve rendered joins and flags tight audible boundaries for listening; music can mask these measurements, so this is advisory.
+
+After deploying, check progress without generating edits or consuming AI allowance:
+
+```bash
+python3 scripts/verify-speech-precision.py
+```
+
+`backfilling` is normal while old sources are processed. `source_statuses.unavailable` means some sources retained estimates because alignment could not run; inspect worker logs before assuming everything was aligned. Test a **new job** to use improved timings; exact re-renders deliberately retain a saved plan's timing. Set `SPEECH_ALIGNMENT_ENABLED=false` to keep future jobs on legacy timing, or `SPEECH_ALIGNMENT_DEVICE=cpu` to run new alignment on CPU. Existing snapshot-backed edits continue to use their saved analysis regardless of the toggle.
+
 ## Requirements
 
 - Linux host with Docker Engine and Docker Compose v2

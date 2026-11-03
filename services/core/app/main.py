@@ -101,6 +101,7 @@ def system_information() -> dict[str, Any]:
         "version": app.version,
         "build_id": deployed_build_id(settings),
         "render_timing_pipeline": RENDER_TIMING_VERSION,
+        "speech_precision": {"version": "speech_precision_v1", "enabled": getattr(settings, "speech_alignment_enabled", False)},
         "environment": settings.app_env,
         "content_policy": {
             "synthetic_image": False,
@@ -110,6 +111,13 @@ def system_information() -> dict[str, Any]:
             "synthetic_music_requires_explicit_approval": True,
         },
     }
+
+
+@app.get("/api/v1/system/speech-precision")
+def speech_precision_information() -> dict[str, Any]:
+    from app.database import connection
+    from app.speech_status import speech_precision_status
+    return speech_precision_status(get_settings(), connection)
 
 
 def deployed_build_id(settings: Any) -> str:

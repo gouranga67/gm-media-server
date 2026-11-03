@@ -344,3 +344,14 @@ Keep the following for the combined acceptance pass:
 This pass evaluates practical quality, not statistical confidence or proof that the rule caused a change. Exact hashes do not recognize every reencoded duplicate. Existing promoted lessons are retained rather than automatically revoked; inspect and explicitly roll back any that fail fresh playback checks. Optional paid critics, self-generated policy text, learned segmentation and autonomous model training are not enabled by this checkpoint.
 
 Source checkpoint verification: 532 backend tests passed with no skips, including real CPU FFmpeg renders and disposable local rclone checks; 54 DOM interaction tests passed; all eight source-suite gates passed. The isolated database run applied all 40 migrations and exercised the actual learning/retention queries. Final focused learning and UI reruns also passed after tightening the read-only schema check and explanatory copy. No service was deployed, learning setting changed, live trial created, rule promoted or production retention/backup action performed.
+
+## Speech precision acceptance — 2026-11-03
+
+After the service rebuild applies migration 041, run `python3 scripts/verify-speech-precision.py`. This is read-only; pending library sources may continue processing in idle time. Check that unavailable sources are not mistaken for confident alignment coverage.
+
+1. Create a new edit from familiar English talking footage. Listen to the beginning and end of every spoken selection, especially quiet consonants, short connecting words, names and numbers. The story should remain intact. Confidence and wider margins reduce risk; human listening is still the acceptance criterion.
+2. Include a picture dip between speaking clips. The picture transition should remain visible while the voice stays audible up to the cut. Listen for clicks and clipped syllables. Check Local quality review's sampled join findings; they are suggestions to listen, not a guarantee of a defect.
+3. Approve a preview, then let library backfill finish. Re-render the exact edit and export it: the source selections and caption timing must match its saved timing snapshot. Repeat with a delivery variant. Historical edits created before this build should retain their old timing.
+4. Use a source twice across jobs. Its cached alignment should be reused without a hosted request. Mixed-language or uncertain words should retain estimates and conservative margins rather than altered transcript text.
+
+The core suite covers CTC repeated-letter alignment, uncertain/interpolated fallback, cache reuse and corruption recovery, immutable partial snapshots, source identity/path checks, background manifest updates, legacy behavior, shared-word joins, rendered audio through picture dips, and advisory output measurements. Real-model checks on private source audio supplement those tests; neither model confidence nor synthetic audio fixtures establish human-labelled timing accuracy.

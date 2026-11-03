@@ -199,6 +199,9 @@ def list_chatgpt_models(settings: Settings | None = None) -> list[dict[str, str]
 
 def _public_context(context: dict[str, Any], max_characters: int) -> dict[str, Any]:
     public = deepcopy(context)
+    # Alignment provenance belongs to deterministic cut/caption handling, not
+    # the hosted story planner's token budget. Refined segment times remain.
+    public.pop("speech_precision", None)
     for key in list(public):
         if key.startswith("_"):
             public.pop(key)
@@ -268,6 +271,7 @@ def _public_context(context: dict[str, Any], max_characters: int) -> dict[str, A
                 "byte_size",
                 "asset_status",
                 "analysis_status",
+                "speech_precision",
             }:
                 del asset[key]
         simplified: list[dict[str, Any]] = []

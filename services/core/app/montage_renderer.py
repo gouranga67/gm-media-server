@@ -172,6 +172,7 @@ def _filter_graph(
     captions_path: Path | None = None,
     hdr_modes: list[str | None] | None = None,
     join_sources: list[dict] | None = None,
+    safe_speech_joins: bool = False,
 ) -> str:
     filters: list[str] = []
     total_duration = sum(float(clip.duration) for clip in plan.clips)
@@ -195,7 +196,7 @@ def _filter_graph(
         )
         asset = assets[str(clip.asset_id)]
         if clip.media_kind == "video" and clip.include_source_audio and asset.get("has_audio"):
-            edge_fade = min(0.08, duration / 8)
+            edge_fade = min(0.005 if safe_speech_joins else 0.08, duration / 8)
             source_volume_db = -8.0 + float(clip.source_audio_gain_db)
             audio = (
                 f"[{index}:a:0]aresample=48000:first_pts=0,atrim=0:{duration:.3f},"
@@ -211,9 +212,9 @@ def _filter_graph(
                 "aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo"
             )
         transition = min(0.2, duration / 4)
-        if fade_in:
+        if fade_in and not safe_speech_joins:
             audio += f",afade=t=in:st=0:d={transition:.3f}"
-        if fade_out:
+        if fade_out and not safe_speech_joins:
             audio += f",afade=t=out:st={duration - transition:.3f}:d={transition:.3f}"
         filters.append(audio + f"[a{index}]")
     filters.append(assemble_clip_graph(plan, fps))
@@ -358,7 +359,7 @@ def _render(
                 fps=30,
                 music_input_index=len(plan.clips) if music_source is not None else None,
                 captions_path=captions_path,
-                hdr_modes=hdr_modes, join_sources=joins,
+                hdr_modes=hdr_modes, join_sources=joins, safe_speech_joins=bool(context.get("speech_precision")),
             ), broll_sources, width=width, height=height, fps=30), effect_sources, width=width, height=height,
                 total_duration=sum(float(clip.duration) for clip in plan.clips)), picture_layers, width=width, height=height, fps=30),
             "-map",
@@ -458,6 +459,7 @@ def _manifest(
         "story_contract_review": context.get("story_contract_review"),
         "story_finishing": context.get("story_finishing"),
         "story_sequence_review": context.get("story_sequence_review"),
+        "speech_precision": context.get("speech_precision"),
         "assembly": context["job"].get("assembly_decision"),
         "creative_direction": {
             "target_duration_seconds": context["job"].get("target_duration_seconds"),

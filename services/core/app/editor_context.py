@@ -175,6 +175,7 @@ def build_editor_context(
             asset["broll_guidance"] = broll_guidance(asset)
         if include_internal_paths:
             asset["_storage_key"] = row["storage_key"]
+            asset["_transcript_key"] = manifest.get("derived", {}).get("transcript")
             proxy = manifest.get("derived", {}).get("proxy")
             if asset["has_video"] and isinstance(proxy, str):
                 asset["_proxy_key"] = proxy

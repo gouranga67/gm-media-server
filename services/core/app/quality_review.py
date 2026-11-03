@@ -13,7 +13,7 @@ from app.media_analysis import LOUDNESS_JSON_PATTERN, probe_media, run_command, 
 from app.render_integrity import render_timing_error
 
 
-QUALITY_REVIEW_VERSION = "1.1"
+QUALITY_REVIEW_VERSION = "1.2"
 MAX_REVIEW_SECONDS = 121
 REVIEW_TIMEOUT_SECONDS = 30
 
@@ -144,6 +144,21 @@ def _review_rendered_video(
           else "No backing track selected." if music_requested else "Backing music was not requested.")
     if music_requested and not plan.music_track_id:
         finding("music_selection", "Requested music has no track", "The plan contains no backing track. Check the available music library.")
+
+    if video_path.is_file():
+        from app.speech_join_review import inspect_joins
+        try:
+            joins = inspect_joins(context, plan, video_path, timeout=min(4, timeout))
+            measurements["speech_joins"] = joins
+            check("speech_joins", "Sampled speech joins", "attention" if joins["status"] == "attention" else "passed",
+                  "Checks source word clearance and rendered audio energy; listening is still needed.")
+            for join in joins["joins"]:
+                if join["review"]:
+                    finding("speech_join", "Listen to a tight speech join",
+                            "Audible output is close to a source word boundary. Background music can mask the exact speech edge.",
+                            clip_index=join["clip_index"], start_seconds=join["at"])
+        except Exception:
+            check("speech_joins", "Sampled speech joins", "unavailable", "Local join inspection was unavailable; the saved cut was preserved.")
 
     try:
         actual = probe if probe is not None else probe_media(video_path, timeout=min(10, timeout))

@@ -25,6 +25,12 @@ class Settings(BaseSettings):
     media_min_free_percent: float = Field(default=15.0, ge=5.0, le=50.0)
     transcription_model_path: Path = Path("/models/faster-whisper-small")
     transcription_device: str = "auto"
+    speech_alignment_enabled: bool = True
+    speech_alignment_model_path: Path = Path("/models/wav2vec2-base-960h")
+    speech_alignment_model_revision: str = "22aad52d435eb6dbaf354bdad9b0da84ce7d6156"
+    speech_alignment_device: str = "auto"
+    speech_alignment_budget_seconds: float = Field(default=30, ge=1, le=180)
+    speech_alignment_edit_budget_seconds: float = Field(default=15, ge=0, le=60)
     analysis_command_timeout_seconds: int = Field(default=7200, ge=60, le=21_600)
     chatgpt_credential_path: Path = Path("/auth/chatgpt.json")
     chatgpt_model: str = "gpt-6.1-sol"

@@ -317,7 +317,7 @@ def reuse_exact_analysis(asset: dict[str, Any]) -> dict[str, Any] | None:
         return None
     manifest = deepcopy(row["manifest"])
     try:
-        for key in ("proxy", "thumbnail", "preview", "transcript", "captions", "waveform"):
+        for key in ("proxy", "thumbnail", "preview", "transcript", "captions", "waveform", "speech_precision"):
             if manifest.get("derived", {}).get(key):
                 resolve_source(settings.media_root, manifest["derived"][key])
     except (OSError, ValueError):
@@ -850,8 +850,9 @@ def _persist_generated_plan(
         plan_row = database.execute(
             """
             INSERT INTO edit_plans (
-                job_id, version, schema_version, document, provider, model, document_sha256
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                job_id, version, schema_version, document, provider, model, document_sha256,
+                speech_precision_snapshot
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING id
             """,
             (
@@ -862,6 +863,7 @@ def _persist_generated_plan(
                 provider,
                 model,
                 document_sha256(document),
+                Jsonb(run.get("_speech_precision_snapshot") or {}),
             ),
         ).fetchone()
         database.execute(
@@ -923,6 +925,29 @@ def _record_plan_usage(
         )
 
 
+def prepare_run_speech_precision(context: dict, run: dict) -> None:
+    """Reuse the reference plan's timing; fresh stories can use latest alignment."""
+    from app.speech_precision import apply_snapshot, prepare_context
+    reference = run.get("edit_plan_id") or run.get("based_on_run_id")
+    if reference:
+        with connection() as database:
+            row = database.execute(
+                "SELECT speech_precision_snapshot FROM edit_plans WHERE id=%s"
+                if run.get("edit_plan_id") else
+                """SELECT p.speech_precision_snapshot FROM edit_runs r
+                   JOIN edit_plans p ON p.id=r.edit_plan_id WHERE r.id=%s""",
+                (reference,),
+            ).fetchone()
+        snapshot = row.get("speech_precision_snapshot") if isinstance(row, dict) else {}
+        if snapshot:
+            apply_snapshot(context, snapshot, get_settings())
+    elif any(a.get("_transcript_key") and a.get("sha256") for a in context["assets"]):
+        snapshot = prepare_context(context, get_settings())
+    else:
+        snapshot = {}
+    run["_speech_precision_snapshot"] = snapshot or {}
+
+
 def process_one_edit(state: WorkerState) -> bool:
     run = claim_pending_edit()
     if run is None:
@@ -937,6 +962,7 @@ def process_one_edit(state: WorkerState) -> bool:
             with connection() as database:
                 persist_assembly(database, context)
             context = build_editor_context(run["job_id"], include_internal_paths=True)
+        prepare_run_speech_precision(context, run)
         if not run.get("edit_plan_id") and not run.get("based_on_run_id"):
             from app.story_contract import selected_story_contract
             contract = selected_story_contract(context)
@@ -1479,12 +1505,15 @@ def process_one_final_export(state: WorkerState) -> bool:
     try:
         with connection() as database:
             plan_row = database.execute(
-                "SELECT document FROM edit_plans WHERE id = %s",
+                "SELECT document, speech_precision_snapshot FROM edit_plans WHERE id = %s",
                 (export["edit_plan_id"],),
             ).fetchone()
         if plan_row is None:
             raise RuntimeError("the approved edit plan was not found")
         context = build_editor_context(export["job_id"], include_internal_paths=True)
+        if plan_row.get("speech_precision_snapshot"):
+            from app.speech_precision import apply_snapshot
+            apply_snapshot(context, plan_row["speech_precision_snapshot"], get_settings())
         from app.duration_policy import apply_duration_snapshot
         apply_duration_snapshot(context, export)
         if isinstance(export.get("preview_manifest"), dict):
@@ -1654,12 +1683,15 @@ def process_one_delivery_variant(state: WorkerState) -> bool:
     try:
         with connection() as database:
             plan_row = database.execute(
-                "SELECT document FROM edit_plans WHERE id = %s",
+                "SELECT document, speech_precision_snapshot FROM edit_plans WHERE id = %s",
                 (variant["edit_plan_id"],),
             ).fetchone()
         if plan_row is None:
             raise RuntimeError("the approved edit plan was not found")
         context = build_editor_context(variant["job_id"], include_internal_paths=True)
+        if plan_row.get("speech_precision_snapshot"):
+            from app.speech_precision import apply_snapshot
+            apply_snapshot(context, plan_row["speech_precision_snapshot"], get_settings())
         from app.duration_policy import apply_duration_snapshot
         apply_duration_snapshot(context, variant)
         render_document, _ = repair_predictable_plan_defaults(
@@ -1998,6 +2030,14 @@ def run_work_cycle(state: WorkerState) -> bool:
         with measure_task("visual_index", root) as event:
             event["did_work"] = bool(index_one_asset_visually(state))
             worked = event["did_work"]
+    if not worked and not state.stopping:
+        from app.speech_precision import backfill_one
+        try:
+            with measure_task("speech_alignment", root) as event:
+                event["did_work"] = bool(backfill_one(get_settings(), connection))
+                worked = event["did_work"]
+        except (OSError, ValueError, RuntimeError) as error:
+            print(f"speech alignment backfill deferred: {type(error).__name__}", flush=True)
     return worked
 
 

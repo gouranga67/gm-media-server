@@ -394,6 +394,7 @@ def _ffmpeg_filter(
     music_input_index: int | None = None,
     hdr_modes: list[str | None] | None = None,
     join_sources: list[dict] | None = None,
+    safe_speech_joins: bool = False,
 ) -> str:
     filters: list[str] = []
     for index, clip in enumerate(plan.clips):
@@ -424,10 +425,10 @@ def _ffmpeg_filter(
         )
         if clip.source_audio_gain_db:
             audio += f",volume={clip.source_audio_gain_db:.3f}dB"
-        transition_seconds = min(0.18, duration / 4)
-        if fade_in:
+        transition_seconds = 0.005 if safe_speech_joins else min(0.18, duration / 4)
+        if fade_in or (safe_speech_joins and index > 0):
             audio += f",afade=t=in:st=0:d={transition_seconds:.3f}"
-        if fade_out:
+        if fade_out or (safe_speech_joins and index + 1 < len(plan.clips)):
             audio += (
                 f",afade=t=out:st={duration - transition_seconds:.3f}"
                 f":d={transition_seconds:.3f}"
@@ -504,6 +505,7 @@ def _render_video(
     effect_sources: list[dict[str, Any]] | None = None,
     broll_sources: list[dict[str, Any]] | None = None,
     picture_layers: list[dict[str, Any]] | None = None,
+    safe_speech_joins: bool = False,
 ) -> str:
     common = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-y"]
     for source, source_in, source_out in sources:
@@ -538,7 +540,7 @@ def _render_video(
                 height=height,
                 frames_per_second=frames_per_second,
                 music_input_index=len(sources) if music_source is not None else None,
-                hdr_modes=hdr_modes, join_sources=joins,
+                hdr_modes=hdr_modes, join_sources=joins, safe_speech_joins=safe_speech_joins,
             ), overlays, width=width, height=height, fps=frames_per_second), effects, width=width, height=height,
                 total_duration=sum(float(clip.source_out - clip.source_in) for clip in plan.clips)), layers, width=width, height=height, fps=frames_per_second),
             "-map",
@@ -709,6 +711,7 @@ def render_edit_preview(
         effect_sources=effect_sources,
         broll_sources=broll_sources,
         picture_layers=selected_picture_layers(context,plan,settings,len(sources)+(1 if music_source else 0)+len(effect_sources)+len(broll_sources)),
+        safe_speech_joins=bool(context.get("speech_precision")),
     )
 
     document = plan.model_dump(mode="json")
@@ -724,6 +727,7 @@ def render_edit_preview(
         "story_contract_review": context.get("story_contract_review"),
         "story_finishing": context.get("story_finishing"),
         "story_sequence_review": context.get("story_sequence_review"),
+        "speech_precision": context.get("speech_precision"),
         "assembly": context["job"].get("assembly_decision"),
         "creative_direction": {
             "target_duration_seconds": context["job"].get("target_duration_seconds"),
@@ -929,6 +933,7 @@ def render_final_delivery(
         height=height,
         frames_per_second=FINAL_FPS,
         final_quality=True,
+        safe_speech_joins=bool(context.get("speech_precision")),
         music_source=music_source,
         effect_sources=effect_sources,
         broll_sources=broll_sources,
@@ -996,6 +1001,7 @@ def render_final_delivery(
         "story_contract_review": context.get("story_contract_review"),
         "story_finishing": context.get("story_finishing"),
         "story_sequence_review": context.get("story_sequence_review"),
+        "speech_precision": context.get("speech_precision"),
         "assembly": context["job"].get("assembly_decision"),
         "creative_direction": {
             "target_duration_seconds": context["job"].get("target_duration_seconds"),

@@ -99,6 +99,7 @@ class RenderRebuildTests(unittest.TestCase):
                 )
                 database = MagicMock()
                 database.execute.return_value.fetchone.side_effect = [
+                    {"speech_precision_snapshot": {}},
                     {
                         "document": document,
                         "provider": "chatgpt_plan",

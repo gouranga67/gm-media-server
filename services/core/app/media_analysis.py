@@ -747,6 +747,13 @@ def analyze_asset(
         atomic_write(captions_path, webvtt)
         derived["transcript"] = _relative(settings.media_root, transcript_path)
         derived["captions"] = _relative(settings.media_root, captions_path)
+        if getattr(settings, "speech_alignment_enabled", False):
+            from app.speech_precision import align_source, profile, summary
+            key, precision = align_source(source, transcript, str(asset.get("sha256")), settings)
+            derived["speech_precision"] = key
+            derived["speech_precision_summary"] = summary(precision)
+            if precision.get("complete"):
+                derived["speech_precision_profile"] = profile(settings)
 
     if is_image and derived.get("preview"):
         from app.source_evidence import image_ocr

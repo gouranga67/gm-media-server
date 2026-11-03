@@ -92,6 +92,7 @@ run_check "Backend unit and local render tests" timeout --foreground --kill-afte
   -v "$project_root/scripts:/app/scripts:ro" \
   worker python -m unittest discover -s /app/tests -p 'test_*.py' -v
 run_check "Existing media analysis" timeout --foreground --kill-after=10s 300s python3 scripts/verify-phase4.py
+run_check "Local speech precision readiness (read-only)" timeout --foreground --kill-after=10s 120s python3 scripts/verify-speech-precision.py
 run_check "Reusable server-library references" timeout --foreground --kill-after=10s 300s python3 scripts/verify-phase6c.py
 run_check "Library concept discovery readiness" timeout --foreground --kill-after=10s 120s python3 scripts/verify-library-concepts.py
 run_check "Photo categories and auto-sort readiness" timeout --foreground --kill-after=10s 120s python3 scripts/verify-library-organization.py

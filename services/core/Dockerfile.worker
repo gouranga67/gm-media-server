@@ -33,6 +33,12 @@ ARG VISUAL_MODEL_REPOSITORY=openai/clip-vit-base-patch32
 ARG VISUAL_MODEL_REVISION=c7244be81152024ce0e99ac8d2e373a8953d9f9a
 RUN python -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='${VISUAL_MODEL_REPOSITORY}', revision='${VISUAL_MODEL_REVISION}', local_dir='/models/clip-vit-base-patch32', allow_patterns=['config.json','preprocessor_config.json','tokenizer_config.json','special_tokens_map.json','tokenizer.json','vocab.json','merges.txt','pytorch_model.bin'])"
 
+ARG SPEECH_ALIGNMENT_MODEL_REVISION=22aad52d435eb6dbaf354bdad9b0da84ce7d6156
+RUN python -c "from huggingface_hub import snapshot_download; snapshot_download(repo_id='facebook/wav2vec2-base-960h', revision='${SPEECH_ALIGNMENT_MODEL_REVISION}', local_dir='/models/wav2vec2-base-960h', allow_patterns=['README.md','config.json','preprocessor_config.json','tokenizer_config.json','special_tokens_map.json','vocab.json','model.safetensors'])"
+
+ENV HF_HOME=/tmp/huggingface
+ENV SPEECH_ALIGNMENT_MODEL_REVISION=${SPEECH_ALIGNMENT_MODEL_REVISION}
+
 RUN groupadd --gid 10001 gmmedia \
     && useradd --uid 10001 --gid gmmedia --create-home --shell /usr/sbin/nologin gmmedia \
     && chown -R gmmedia:gmmedia /models

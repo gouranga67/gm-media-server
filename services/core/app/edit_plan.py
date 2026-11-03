@@ -826,6 +826,7 @@ def protect_spoken_boundaries(plan: EditPlan, assets: list[dict[str, Any]]) -> E
         for clip in protected.clips
     }
     by_asset: dict[str, list[Any]] = defaultdict(list)
+    precision_words: dict[str, list[tuple[float, float]]] = {}
 
     for clip in protected.clips:
         if isinstance(protected, MontageEditPlan) and (
@@ -838,6 +839,7 @@ def protect_spoken_boundaries(plan: EditPlan, assets: list[dict[str, Any]]) -> E
             continue
         by_asset[asset_id].append(clip)
         all_words: list[tuple[float, float]] = []
+        word_details = {}
         for segment in asset.get("transcript_segments", []):
             if not isinstance(segment, dict):
                 continue
@@ -851,6 +853,7 @@ def protect_spoken_boundaries(plan: EditPlan, assets: list[dict[str, Any]]) -> E
                     continue
                 if math.isfinite(start) and math.isfinite(end) and 0 <= start < end:
                     all_words.append((start, end))
+                    word_details[(start, end)] = word
         words = sorted((start, end) for start, end in all_words
                        if end > float(clip.source_in) and start < float(clip.source_out))
         if not words:
@@ -860,21 +863,38 @@ def protect_spoken_boundaries(plan: EditPlan, assets: list[dict[str, Any]]) -> E
         # deliberately excluded by a precise cleanup revision.
         preceding_end = max((end for start, end in all_words if end <= words[0][0]), default=0.0)
         following_start = min((start for start, end in all_words if start >= words[-1][1]), default=duration)
-        clip.source_in = round(max(0.0, min(float(clip.source_in), max(preceding_end, words[0][0] - 0.12))), 3)
+        from app.speech_precision import VERSION, boundary_margins
+        active = (asset.get("speech_precision") or {}).get("version") == VERSION
+        if active:
+            precision_words[asset_id] = all_words
+        lead = boundary_margins(word_details[words[0]], active)[0]
+        tail = boundary_margins(word_details[words[-1]], active)[1]
+        clip.source_in = round(max(0.0, min(float(clip.source_in), max(preceding_end, words[0][0] - lead))), 3)
         clip.source_out = round(
-            min(duration, max(float(clip.source_out), min(following_start, words[-1][1] + 0.16))), 3
+            min(duration, max(float(clip.source_out), min(following_start, words[-1][1] + tail))), 3
         )
 
     # Adjacent selections from one source can both expand into the same silence.
     # Split that silence at the original midpoint while preserving invalid model
     # overlaps for the validator to report normally.
-    for clips in by_asset.values():
+    for asset_id, clips in by_asset.items():
         ordered = sorted(clips, key=lambda item: originals[id(item)][0])
         for left, right in zip(ordered, ordered[1:], strict=False):
             left_original = originals[id(left)]
             right_original = originals[id(right)]
             if left_original[1] <= right_original[0] and left.source_out > right.source_in:
                 boundary = round((left_original[1] + right_original[0]) / 2, 3)
+                # A midpoint inside a shared word would remove its middle from
+                # both takes. For a near-contiguous same-source join, assign
+                # the complete word to one side and keep source time continuous.
+                if right_original[0] - left_original[1] <= 0.25:
+                    crossing = next(((start, end) for start, end in precision_words.get(asset_id, [])
+                                     if start < boundary < end), None)
+                    if crossing:
+                        choices = [value for value in crossing if
+                                   left.source_in + 0.25 <= value <= right.source_out - 0.25]
+                        if choices:
+                            boundary = round(min(choices, key=lambda value: abs(value - boundary)), 3)
                 left.source_out = boundary
                 right.source_in = boundary
 
