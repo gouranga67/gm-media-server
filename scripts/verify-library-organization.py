@@ -11,6 +11,8 @@ def main():
     helper = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(helper)
     assets = helper.request("library/assets?limit=5")
+    if not helper.request("system/library-intake").get("folder_suggestions_schema_ready"):
+        raise RuntimeError("deploy the folder suggestions build and migration 047 before running this check")
     categories = {"auto","review","product","scene","document","other"}
     for asset in assets:
         if asset.get("media_category") not in categories:
@@ -32,6 +34,8 @@ def main():
         detail = helper.request(f"library/organization/{session['id']}")
         if "inventory" in detail or detail["status"] not in ("pending","generating","ready","failed"):
             raise RuntimeError("auto-sort response leaked internal inventory or has invalid status")
+        if not isinstance(detail.get("include_folders"), bool) or not isinstance(detail.get("folder_options"), list) or len(detail["folder_options"]) > 100:
+            raise RuntimeError("saved auto-sort folder review context is incomplete")
         if not 1 <= len(detail["asset_ids"]) <= 24:
             raise RuntimeError("invalid auto-sort batch size")
         if detail["status"] == "ready":
@@ -41,8 +45,14 @@ def main():
             for item in detail["suggestions"]:
                 if not item["display_name"] or item["media_category"] not in categories:
                     raise RuntimeError("invalid suggested name or category")
+                folder = item.get("folder")
+                if folder:
+                    if not detail["include_folders"] or not folder.get("name") or len(folder["name"]) > 120:
+                        raise RuntimeError("invalid suggested folder")
+                    if folder.get("id"):
+                        UUID(folder["id"])
     print(json.dumps({"status":"passed","checked_assets":len(assets),"folders_checked":len(folders),"saved_auto_sort_sessions":len(sessions),
-                      "model_calls":0,"renamed_files":0},indent=2))
+                      "reviewable_folder_suggestions":True,"model_calls":0,"renamed_files":0},indent=2))
 
 
 if __name__ == "__main__":

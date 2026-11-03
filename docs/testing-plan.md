@@ -460,3 +460,19 @@ Deploy with the normal installer, then run `python3 scripts/verify-phase31.py`. 
 10. Leave and reopen the acceptance page. Saved notes/results should persist, failed saves should retain the typed draft and stable retry identity, and a later failed observation should replace that build's displayed pass without erasing history. A new deployment must not inherit previous human passes. Refreshing after a build change clears the old form confirmation; record fresh checks. No acceptance action creates a social post or model request.
 
 Once the relevant real checks are recorded, `python3 scripts/verify-phase31.py --require-private` verifies the private pilot gate; `--require-publishing` checks the additional publishing gate. These commands only read evidence. Run `sudo ./scripts/verify-live-suite.sh` for the core technical lane, then its `--confirm-render-and-ai` lane only when you intend additional renders/editor requests. Actual posts, restores and reboots are separate deliberate actions; the live suite never substitutes a fake result for them.
+
+
+## Phase 29 follow-up — reviewed folder suggestions
+
+Large manual playback testing may wait until the build checkpoints are deployed. After each reboot/deployment, do a small smoke check: open GM Studio, load Library and play an existing saved reel. Continue the automated source checks throughout the build. Real posting, restore and reboot drills remain deliberate, separate acceptance tasks.
+
+After migration 047 is deployed, run `python3 scripts/verify-library-organization.py`. This only reads readiness and saved review contracts; it does not call a model or change files.
+
+1. In Library or Inbox, select a few ready videos/photos/audio files. Open Auto-sort, leave **Suggest folders too** checked, then press **Suggest organisation**. One bounded request suggests names, labels and folder choices. Existing folder names (at most 100) are shared in this request; uncheck this option for names/labels only.
+2. Before Apply, edit a proposed new folder name, choose an existing folder for another file, and choose **No folder change** where appropriate. Review the content and uncertainty. No original, folder or name changes while reviewing.
+3. First try names-only application on a small test selection: **Also apply folder choices** stays unchecked. Names/labels save, but memberships do not change. The saved result should say folders unchanged. Applied rows cannot be filed later through that same session; use the normal folder controls or a fresh auto-sort review.
+4. On a separate selection, check **Also apply folder choices**, then Apply. Only selected rows file into their chosen destinations. New names create folders only at this step; case-insensitive matching reuses an existing folder. Existing memberships, notes, favourites, originals, analysis and old edits remain available. Photos/audio can be filed without a Talking/B-roll label.
+5. Leave and reopen the saved session: applied names, folder choices and the folder-application receipt persist. A repeated successful application is a no-op. A failed application retains the open review and editable choices without another model request.
+6. With disposable test folders, rename/delete a chosen existing folder in another tab before Apply. Application should report a conflict and roll back the whole batch. Refresh/request a new review, or apply names only. A source moved to Trash or edited since the suggestions must also block stale metadata application. Old saved sessions remain names-only.
+
+Folder suggestions add memberships, never move an original or remove its other memberships. Nested folders and automatic background filing are not implemented by this checkpoint. Existing successful edit-planning/render defaults remain unchanged.

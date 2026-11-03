@@ -1491,21 +1491,25 @@ export type OrganizationSuggestion = {
   readonly media_category: MediaCategory; readonly tags: readonly string[];
   readonly confidence: "supported" | "uncertain"; readonly reason: string;
   readonly previous_name?: string; readonly mime_type?: string;
+  readonly folder?: { readonly id: string | null; readonly name: string } | null;
+  readonly folder_applied?: boolean;
 };
 export type OrganizationSession = {
   readonly id: string; readonly status: "pending" | "generating" | "ready" | "failed";
   readonly asset_ids: readonly string[]; readonly suggestions: readonly OrganizationSuggestion[];
   readonly applied_asset_ids: readonly string[]; readonly total_tokens: number; readonly error: string | null;
   readonly created_at: string;
+  readonly include_folders?: boolean;
+  readonly folder_options?: readonly { readonly id: string; readonly name: string }[];
 };
 export function getOrganizationSessions() { return apiRequest<readonly OrganizationSession[]>("library/organization", { cache: "no-store" }); }
 export function getOrganizationSession(id: string) { return apiRequest<OrganizationSession>(`library/organization/${encodeURIComponent(id)}`, { cache: "no-store" }); }
-export function suggestLibraryOrganization(input: { readonly id: string; readonly asset_ids: readonly string[]; readonly rename_existing: boolean; readonly privacy_mode: "hybrid" | "text_only" }) {
+export function suggestLibraryOrganization(input: { readonly id: string; readonly asset_ids: readonly string[]; readonly rename_existing: boolean; readonly privacy_mode: "hybrid" | "text_only"; readonly include_folders?: boolean }) {
   return apiRequest<OrganizationSession>("library/organization", { method: "POST", body: JSON.stringify(input) });
 }
-export function applyLibraryOrganization(id: string, suggestions: readonly OrganizationSuggestion[]) {
+export function applyLibraryOrganization(id: string, suggestions: readonly OrganizationSuggestion[], applyFolders = false) {
   return apiRequest<{ readonly updated: number; readonly applied_asset_ids: readonly string[] }>(`library/organization/${encodeURIComponent(id)}/apply`, {
-    method: "POST", body: JSON.stringify({ suggestions: suggestions.map(({ asset_id, display_name, media_role, media_category, tags, confidence, reason }) => ({ asset_id, display_name, media_role, media_category, tags, confidence, reason })) }),
+    method: "POST", body: JSON.stringify({ apply_folders: applyFolders, suggestions: suggestions.map(({ asset_id, display_name, media_role, media_category, tags, confidence, reason, folder }) => ({ asset_id, display_name, media_role, media_category, tags, confidence, reason, folder: applyFolders ? folder ?? null : null })) }),
   });
 }
 

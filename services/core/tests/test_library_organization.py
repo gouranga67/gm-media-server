@@ -22,7 +22,7 @@ def source(mime="video/mp4", role="auto", custom_name=None, category="auto"):
 
 def suggestion(row, **changes):
     return dict(asset_id=row["asset_id"],display_name="Cream B-roll",media_role="broll",media_category="product",
-        tags=["cream"],confidence="supported",reason="The supplied frame shows the cream product.") | changes
+        tags=["cream"],confidence="supported",reason="The supplied frame shows the cream product.",folder=None) | changes
 
 
 class OrganizationValidationTests(unittest.TestCase):
@@ -93,6 +93,32 @@ class OrganizationValidationTests(unittest.TestCase):
             with self.subTest(values=values), self.assertRaises(ValueError):
                 validate_organization({"suggestions":values}, [row], False)
 
+    def test_folder_suggestions_are_opt_in_grounded_and_use_real_folder_ids(self):
+        row = source(); folder = {"id":str(uuid4()),"name":"Cream launch"}
+        doc = {"suggestions":[suggestion(row,folder=folder)]}
+        self.assertIsNone(validate_organization(doc,[row],False)[0]["folder"])
+        result = validate_organization(doc,[row],False,folder_options=[folder])[0]
+        self.assertEqual(result["folder"],folder)
+        same_name = {"suggestions":[suggestion(row,folder={"id":None,"name":"cream launch"})]}
+        self.assertEqual(validate_organization(same_name,[row],False,folder_options=[folder])[0]["folder"],folder)
+        with self.assertRaises(ValueError):
+            validate_organization(doc,[row],False,folder_options=[])
+        doc["suggestions"][0]["folder"] = {"id":None,"name":"  Cream   B-roll  "}
+        self.assertEqual(validate_organization(doc,[row],False,folder_options=[])[0]["folder"]["name"],"Cream B-roll")
+        doc["suggestions"][0]["confidence"] = "uncertain"
+        self.assertIsNone(validate_organization(doc,[row],False,folder_options=[])[0]["folder"])
+        row.update(notes="",tags=[])
+        doc["suggestions"][0]["confidence"] = "supported"
+        self.assertIsNone(validate_organization(doc,[row],False,set(),[])[0]["folder"])
+
+    def test_folder_names_reject_paths_blank_and_excessive_length(self):
+        for name in ("  ","../cream","cream/broll","cream\\broll","a"*121,"cream\0"):
+            with self.subTest(name=name), self.assertRaises(ValidationError):
+                OrganizationSuggestion(**suggestion(source(),folder={"id":None,"name":name}))
+        # Existing folder names are logical labels and may contain a slash.
+        existing = OrganizationSuggestion(**suggestion(source(),folder={"id":uuid4(),"name":"Cream / soap"}))
+        self.assertEqual(existing.folder.name,"Cream / soap")
+
     def test_bounded_unique_selection_and_closed_structured_schema(self):
         id = uuid4()
         for ids in ([],[id,id],[uuid4() for _ in range(25)]):
@@ -110,7 +136,8 @@ class OrganizationValidationTests(unittest.TestCase):
 class OrganizationApplyTests(unittest.TestCase):
     def setUp(self):
         self.sources = [source(),source(mime="image/png")]
-        self.row = dict(id=uuid4(),status="ready",inventory=self.sources,applied_asset_ids=[])
+        self.row = dict(id=uuid4(),status="ready",inventory=self.sources,applied_asset_ids=[],
+            suggestions=[suggestion(row) | {"previous_name":row["display_name"]} for row in self.sources])
         self.database = Mock()
         self.database.execute.return_value.fetchone.return_value = self.row
         self.database.execute.return_value.fetchall.return_value = [{"id":item["asset_id"]} for item in self.sources]
@@ -160,13 +187,65 @@ class OrganizationApplyTests(unittest.TestCase):
             apply_organization(self.row["id"],bad)
         self.assertFalse(any("INSERT" in call.args[0] for call in self.database.execute.call_args_list))
 
+    def test_folder_choices_require_explicit_apply_and_legacy_sessions_stay_names_only(self):
+        data = self.payload.model_dump()
+        data["suggestions"][0]["folder"] = {"id":None,"name":"Cream"}
+        payload = OrganizationApply.model_validate(data)
+        apply_organization(self.row["id"],payload)
+        self.assertFalse(any("INSERT INTO library_collection" in call.args[0] for call in self.database.execute.call_args_list))
+        receipt = next(c.args[1][1].obj for c in self.database.execute.call_args_list if "SET applied_asset_ids=" in c.args[0])
+        self.assertFalse(receipt[0]["folder_applied"])
+        self.assertEqual(receipt[0]["previous_name"],self.sources[0]["display_name"])
+        self.database.reset_mock()
+        payload.apply_folders = True
+        with self.assertRaises(HTTPException) as error:
+            apply_organization(self.row["id"],payload)
+        self.assertEqual(error.exception.status_code,409)
+
+    def test_new_folder_apply_is_additive_transactional_and_retries_do_not_duplicate(self):
+        self.row["include_folders"] = True
+        target = {"id":None,"name":"Cream launch"}
+        payload = OrganizationApply(suggestions=[OrganizationSuggestion(**suggestion(self.sources[0],folder=target)),
+            OrganizationSuggestion(**suggestion(self.sources[1],media_role="auto",folder=target))],apply_folders=True)
+        result = apply_organization(self.row["id"],payload)
+        calls = self.database.execute.call_args_list
+        creates = [call for call in calls if "INSERT INTO library_collections" in call.args[0]]
+        adds = [call for call in calls if "INSERT INTO library_collection_assets" in call.args[0]]
+        self.assertEqual(len(creates),1); self.assertEqual(len(adds),2)
+        self.assertIn("ON CONFLICT (lower(name))",creates[0].args[0])
+        self.assertTrue(all("ON CONFLICT DO NOTHING" in call.args[0] for call in adds))
+        self.assertLess(calls.index(creates[0]),next(i for i,c in enumerate(calls) if "SELECT id FROM assets" in c.args[0]))
+        self.assertFalse(any("DELETE" in call.args[0] for call in calls))
+        receipt = next(c.args[1][1].obj for c in calls if "SET applied_asset_ids=" in c.args[0])
+        self.assertTrue(receipt[0]["folder_applied"])
+        self.assertEqual(receipt[0]["folder"]["name"],"Cream launch")
+        self.row["applied_asset_ids"] = result["applied_asset_ids"]
+        self.database.reset_mock()
+        self.assertEqual(apply_organization(self.row["id"],payload)["updated"],0)
+        self.assertFalse(any("INSERT" in call.args[0] for call in self.database.execute.call_args_list))
+
+    def test_deleted_or_renamed_folder_blocks_all_metadata_writes(self):
+        self.row["include_folders"] = True
+        folder = {"id":str(uuid4()),"name":"Original folder name"}
+        payload = OrganizationApply(suggestions=[OrganizationSuggestion(**suggestion(self.sources[0],folder=folder))],apply_folders=True)
+        for current in (None,dict(id=folder["id"],name="Renamed")):
+            def execute(sql, params=None):
+                return SimpleNamespace(fetchone=lambda: current if "FROM library_collections" in sql else self.row)
+            self.database.reset_mock(); self.database.execute.side_effect = execute
+            with self.assertRaises(HTTPException) as error:
+                apply_organization(self.row["id"],payload)
+            self.assertEqual(error.exception.status_code,409)
+            self.assertFalse(any("INSERT" in call.args[0] for call in self.database.execute.call_args_list))
+
 
 class OrganizationWorkerTests(unittest.TestCase):
     def test_worker_makes_one_request_records_usage_and_never_renames_automatically(self):
         for privacy in ("hybrid","text_only"):
             with self.subTest(privacy=privacy):
                 inventory = [source(mime="image/png")]
-                row = dict(id=uuid4(),inventory=inventory,privacy_mode=privacy,rename_existing=False)
+                folder = {"id":str(uuid4()),"name":"Cream launch"}
+                row = dict(id=uuid4(),inventory=inventory,privacy_mode=privacy,rename_existing=False,
+                    include_folders=privacy == "hybrid",folder_options=[folder])
                 database = Mock(); database.execute.return_value.fetchone.side_effect = [row,None]
                 @contextmanager
                 def connection(): yield database
@@ -175,12 +254,15 @@ class OrganizationWorkerTests(unittest.TestCase):
                 with patch("app.library_organization.connection",connection),patch("app.library_organization.get_settings",return_value=settings), \
                      patch("app.library_organization.assert_ai_budget"),patch("app.library_organization.usable_chatgpt_credentials",return_value={"access_token":"fixture"}), \
                      patch("app.library_organization.high_impact_visuals",return_value=[]) as images, \
-                     patch("app.library_organization._request_plan",return_value=({"suggestions":[suggestion(inventory[0])]}, {"total_tokens":123})) as provider:
+                     patch("app.library_organization._request_plan",return_value=({"suggestions":[suggestion(inventory[0],folder=folder)]}, {"total_tokens":123})) as provider:
                     self.assertTrue(process_one_organization(state)); self.assertFalse(process_one_organization(state))
                 provider.assert_called_once()
+                prompt = provider.call_args.kwargs["structured_task"]["content"][0]["text"]
+                self.assertEqual("Cream launch" in prompt,privacy == "hybrid")
                 self.assertEqual(images.call_count,1 if privacy == "hybrid" else 0)
                 self.assertTrue(any("INSERT INTO ai_usage_events" in call.args[0] for call in database.execute.call_args_list))
                 self.assertFalse(any("INSERT INTO asset_library_metadata" in call.args[0] for call in database.execute.call_args_list))
+                self.assertFalse(any("INSERT INTO library_collections" in call.args[0] for call in database.execute.call_args_list))
                 self.assertIsNone(state.active_organization_request_id)
 
     def test_invalid_proposal_still_records_usage_without_retrying(self):
@@ -206,5 +288,7 @@ class OrganizationWorkerTests(unittest.TestCase):
             self.assertNotIn("inventory",request_organization(payload))
             with self.assertRaises(HTTPException):
                 request_organization(OrganizationCreate(id=payload.id,asset_ids=[uuid4()]))
+            with self.assertRaises(HTTPException):
+                request_organization(OrganizationCreate(id=payload.id,asset_ids=payload.asset_ids,include_folders=True))
         load.assert_not_called()
         self.assertNotIn("inventory",public_session(row))

@@ -72,7 +72,7 @@ The [folder-first library increment](phase-reports/library-folders-2026-11-03.md
 | L3 | Pause/resume an upload or briefly interrupt the connection | The existing transfer resumes; it does not register another original or job. Keep the original file available until Ready. |
 | L4 | Filter talking footage, B-roll, photos, audio and collections | Each view shows the expected sources; a photo category is distinct from a video footage role. |
 | L5 | Rename, tag, favourite and categorise a source | Details persist and appear when choosing media for a new job. The original recording remains unchanged. |
-| L6 | Auto-sort a small mixed batch | Suggestions describe the actual content, preserve manual work and apply only after explicit review/submission. |
+| L6 | Auto-sort a small mixed batch | Suggestions describe the actual content and preserve manual work. Review folder choices; names-only Apply leaves memberships unchanged. Explicitly opt in to filing, confirm existing/new folders and reopen the saved result. |
 | L7 | Speech search, scene search and recognised review text | Results point to relevant sources/ranges. Check the raw media; similarity or OCR alone is not proof. |
 | L8 | Add a product name and aliases in Studio knowledge | Its real mentions are consistently identified without transferring unrelated claims to it. |
 | L9 | Mark a source range Avoid | Fresh concepts/plans avoid that range. An older frozen edit remains available. |

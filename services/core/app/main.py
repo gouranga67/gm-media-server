@@ -113,6 +113,7 @@ def system_information() -> dict[str, Any]:
         "voice_cleanup": {"version": "voice_cleanup_v1", "automatic_new_speech_edits": True, "hosted_model_calls": 0},
         "library_intake": {"version": 1, "durable_registration": True, "folder_upload": True,
             "reviewable_inbox": True, "server_pagination": True, "page_size": 60,
+            "reviewable_folder_suggestions": True,
             "upload_concurrency": 2, "automatic_hosted_model_calls": 0},
         "learning_evaluation": {"version": 2,"saved_test_cases":True,"recording_groups":True,
             "paired_checklist":True,"usage_qualification":True,"promotion_history":True,
@@ -165,8 +166,10 @@ def library_intake_information() -> dict[str, Any]:
     from app.database import connection
     with connection() as database:
         row = database.execute("SELECT to_regclass('library_intakes') IS NOT NULL AS ready").fetchone()
+        folders = database.execute("SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version='047_organization_folders.sql') AS ready").fetchone()
     return {"version": 1, "schema_ready": bool(row and row["ready"]),
-        "durable_registration": True, "server_pagination": True, "automatic_hosted_model_calls": 0}
+        "durable_registration": True, "server_pagination": True, "automatic_hosted_model_calls": 0,
+        "folder_suggestions_schema_ready": bool(folders and folders["ready"])}
 
 
 @app.get("/api/v1/system/learning-evaluation")

@@ -172,9 +172,10 @@ globalThis.fetch = async (url, options = {}) => {
   else if (/^concepts\/[^/?]+$/.test(route)) payload = conceptHistory.find((item) => item.id === route.split("/")[1]);
   else if (route === "library/organization" && (options.method ?? "GET") === "GET") payload = organizationHistory;
   else if (route === "library/organization") {
-    const session = { id: body.id,asset_ids:body.asset_ids,status:"ready",total_tokens:500,error:null,applied_asset_ids:[],created_at:"2026-01-01T00:00:00Z",
+    const session = { id: body.id,asset_ids:body.asset_ids,include_folders:body.include_folders ?? false,folder_options:folderList.map(({id,name})=>({id,name})),status:"ready",total_tokens:500,error:null,applied_asset_ids:[],created_at:"2026-01-01T00:00:00Z",
       suggestions:body.asset_ids.map((id) => { const item = managedAssets.find((asset) => asset.id === id); return {
         asset_id:id,previous_name:item.display_name,display_name:item.mime_type.startsWith("image/") ? "Image of customer review" : "Talking about soap",
+        folder:body.include_folders ? {id:null,name:"Customer reviews"} : null,
         mime_type:item.mime_type,media_role:item.mime_type.startsWith("image/") ? "auto" : "talking",media_category:"review",tags:["review"],confidence:"supported",reason:"Supported by the supplied preview or recorded words.",
       }; }) };
     organizationHistory.unshift(session); payload={ ...session,status:"pending" };
@@ -184,6 +185,8 @@ globalThis.fetch = async (url, options = {}) => {
     const session=organizationHistory.find((item) => item.id === route.split("/")[2]);
     for (const suggestion of body.suggestions) {
       Object.assign(managedAssets.find((item) => item.id === suggestion.asset_id),suggestion);
+      const saved=session.suggestions.find(item=>item.asset_id===suggestion.asset_id);
+      Object.assign(saved,suggestion,{folder_applied:Boolean(body.apply_folders && suggestion.folder)});
       session.applied_asset_ids.push(suggestion.asset_id);
     }
     payload={updated:body.suggestions.length,applied_asset_ids:session.applied_asset_ids};
@@ -485,6 +488,7 @@ test("batch names preserve original filenames and role changes move only the dis
   assert.equal(managedAssets.find((item) => item.id === "talk").display_name, "Product introduction");
   assert.ok(managedAssets.every((item) => item.source_name.startsWith("VID_")));
   await click(button("All media"));
+  await waitFor(() => document.querySelector('button[aria-label="Rename Product introduction"]'));
   await click(document.querySelector('button[aria-label="Rename Product introduction"]'));
   await type('input[placeholder="e.g. Cream close-up"]', "New product intro");
   await click(button("Save names"));
@@ -692,7 +696,7 @@ test("auto-sort suggestions require explicit application and can be edited befor
   await click(button("Auto-sort selected"));
   await waitFor(() => document.querySelector('section[aria-label="Auto-sort library"]'));
   assert.equal(posts("library/organization").length,0);
-  await click(button("Suggest names & categories"));
+  await click(button("Suggest organisation"));
   await waitFor(() => document.querySelector('input[aria-label="Suggested name for r3.png"]'));
   assert.equal(managedAssets.find((item) => item.id === "review-photo").display_name,"r3.png");
   await type('input[aria-label="Suggested name for r3.png"]',"Customer review of cream");
@@ -717,7 +721,7 @@ test("failed auto-sort application preserves the review and original names", asy
   await waitFor(() => document.querySelector('input[aria-label="Select VID_0003.mp4"]'));
   await click(document.querySelector('input[aria-label="Select VID_0003.mp4"]'));
   await click(button("Auto-sort selected"));
-  await click(button("Suggest names & categories"));
+  await click(button("Suggest organisation"));
   await waitFor(() => document.querySelector('input[aria-label="Apply suggestion for VID_0003.mp4"]'));
   organizationFailure=true;
   await click(button("Apply 1 selected suggestions"));
@@ -725,6 +729,57 @@ test("failed auto-sort application preserves the review and original names", asy
   assert.equal(document.querySelector('input[aria-label="Apply suggestion for VID_0003.mp4"]').checked,true);
   assert.equal(managedAssets.find((item) => item.id === "unsorted").display_name,"VID_0003.mp4");
   assert.equal(posts("library/organization").length,1);
+});
+
+test("folder suggestions wait for explicit opt-in, stay editable and survive failed apply", async () => {
+  setupFolders();
+  await mountBrowser();
+  await waitFor(() => document.querySelector('input[aria-label="Select VID_0003.mp4"]'));
+  await click(document.querySelector('input[aria-label="Select VID_0003.mp4"]'));
+  await click(button("Auto-sort selected"));
+  await click(button("Suggest organisation"));
+  await waitFor(() => document.querySelector('select[aria-label="Folder for VID_0003.mp4"]'));
+  assert.equal(posts("library/organization")[0].body.include_folders,true);
+  const optIn = [...document.querySelectorAll('label')].find(e => e.textContent.includes("Also apply folder choices")).querySelector('input');
+  assert.equal(optIn.checked,false);
+  assert.equal(posts("/apply").length,0);
+  await chooseOption('select[aria-label="Folder for VID_0003.mp4"]',folderList[0].id);
+  await click(optIn);
+  organizationFailure=true;
+  await click(button("Apply 1 selected suggestions"));
+  await waitFor(() => document.body.textContent.includes("Library details changed"));
+  assert.equal(document.querySelector('select[aria-label="Folder for VID_0003.mp4"]').value,folderList[0].id);
+  assert.equal(optIn.checked,true);
+  organizationFailure=false;
+  await click(button("Apply 1 selected suggestions"));
+  await waitFor(() => document.body.textContent.includes("Folder choices applied"));
+  const applies = posts("/apply");
+  assert.equal(applies.length,2);
+  assert.deepEqual(applies[0].body,applies[1].body);
+  assert.equal(applies[1].body.apply_folders,true);
+  assert.deepEqual(applies[1].body.suggestions[0].folder,{id:folderList[0].id,name:folderList[0].name});
+  assert.equal(posts("library/organization").length,1);
+});
+
+test("new folder names validate before applying while names-only remains available", async () => {
+  await mountBrowser();
+  await waitFor(() => document.querySelector('input[aria-label="Select VID_0003.mp4"]'));
+  await click(document.querySelector('input[aria-label="Select VID_0003.mp4"]'));
+  await click(button("Auto-sort selected"));
+  await click(button("Suggest organisation"));
+  await waitFor(() => document.querySelector('input[aria-label="New folder name for VID_0003.mp4"]'));
+  await type('input[aria-label="New folder name for VID_0003.mp4"]',"");
+  const optIn = [...document.querySelectorAll('label')].find(e => e.textContent.includes("Also apply folder choices")).querySelector('input');
+  await click(optIn);
+  assert.equal(button("Apply 1 selected suggestions").disabled,true);
+  await type('input[aria-label="New folder name for VID_0003.mp4"]',"Cream B-roll");
+  assert.equal(button("Apply 1 selected suggestions").disabled,false);
+  await click(optIn);
+  await type('input[aria-label="New folder name for VID_0003.mp4"]',"");
+  await click(button("Apply 1 selected suggestions"));
+  await waitFor(() => document.body.textContent.includes("Folder memberships unchanged"));
+  assert.equal(posts("/apply")[0].body.apply_folders,false);
+  assert.equal(posts("/apply")[0].body.suggestions[0].folder,null);
 });
 
 
