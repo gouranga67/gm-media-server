@@ -26,8 +26,8 @@ class QualityReviewTests(unittest.TestCase):
                 "words": [{"start": 0.1, "end": 1.1, "text": "A complete"},
                           {"start": 1.2, "end": 3.9, "text": "spoken thought."}]}]}]}
         self.probe = {"format": {"duration_seconds": 4.05}, "streams": [
-            {"type": "video", "width": 540, "height": 960, "color_transfer": "bt709"},
-            {"type": "audio"}]}
+            {"type": "video", "width": 540, "height": 960, "color_transfer": "bt709", "duration_seconds": 4},
+            {"type": "audio", "duration_seconds": 4}]}
         self.stderr = '{"input_i":"-15.2","input_tp":"-1.1"}'
 
     def inspect(self, stderr=None, probe=None, captions=None):
@@ -91,6 +91,13 @@ class QualityReviewTests(unittest.TestCase):
         self.assertEqual(report["status"], "incomplete")
         colour = next(c for c in report["checks"] if c["code"] == "colour_metadata")
         self.assertEqual(colour["status"], "unavailable")
+
+    def test_full_container_duration_does_not_hide_half_a_video_track(self):
+        self.probe["streams"][0]["duration_seconds"] = 2
+        report = self.inspect()
+        self.assertEqual(report["status"], "attention")
+        self.assertTrue(any(f["code"] == "stream_timing" and f["severity"] == "error"
+                            for f in report["findings"]))
 
     def test_measurement_timeout_preserves_the_preview_and_bounds_processing(self):
         with patch("app.quality_review.run_command", side_effect=subprocess.TimeoutExpired("ffmpeg", 30)) as command:

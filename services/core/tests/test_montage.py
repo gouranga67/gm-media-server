@@ -371,7 +371,8 @@ class MontageFilterTests(unittest.TestCase):
 
         self.assertIn("format=yuv420p", graph)
         self.assertIn("channel_layouts=stereo", graph)
-        self.assertIn("concat=n=2:v=1:a=1", graph)
+        self.assertIn("concat=n=2:v=1:a=0", graph)
+        self.assertIn("concat=n=2:v=0:a=1", graph)
         self.assertIn("zoompan", graph)
         self.assertIn("d=60", graph)
         self.assertIn("apad=pad_dur=2.000", graph)

@@ -27,6 +27,7 @@ from app.assembly import router as assembly_router
 from app.publishing import router as publishing_router
 from app.publishing_captions import router as publishing_captions_router
 from app.duration_routes import router as duration_router
+from app.render_integrity import RENDER_TIMING_VERSION
 
 
 @asynccontextmanager
@@ -99,6 +100,7 @@ def system_information() -> dict[str, Any]:
         "service": "gm-media-api",
         "version": app.version,
         "build_id": deployed_build_id(settings),
+        "render_timing_pipeline": RENDER_TIMING_VERSION,
         "environment": settings.app_env,
         "content_policy": {
             "synthetic_image": False,

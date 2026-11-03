@@ -663,39 +663,67 @@ def clip_audio_window(
     )
 
 
-def assemble_clip_graph(plan: Any, concat_inputs: list[str], fps: int) -> str:
-    """Optional picture dissolves preserve the exact existing dialogue timeline."""
-    if not any(clip.transition == "cross_dissolve" for clip in plan.clips):
-        return (
-            "".join(concat_inputs) + f"concat=n={len(plan.clips)}:v=1:a=1[vcat][acat]"
-        )
+def assemble_clip_graph(plan: Any, fps: int) -> str:
+    """Assemble picture on one frame clock and speech on its own sample clock.
+
+    Quantize cumulative boundaries, not each clip independently: many short
+    cuts must not accumulate a frame of lip-sync drift at every join. concat
+    changes its output time base, so explicitly restore CFR before feeding a
+    later xfade. Dissolves extend picture only; they never overlap dialogue.
+    """
     durations = [
         float(c.duration if hasattr(c, "duration") else c.source_out - c.source_in)
         for c in plan.clips
     ]
-    parts = [
-        f"[v{index}]fps={fps},settb=AVTB[xfv{index}]"
-        for index in range(len(plan.clips))
-    ]
+    boundaries = [0]
+    elapsed = 0.0
+    for duration in durations:
+        elapsed += duration
+        boundaries.append(round(elapsed * fps))
+    clock = f"fps={fps},settb=1/{fps},setpts=N"
+    parts = []
+    for index in range(len(plan.clips)):
+        frames = boundaries[index + 1] - boundaries[index]
+        parts.append(
+            f"[v{index}]{clock},tpad=stop_mode=clone:stop=1,"
+            f"trim=end_frame={frames}[xfv{index}]"
+        )
     current = "xfv0"
-    elapsed = durations[0]
-    for index, clip in enumerate(plan.clips[1:], 1):
-        target = f"joinedpicture{index}"
-        if clip.transition == "cross_dissolve":
-            fade = min(0.2, durations[index] / 4, durations[index - 1] / 4)
-            parts.append(
-                f"[{current}]tpad=stop_mode=clone:stop_duration={fade:.3f}[padpicture{index}]"
-            )
-            parts.append(
-                f"[padpicture{index}][xfv{index}]xfade=transition=fade:duration={fade:.3f}:offset={elapsed:.3f}[{target}]"
-            )
-        else:
-            parts.append(f"[{current}][xfv{index}]concat=n=2:v=1:a=0[{target}]")
-        current = target
-        elapsed += durations[index]
-    parts.append(f"[{current}]trim=duration={elapsed:.3f},setpts=PTS-STARTPTS[vcat]")
-    parts.append(
+    audio = (
         "".join(f"[a{i}]" for i in range(len(plan.clips)))
         + f"concat=n={len(plan.clips)}:v=0:a=1[acat]"
     )
+    if not any(clip.transition == "cross_dissolve" for clip in plan.clips):
+        parts.append(
+            "".join(f"[xfv{i}]" for i in range(len(plan.clips)))
+            + f"concat=n={len(plan.clips)}:v=1:a=0,{clock}[vcat]"
+        )
+        parts.append(audio)
+        return ";".join(parts)
+    for index, clip in enumerate(plan.clips[1:], 1):
+        target = f"joinedpicture{index}"
+        if clip.transition == "cross_dissolve":
+            fade_frames = max(1, min(
+                round(0.2 * fps),
+                (boundaries[index] - boundaries[index - 1]) // 4,
+                (boundaries[index + 1] - boundaries[index]) // 4,
+            ))
+            fade = fade_frames / fps
+            parts.append(
+                f"[{current}]tpad=stop_mode=clone:stop={fade_frames}[padpicture{index}]"
+            )
+            parts.append(
+                f"[padpicture{index}][xfv{index}]xfade=transition=fade:"
+                f"duration={fade:.6f}:offset={boundaries[index] / fps:.6f},"
+                f"{clock},tpad=stop_mode=clone:stop=1,"
+                f"trim=end_frame={boundaries[index + 1]}[{target}]"
+            )
+        else:
+            parts.append(
+                f"[{current}][xfv{index}]concat=n=2:v=1:a=0,{clock},"
+                f"tpad=stop_mode=clone:stop=1,trim=end_frame={boundaries[index + 1]}[{target}]"
+            )
+        current = target
+    parts.append(f"[{current}]trim=end_frame={boundaries[-1]},setpts=PTS-STARTPTS[vcat]")
+    parts.append(audio)
     return ";".join(parts)

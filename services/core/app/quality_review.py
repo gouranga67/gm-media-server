@@ -10,9 +10,10 @@ from typing import Any
 
 from app.edit_plan import EditPlan, MontageEditPlan, edit_plan_duration, source_word_gaps
 from app.media_analysis import LOUDNESS_JSON_PATTERN, probe_media, run_command, video_probe_hdr_mode
+from app.render_integrity import render_timing_error
 
 
-QUALITY_REVIEW_VERSION = "1.0"
+QUALITY_REVIEW_VERSION = "1.1"
 MAX_REVIEW_SECONDS = 121
 REVIEW_TIMEOUT_SECONDS = 30
 
@@ -163,6 +164,11 @@ def _review_rendered_video(
         check("duration", "Rendered duration", "passed" if duration_ok else "attention", f"Edit plan: {expected:.2f}s; file: {duration:.2f}s." if duration is not None else "File duration could not be read.")
         if not duration_ok:
             finding("duration", "Check the rendered duration", "The file duration does not match the selected clips.", severity="error")
+        timing_error = render_timing_error(actual, expected)
+        check("stream_timing", "Picture and sound coverage", "attention" if timing_error else "passed",
+              timing_error or "Both tracks cover the selected edit and start together; this does not assess lip sync by watching the speaker.")
+        if timing_error:
+            finding("stream_timing", "Picture and sound timing failed", timing_error, severity="error")
         hdr = video_probe_hdr_mode(actual)
         known_sdr = bool(video and video.get("color_transfer") == "bt709")
         check("colour_metadata", "SDR colour metadata", "attention" if hdr else "passed" if known_sdr else "unavailable",

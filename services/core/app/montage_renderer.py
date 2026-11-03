@@ -49,6 +49,7 @@ from app.media_analysis import (
     video_probe_hdr_mode,
 )
 from app.quality_review import review_rendered_video
+from app.render_integrity import RENDER_TIMING_VERSION, render_timing_error as _timing_error
 from app.finishing_renderer import (
     append_broll_filters, broll_input_arguments, finishing_manifest,
     public_broll_manifest, rhythmic_zoom, selected_broll,
@@ -173,7 +174,6 @@ def _filter_graph(
     join_sources: list[dict] | None = None,
 ) -> str:
     filters: list[str] = []
-    concat_inputs: list[str] = []
     total_duration = sum(float(clip.duration) for clip in plan.clips)
     for index, clip in enumerate(plan.clips):
         duration = float(clip.duration)
@@ -198,9 +198,9 @@ def _filter_graph(
             edge_fade = min(0.08, duration / 8)
             source_volume_db = -8.0 + float(clip.source_audio_gain_db)
             audio = (
-                f"[{index}:a:0]aresample=48000,atrim=0:{duration:.3f},"
+                f"[{index}:a:0]aresample=48000:first_pts=0,atrim=0:{duration:.3f},"
                 f"apad=pad_dur={duration:.3f},atrim=0:{duration:.3f},"
-                "asetpts=PTS-STARTPTS,aformat=sample_fmts=fltp:"
+                "asetpts=N/SR/TB,aformat=sample_fmts=fltp:"
                 f"sample_rates=48000:channel_layouts=stereo,volume={source_volume_db:.3f}dB,"
                 f"afade=t=in:st=0:d={edge_fade:.3f},"
                 f"afade=t=out:st={duration - edge_fade:.3f}:d={edge_fade:.3f}"
@@ -216,8 +216,7 @@ def _filter_graph(
         if fade_out:
             audio += f",afade=t=out:st={duration - transition:.3f}:d={transition:.3f}"
         filters.append(audio + f"[a{index}]")
-        concat_inputs.extend((f"[v{index}]", f"[a{index}]"))
-    filters.append(assemble_clip_graph(plan,concat_inputs,fps))
+    filters.append(assemble_clip_graph(plan, fps))
     video_output = "vbase" if captions_path is not None else "vout"
     filters.append(
         f"[vcat]tpad=stop_mode=clone:stop_duration={total_duration:.3f},"
@@ -260,27 +259,6 @@ def _filter_graph(
             f"apad=pad_dur={total_duration:.3f},atrim=0:{total_duration:.3f}[aout]"
         )
     return apply_graph_finishing(";".join(filters), plan, width=width, height=height, fps=fps, join_sources=join_sources)
-
-
-def _timing_error(probe: dict[str, Any], expected_duration: float) -> str | None:
-    durations = {
-        str(stream.get("type")): stream.get("duration_seconds")
-        for stream in probe.get("streams", [])
-    }
-    video_duration = durations.get("video")
-    audio_duration = durations.get("audio")
-    if not isinstance(video_duration, (int, float)) or not isinstance(audio_duration, (int, float)):
-        return "render timing QA could not read both stream durations"
-    tolerance = 0.15
-    if abs(float(video_duration) - expected_duration) > tolerance:
-        return f"video is {float(video_duration):.3f}s; expected {expected_duration:.3f}s"
-    if abs(float(audio_duration) - expected_duration) > tolerance:
-        return f"audio is {float(audio_duration):.3f}s; expected {expected_duration:.3f}s"
-    if abs(float(video_duration) - float(audio_duration)) > tolerance:
-        return (
-            f"audio/video differ by {abs(float(video_duration) - float(audio_duration)):.3f}s"
-        )
-    return None
 
 
 def _render_source(
@@ -510,6 +488,8 @@ def _manifest(
             "video_encoder": encoder,
             "audio_preset": "montage_mix_v1",
             "color_pipeline": "transfer_aware_hdr_to_bt709_sdr_v2",
+            "timing_pipeline": RENDER_TIMING_VERSION,
+            "stream_timing_verified": True,
         },
         "sources": [
             {

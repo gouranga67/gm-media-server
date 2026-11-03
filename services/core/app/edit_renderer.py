@@ -40,6 +40,7 @@ from app.media_analysis import (
     video_probe_hdr_mode,
 )
 from app.quality_review import review_rendered_video
+from app.render_integrity import RENDER_TIMING_VERSION, render_timing_error
 from app.finishing_renderer import (
     append_broll_filters, broll_input_arguments, finishing_manifest,
     public_broll_manifest, rhythmic_zoom, selected_broll,
@@ -395,7 +396,6 @@ def _ffmpeg_filter(
     join_sources: list[dict] | None = None,
 ) -> str:
     filters: list[str] = []
-    concat_inputs: list[str] = []
     for index, clip in enumerate(plan.clips):
         duration = float(clip.source_out - clip.source_in)
         fade_in = index > 0 and clip.transition == "dip_to_black"
@@ -414,10 +414,13 @@ def _ffmpeg_filter(
             )
         )
         audio = (
-            f"[{index}:a:0]aresample=48000,atrim=0:{duration:.3f},"
+            # Accurate seeking may leave the first decoded audio packet just
+            # after zero. Fill that small lead before trimming; rebasing only
+            # after atrim used to subtract it from every clip's running time.
+            f"[{index}:a:0]aresample=48000:first_pts=0,atrim=0:{duration:.3f},"
             f"apad=pad_dur={duration:.3f},atrim=0:{duration:.3f},"
             "aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo,"
-            "asetpts=PTS-STARTPTS"
+            "asetpts=N/SR/TB"
         )
         if clip.source_audio_gain_db:
             audio += f",volume={clip.source_audio_gain_db:.3f}dB"
@@ -430,10 +433,7 @@ def _ffmpeg_filter(
                 f":d={transition_seconds:.3f}"
             )
         filters.append(audio + f"[a{index}]")
-        concat_inputs.extend((f"[v{index}]", f"[a{index}]"))
-    filters.append(
-        assemble_clip_graph(plan,concat_inputs,frames_per_second)
-    )
+    filters.append(assemble_clip_graph(plan, frames_per_second))
     safe_caption_path = str(captions_path).replace("\\", r"\\").replace(":", r"\:").replace("'", r"\'")
     filters.append(f"[vcat]subtitles=filename='{safe_caption_path}'[vout]")
     if music_input_index is None:
@@ -605,6 +605,13 @@ def _render_video(
             ]
             completed = run_command(command, timeout=timeout, check=False)
             if completed.returncode == 0 and temporary.is_file() and temporary.stat().st_size > 0:
+                timing_error = render_timing_error(
+                    probe_media(temporary, timeout),
+                    sum(float(clip.source_out - clip.source_in) for clip in plan.clips),
+                )
+                if timing_error is not None:
+                    failures.append(f"{encoder}: {timing_error}")
+                    continue
                 temporary.chmod(READ_ONLY_MODE)
                 os.replace(temporary, destination)
                 return encoder
@@ -756,6 +763,8 @@ def render_edit_preview(
             "audio_preset": "spoken_voice_v1",
             "caption_style": "clean_blue_v1",
             "color_pipeline": "transfer_aware_hdr_to_bt709_sdr_v2",
+            "timing_pipeline": RENDER_TIMING_VERSION,
+            "stream_timing_verified": True,
         },
         "sources": [
             {
@@ -1023,6 +1032,8 @@ def render_final_delivery(
             "audio_preset": "spoken_voice_v1",
             "caption_style": "clean_blue_v1",
             "color_pipeline": "transfer_aware_hdr_to_bt709_sdr_v2",
+            "timing_pipeline": RENDER_TIMING_VERSION,
+            "stream_timing_verified": True,
         },
         "caption_corrections": caption_corrections,
         "captions": {

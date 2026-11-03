@@ -28,7 +28,7 @@ COLOURS = [
 ]
 
 
-def make_source(path, rate, *, variable=False):
+def make_source(path, rate, *, variable=False, audio_offset=0):
     colours = ["red", "lime", "blue", "yellow", "cyan", "magenta"]
     filters = [
         f"drawbox=c={colour}:t=fill:enable='gte(t,{index / 2})*lt(t,{(index + 1) / 2})'"
@@ -55,7 +55,8 @@ def make_source(path, rate, *, variable=False):
             "-vf",
             ",".join(filters),
             "-af",
-            "volume='if(lt(mod(t,0.5),0.12),1,0)':eval=frame",
+            "volume='if(lt(mod(t,0.5),0.12),1,0)':eval=frame"
+            + f",asetpts=PTS+{audio_offset}/TB",
             "-fps_mode",
             "vfr",
             "-c:v",

@@ -103,6 +103,7 @@ def normalize_probe(payload: dict[str, Any]) -> dict[str, Any]:
             "type": stream_type,
             "codec": raw_stream.get("codec_name"),
             "duration_seconds": _number(raw_stream.get("duration"), float),
+            "start_seconds": _number(raw_stream.get("start_time"), float),
         }
         if stream_type == "video":
             rotation: int | None = None
