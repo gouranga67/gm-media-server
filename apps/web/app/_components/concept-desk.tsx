@@ -47,6 +47,7 @@ export function ConceptDesk() {
   const [privacy, setPrivacy] = useState<"hybrid" | "text_only">("hybrid");
   const [reelKind, setReelKind] = useState<"story" | "bloopers">("story");
   const [collectionId, setCollectionId] = useState("");
+  const [scopeUnavailable, setScopeUnavailable] = useState(false);
   const [collections, setCollections] = useState<readonly LibraryCollection[]>([]);
   const [coverage, setCoverage] = useState<ConceptLibraryStatus>();
   const [history, setHistory] = useState<readonly ConceptSession[]>([]);
@@ -74,7 +75,18 @@ export function ConceptDesk() {
     void Promise.all([getConceptLibraryStatus(), getLibraryCollections().catch(() => []), getConceptSessions(), getMusicTracks().catch(() => [])]).then(([status, groups, sessions, tracks]) => {
       if (cancelled) return;
       setCoverage(status); setCollections(groups); setHistory(sessions); setHasMusic(tracks.some((track) => track.active));
-      const fromUrl = new URL(window.location.href).searchParams.get("session");
+      const parameters = new URL(window.location.href).searchParams;
+      const folder = parameters.get("collection");
+      if (folder) {
+        if (groups.some((group) => group.id === folder)) setCollectionId(folder);
+        else {
+          setScopeUnavailable(true);
+          setError("That folder is unavailable. Choose a footage scope before generating ideas.");
+        }
+      }
+      const fromUrl = parameters.get("session");
+      // A folder shortcut opens a fresh scoped brief, not an unrelated saved idea.
+      if (folder) return;
       setActiveId(fromUrl && /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(fromUrl) ? fromUrl : sessions[0]?.id);
     }).catch((requestError: unknown) => { if (!cancelled) setError(message(requestError)); });
     return () => { cancelled = true; };
@@ -109,7 +121,7 @@ export function ConceptDesk() {
   }, [activeId]);
 
   async function generate() {
-    if (busy || generating || loadingSession) return;
+    if (busy || generating || loadingSession || scopeUnavailable) return;
     setBusy(true); setError(undefined);
     const settings = { focus: focus.trim(), audience: audience.trim(), collection_id: collectionId || null, privacy_mode: privacy, reel_kind: reelKind };
     const key = JSON.stringify(settings);
@@ -142,7 +154,7 @@ export function ConceptDesk() {
       <form aria-label="Find reel concepts" className="grid gap-4 rounded-md border border-[#D7D9D3] bg-white p-4 lg:grid-cols-[1.5fr_1fr]" onSubmit={(event) => { event.preventDefault(); void generate(); }}>
         <div className="space-y-2 lg:col-span-2"><label className="block max-w-sm text-xs font-bold text-[#173F5F]">Reel type<select aria-label="Reel type" className={`${control} mt-2`} disabled={busy || generating || loadingSession} onChange={(event) => setReelKind(event.currentTarget.value as typeof reelKind)} value={reelKind}><option value="story">Story reel</option><option value="bloopers">Bloopers &amp; outtakes</option></select></label>{reelKind === "bloopers" ? <p className="max-w-3xl rounded-md bg-[#FFF7EB] p-3 text-xs leading-5 text-[#8A5928]">Find possible mistakes, restarts and laughter in stored transcripts, with nearby setup and recovery. Clues are not confirmed errors; review the source links before choosing. Purely visual gags and untranscribed laughter may be missed. No model request is queued when the local scan finds no candidates.</p> : null}</div>
         <div className="space-y-3"><label className="block text-xs font-bold text-[#173F5F]">Direction <span className="font-normal text-[#666862]">· optional</span><textarea className={`${control} mt-2 min-h-24 resize-y py-3`} disabled={busy || generating} maxLength={1200} onChange={(event) => setFocus(event.currentTarget.value)} placeholder="Surprise me with a new reel concept from our footage—or focus on a product, problem or theme." value={focus} /></label><label className="block text-xs font-bold text-[#173F5F]">Audience <span className="font-normal text-[#666862]">· optional</span><input className={`${control} mt-2`} disabled={busy || generating} maxLength={600} onChange={(event) => setAudience(event.currentTarget.value)} placeholder="Who should this connect with?" value={audience} /></label></div>
-        <div className="space-y-3"><label className="block text-xs font-bold text-[#173F5F]">Footage scope<select aria-label="Concept footage scope" className={`${control} mt-2`} disabled={busy || generating} onChange={(event) => setCollectionId(event.currentTarget.value)} value={collectionId}><option value="">All active library media</option>{collections.map((collection) => <option key={collection.id} value={collection.id}>{collection.name}</option>)}</select></label><label className="block text-xs font-bold text-[#173F5F]">Analysis shared for this request<select aria-label="Concept privacy" className={`${control} mt-2`} disabled={busy || generating} onChange={(event) => setPrivacy(event.currentTarget.value as typeof privacy)} value={privacy}><option value="hybrid">Transcript + small preview frames</option><option value="text_only">Transcript and metadata only</option></select></label><p className="text-xs leading-5 text-[#666862]">Original files stay on your server. Reuses stored analysis; one bounded concept request when you press Generate. Creating selected edits makes their normal editing requests. No new speech is generated.</p>{coverage?.still_processing ? <p className="rounded-md bg-[#EFF6FA] p-2 text-xs leading-5 text-[#173F5F]">More files are still processing. Wait to include them, or generate ideas from the ready footage now.</p> : null}<button className={`${primary} w-full`} disabled={busy || generating || loadingSession || !coverage || coverage.spoken_sources === 0} type="submit">{busy || generating ? <LoaderCircleIcon aria-hidden="true" className="size-4 animate-spin" /> : <SparklesIcon aria-hidden="true" className="size-4" />}{generating ? "Finding supported moments…" : reelKind === "bloopers" ? "Find blooper reel ideas" : "Generate reel ideas"}</button></div>
+        <div className="space-y-3"><label className="block text-xs font-bold text-[#173F5F]">Footage scope<select aria-label="Concept footage scope" className={`${control} mt-2`} disabled={busy || generating} onChange={(event) => { setCollectionId(event.currentTarget.value); setScopeUnavailable(false); setError(undefined); }} value={scopeUnavailable ? "__choose" : collectionId}>{scopeUnavailable ? <option value="__choose" disabled>Choose a scope…</option> : null}<option value="">All active library media</option>{collections.map((collection) => <option key={collection.id} value={collection.id}>{collection.name}</option>)}</select></label><label className="block text-xs font-bold text-[#173F5F]">Analysis shared for this request<select aria-label="Concept privacy" className={`${control} mt-2`} disabled={busy || generating} onChange={(event) => setPrivacy(event.currentTarget.value as typeof privacy)} value={privacy}><option value="hybrid">Transcript + small preview frames</option><option value="text_only">Transcript and metadata only</option></select></label><p className="text-xs leading-5 text-[#666862]">Original files stay on your server. Reuses stored analysis; one bounded concept request when you press Generate. Creating selected edits makes their normal editing requests. No new speech is generated.</p>{coverage?.still_processing ? <p className="rounded-md bg-[#EFF6FA] p-2 text-xs leading-5 text-[#173F5F]">More files are still processing. Wait to include them, or generate ideas from the ready footage now.</p> : null}<button className={`${primary} w-full`} disabled={busy || generating || loadingSession || scopeUnavailable || !coverage || coverage.spoken_sources === 0} type="submit">{busy || generating ? <LoaderCircleIcon aria-hidden="true" className="size-4 animate-spin" /> : <SparklesIcon aria-hidden="true" className="size-4" />}{generating ? "Finding supported moments…" : reelKind === "bloopers" ? "Find blooper reel ideas" : "Generate reel ideas"}</button></div>
       </form>
       {error ? <p className="my-4 rounded-md border border-[#D8B4AA] bg-[#FFF7F4] p-3 text-sm text-[#A23B2A]" role="alert">{error}</p> : null}
       <section aria-label="Saved concept sessions" className="mt-6 flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-bold text-[#173F5F]">Concept options</h2>{history.length ? <label className="text-xs font-bold text-[#666862]">Saved sessions<select aria-label="Saved concept session" className={`${control} mt-1 max-w-80`} disabled={busy || generating} onChange={(event) => { setActiveId(event.currentTarget.value); setError(undefined); }} value={activeId ?? ""}>{history.map((item) => <option key={item.id} value={item.id}>{new Date(item.created_at).toLocaleString()} · {item.focus.slice(0,45) || (item.reel_kind === "bloopers" ? "Blooper ideas" : "Library ideas")} · {item.status}</option>)}</select></label> : null}</section>

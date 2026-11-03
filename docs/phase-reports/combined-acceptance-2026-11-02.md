@@ -31,7 +31,7 @@ These are host verifier/test changes; another application rebuild is not needed 
 1. In the server terminal, run the container-based core suite:
 
    ```bash
-   cd /home/gm/projects/gm-media-server
+   cd gm-media-server
    sudo ./scripts/verify-live-suite.sh
    ```
 

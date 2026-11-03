@@ -246,6 +246,7 @@ export type LibraryCollection = {
   readonly name: string;
   readonly description: string;
   readonly asset_count: number;
+  readonly cover_asset_id?: string | null;
   readonly created_at: string;
   readonly updated_at: string;
 };
@@ -1062,6 +1063,22 @@ export function setLibraryCollectionMembership(collectionId: string, assetId: st
     `library/collections/${encodeURIComponent(collectionId)}/assets/${encodeURIComponent(assetId)}`,
     { method: selected ? "PUT" : "DELETE", body: selected ? "{}" : undefined },
   );
+}
+
+export function updateLibraryFolder(collectionId: string, name: string, description: string) {
+  return apiRequest<LibraryCollection>(`library/collections/${encodeURIComponent(collectionId)}`, {
+    method: "PATCH", body: JSON.stringify({ name, description }),
+  });
+}
+
+export function deleteLibraryFolder(collectionId: string) {
+  return apiRequest<undefined>(`library/collections/${encodeURIComponent(collectionId)}`, { method: "DELETE" });
+}
+
+export function updateLibraryFolderMembers(collectionId: string, assetIds: readonly string[], action: "add" | "remove") {
+  return apiRequest<{ readonly updated: number }>(`library/collections/${encodeURIComponent(collectionId)}/assets/batch`, {
+    method: "POST", body: JSON.stringify({ asset_ids: assetIds, action }),
+  });
 }
 
 export function getMusicTracks() {

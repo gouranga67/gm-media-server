@@ -16,6 +16,7 @@ from app.schemas import (
     LibraryAssetUpdate,
     LibraryBatchUpdate,
     LibraryCollectionCreate,
+    LibraryCollectionBatch,
     LibraryCollectionResponse,
     ManagedLibraryAssetResponse,
 )
@@ -334,11 +335,19 @@ def list_collections() -> list[dict[str, Any]]:
             """
             SELECT library_collections.id, library_collections.name,
                    library_collections.description,
-                   COUNT(library_collection_assets.asset_id)::integer AS asset_count,
+                   COUNT(assets.id) FILTER (WHERE assets.library_status = 'active'
+                       AND assets.status = 'ready' AND asset_ingests.status = 'ready')::integer AS asset_count,
+                   (array_agg(assets.id ORDER BY library_collection_assets.created_at DESC, assets.id)
+                       FILTER (WHERE assets.library_status = 'active' AND assets.status = 'ready'
+                           AND asset_ingests.status = 'ready'
+                           AND COALESCE(asset_ingests.manifest #>> '{derived,thumbnail}', '') <> ''))[1]
+                       AS cover_asset_id,
                    library_collections.created_at, library_collections.updated_at
             FROM library_collections
             LEFT JOIN library_collection_assets
               ON library_collection_assets.collection_id = library_collections.id
+            LEFT JOIN assets ON assets.id = library_collection_assets.asset_id
+            LEFT JOIN asset_ingests ON asset_ingests.asset_id = assets.id
             GROUP BY library_collections.id
             ORDER BY lower(library_collections.name)
             """
@@ -367,6 +376,56 @@ def create_collection(payload: LibraryCollectionCreate) -> dict[str, Any]:
         raise HTTPException(status_code=409, detail="a collection with that name already exists") from error
     assert row is not None
     return row
+
+
+@router.patch("/collections/{collection_id}", response_model=LibraryCollectionResponse)
+def rename_collection(collection_id: UUID, payload: LibraryCollectionCreate) -> dict[str, Any]:
+    try:
+        with connection() as database:
+            row = database.execute(
+                "UPDATE library_collections SET name = %s, description = %s, updated_at = now() "
+                "WHERE id = %s RETURNING id, name, description, created_at, updated_at, "
+                "(SELECT COUNT(*) FROM library_collection_assets member JOIN assets ON assets.id = member.asset_id "
+                "JOIN asset_ingests ON asset_ingests.asset_id = assets.id "
+                "WHERE member.collection_id = library_collections.id AND assets.library_status = 'active' "
+                "AND assets.status = 'ready' AND asset_ingests.status = 'ready')::integer AS asset_count",
+                (payload.name, payload.description, collection_id),
+            ).fetchone()
+            if row is None:
+                raise HTTPException(status_code=404, detail="folder not found")
+    except UniqueViolation as error:
+        raise HTTPException(status_code=409, detail="a folder with that name already exists") from error
+    return row
+
+
+@router.post("/collections/{collection_id}/assets/batch")
+def update_collection_batch(collection_id: UUID, payload: LibraryCollectionBatch) -> dict[str, Any]:
+    """Change grouping atomically; originals, analysis and job references stay intact."""
+    with connection() as database:
+        folder = database.execute(
+            "SELECT id FROM library_collections WHERE id = %s FOR UPDATE", (collection_id,),
+        ).fetchone()
+        if folder is None:
+            raise HTTPException(status_code=404, detail="folder not found; refresh the library")
+        rows = database.execute(
+            "SELECT id FROM assets WHERE id = ANY(%s) AND status = 'ready' "
+            "ORDER BY id FOR UPDATE", (payload.asset_ids,),
+        ).fetchall()
+        if len(rows) != len(payload.asset_ids):
+            raise HTTPException(status_code=409, detail="some originals are unavailable; no folder changes were made")
+        if payload.action == "add":
+            database.execute(
+                "INSERT INTO library_collection_assets (collection_id, asset_id) "
+                "SELECT %s, id FROM assets WHERE id = ANY(%s) ON CONFLICT DO NOTHING",
+                (collection_id, payload.asset_ids),
+            )
+        else:
+            database.execute(
+                "DELETE FROM library_collection_assets WHERE collection_id = %s AND asset_id = ANY(%s)",
+                (collection_id, payload.asset_ids),
+            )
+        database.execute("UPDATE library_collections SET updated_at = now() WHERE id = %s", (collection_id,))
+    return {"updated": len(rows), "action": payload.action, "collection_id": collection_id}
 
 
 @router.put("/collections/{collection_id}/assets/{asset_id}", status_code=status.HTTP_204_NO_CONTENT)

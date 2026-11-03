@@ -432,6 +432,7 @@ class LibraryCollectionResponse(BaseModel):
     name: str
     description: str
     asset_count: int = Field(ge=0)
+    cover_asset_id: UUID | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -449,6 +450,20 @@ class LibraryCollectionCreate(BaseModel):
         if not normalized:
             raise ValueError("collection name cannot be blank")
         return normalized
+
+
+class LibraryCollectionBatch(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    asset_ids: list[UUID] = Field(min_length=1, max_length=500)
+    action: Literal["add", "remove"]
+
+    @field_validator("asset_ids")
+    @classmethod
+    def unique_assets(cls, value: list[UUID]) -> list[UUID]:
+        if len(value) != len(set(value)):
+            raise ValueError("select each original only once")
+        return value
 
 
 class LibraryAssetDetailResponse(BaseModel):

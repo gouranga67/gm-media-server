@@ -1,6 +1,6 @@
 # GM Studio hands on test checklist
 
-Updated: 2026-11-02 (Australia/Brisbane).
+Updated: 2026-11-03 (Australia/Brisbane).
 
 Use this checklist to judge whether the deployed tools make useful reels. A successful render alone is not a pass: listen, watch and compare against the raw footage. Build `84b96419` is deployed; the [combined technical checkpoint](phase-reports/combined-acceptance-2026-11-02.md) records 536 passing backend tests, eight source gates, eight read-only live checks and a zero-AI NVENC fixture. The container-based core suite and hands-on acceptance remain pending. Start with the eight checks below; the later tables are a reference, not a requirement to test every control in one sitting.
 
@@ -63,6 +63,8 @@ For every problem, record the job link, preview version, exact reel timestamp, b
 
 ## Library and uploads
 
+The [folder-first library increment](phase-reports/library-folders-2026-11-03.md) is implemented in source and needs deployment. Existing collections become flat folders; nested folders and assisted filing are later work. Check the five deployment-acceptance steps in that report before reorganising a large batch.
+
 | ID | Test | Pass when |
 | --- | --- | --- |
 | L1 | Upload a mixed batch directly to Library | Files become available without creating editing jobs. Processing and failures are visible. |
@@ -76,6 +78,10 @@ For every problem, record the job link, preview version, exact reel timestamp, b
 | L9 | Mark a source range Avoid | Fresh concepts/plans avoid that range. An older frozen edit remains available. |
 | L10 | Move one disposable test source to Trash, then restore it | It disappears from new-job selection, restores correctly and does not break an existing edit. Trash does not reclaim its file storage. |
 | L11 | Review exact duplicates | The chosen canonical record persists. If testing storage cleanup, use only an intentionally duplicated test file and confirm referenced edits still play. |
+| L12 | Create a folder and add several selected videos/photos | Submission is explicit, membership persists and the originals still appear in All media. One item can belong to several folders. |
+| L13 | Remove a member, rename a folder, then remove the test folder | Only the intended grouping changes; media, other memberships and existing edits remain. Removing a folder requires confirmation. |
+| L14 | Change folder, filters and Grid/List, leave and return | The browsing location and display return without replaying selection. Search results remain inside the selected folder. |
+| L15 | Find reel ideas from a folder | A fresh concept brief opens with that folder selected. Opening the page makes no generation request. |
 
 ## Revisions and precise editing
 

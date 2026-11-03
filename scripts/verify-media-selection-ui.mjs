@@ -25,6 +25,7 @@ let lessonProposed = false, labFixture = null;
 let assemblySettings, assemblyError, assemblyLocked, profiles, previewFixture;
 function assemblyPreview() { return {ready: !assemblyError, locked: assemblyLocked, error:assemblyError, settings:assemblySettings, decision:assemblyError ? null : {recipe:assemblySettings.assembly_mode === "auto" ? "talking_head" : assemblySettings.assembly_mode,edit_style:assemblySettings.edit_style,purpose:assemblySettings.reel_intent === "auto" ? "story" : assemblySettings.reel_intent,label:"Speech with supporting pictures",reason:"Keep recorded speech continuous.",hosted_model_calls:0}}; }
 let publishingFixture, alternativeFailure, durationFixture, durationFailure;
+let folderList = [], folderMembers = new Map(), folderFailure = false;
 let creativeImportAttempts = new Map();
 URL.createObjectURL = () => "blob:synthetic-preview";
 URL.revokeObjectURL = () => {};
@@ -156,9 +157,29 @@ globalThis.fetch = async (url, options = {}) => {
   else if (/^library\/organization\/[^/?]+$/.test(route)) payload=organizationHistory.find((item) => item.id === route.split("/")[2]);
   else if (route.startsWith("library/assets?")) {
     const params = new URLSearchParams(route.split("?")[1]);
-    payload = params.get("offset") === "0" ? managedAssets : [];
+    payload = params.get("offset") === "0" ? managedAssets.filter((asset) => !params.get("collection_id") || folderMembers.get(params.get("collection_id"))?.has(asset.id)) : [];
   }
-  else if (route === "library/collections") payload = [];
+  else if (route === "library/collections") {
+    if (options.method === "POST") { const folder={id:crypto.randomUUID(),...body,asset_count:0}; folderList.push(folder); folderMembers.set(folder.id,new Set()); payload=folder; }
+    else payload=folderList.map(folder=>({...folder,asset_count:managedAssets.filter(asset=>asset.library_status==="active" && folderMembers.get(folder.id)?.has(asset.id)).length}));
+  }
+  else if (/^library\/collections\/[^/]+\/assets\/batch$/.test(route)) {
+    if(folderFailure) return {ok:false,status:409,json:async()=>({detail:"Refresh this folder; no changes were made"})};
+    const id=route.split("/")[2], members=folderMembers.get(id) ?? new Set();
+    for(const asset of body.asset_ids) {if(body.action==="add")members.add(asset);else members.delete(asset);}
+    folderMembers.set(id,members);
+    for(const asset of managedAssets) asset.collection_count=[...folderMembers.values()].filter(ids=>ids.has(asset.id)).length;
+    payload={updated:body.asset_ids.length};
+  }
+  else if (/^library\/collections\/[^/?]+$/.test(route)) {
+    const id=route.split("/")[2], folder=folderList.find(item=>item.id===id);
+    if(options.method==="PATCH") {Object.assign(folder,body);payload=folder;}
+    if(options.method==="DELETE") {
+      folderList=folderList.filter(item=>item.id!==id);folderMembers.delete(id);
+      for(const asset of managedAssets)asset.collection_count=[...folderMembers.values()].filter(ids=>ids.has(asset.id)).length;
+      payload=undefined;
+    }
+  }
   else if (route.startsWith("catalog/search?")) payload = { results: [{ asset_id: "broll", segment_kind: "visual", text: "Cream on the shelf", rank: 1 }] };
   else if (route === "library/assets/batch") {
     if (batchFailure) return { ok: false, status: 409, json: async () => ({ detail: "Refresh the library before changing these files" }) };
@@ -172,7 +193,7 @@ globalThis.fetch = async (url, options = {}) => {
     }
     payload = { updated: body.asset_ids.length, action: body.action };
   }
-  else if (/^library\/assets\/[^/?]+$/.test(route)) payload = { asset: managedAssets.find((item) => item.id === route.split("/").at(-1)), collections: [], evidence: [], visual_frames: [] };
+  else if (/^library\/assets\/[^/?]+$/.test(route)) payload = { asset: managedAssets.find((item) => item.id === route.split("/").at(-1)), collections: folderList.filter(folder=>folderMembers.get(folder.id)?.has(route.split("/").at(-1))), evidence: [], visual_frames: [] };
   else if (route === "projects") payload = { ...body, id: body.id };
   else if (/^projects\/[^/]+\/jobs$/.test(route)) { assemblySettings={assembly_mode:body.assembly_mode ?? body.recipe,pacing_mode:body.pacing_mode ?? "manual",edit_style:body.edit_style,reel_intent:body.reel_intent}; payload = { ...body, id: jobId }; }
   else if (route === `jobs/${jobId}/duration`) {
@@ -207,6 +228,7 @@ beforeEach(() => {
   window.history.replaceState(null, "", "/jobs/new");
   calls = []; transfers = []; navigation = []; readyEvents = 0; analysisStatus = "ready"; batchFailure = false; conceptHistory = []; renderConceptFailure = false; conceptCounter = 0;
   organizationHistory = []; organizationFailure = false;
+  folderList=[];folderMembers=new Map();folderFailure=false;
   creativeImportAttempts = new Map();
   alternativeFailure=false;
   durationFailure=false;
@@ -362,6 +384,8 @@ test("blooper purpose is separate from format and waits for explicit job submiss
 });
 async function mountBrowser() {
   await act(async () => root.render(React.createElement(MediaLibrary)));
+  await waitFor(() => !button("Browse all media").disabled);
+  await click(button("Browse all media"));
   await waitFor(() => document.querySelector('input[aria-label="Select Product introduction"]'));
 }
 
@@ -413,7 +437,7 @@ test("Trash requires an explicit click and confirmation, preserves used original
   await click(button("Confirm move to Trash"));
   await waitFor(() => !document.querySelector('input[aria-label="Select Product introduction"]'));
   assert.equal(managedAssets.find((item) => item.id === "talk").job_references, 2);
-  await click(button("Trash (1)"));
+  await click(button("Trash"));
   await click(document.querySelector('input[aria-label="Select Product introduction"]'));
   await click(button("Restore selected"));
   await waitFor(() => managedAssets.find((item) => item.id === "talk").library_status === "active");
@@ -569,7 +593,7 @@ test("a saved blooper session can honestly decline weak evidence without creatin
 
 test("photos can be categorized and filtered without assigning a video footage role", async () => {
   managedAssets.push({ ...managedAssets[0],id:"review-photo",mime_type:"image/png",display_name:"r3.png",source_name:"r3.png",media_role:"auto" });
-  await act(async () => root.render(React.createElement(MediaLibrary)));
+  await mountBrowser();
   await waitFor(() => document.querySelector('input[aria-label="Select r3.png"]'));
   await click(button("Photos"));
   await click(document.querySelector('input[aria-label="Select r3.png"]'));
@@ -584,7 +608,7 @@ test("photos can be categorized and filtered without assigning a video footage r
 
 test("auto-sort suggestions require explicit application and can be edited before saving", async () => {
   managedAssets.push({ ...managedAssets[0],id:"review-photo",mime_type:"image/png",display_name:"r3.png",source_name:"r3.png",media_role:"auto" });
-  await act(async () => root.render(React.createElement(MediaLibrary)));
+  await mountBrowser();
   await waitFor(() => document.querySelector('input[aria-label="Select r3.png"]'));
   await click(document.querySelector('input[aria-label="Select r3.png"]'));
   await click(button("Auto-sort selected"));
@@ -611,7 +635,7 @@ test("auto-sort suggestions require explicit application and can be edited befor
 });
 
 test("failed auto-sort application preserves the review and original names", async () => {
-  await act(async () => root.render(React.createElement(MediaLibrary)));
+  await mountBrowser();
   await waitFor(() => document.querySelector('input[aria-label="Select VID_0003.mp4"]'));
   await click(document.querySelector('input[aria-label="Select VID_0003.mp4"]'));
   await click(button("Auto-sort selected"));
@@ -1147,4 +1171,121 @@ test("AI music approval is explicit per file and is never sent for effects", asy
   await waitFor(() => creativeImportAttempts.get("effect.ogg") === 1);
   const effect = new URLSearchParams(calls.filter(c => c.route.startsWith("creative-assets/import?")).at(-1).route.split("?")[1]);
   assert.equal(effect.get("ai_generated_music"), "false");
+});
+
+function setupFolders() {
+  folderList=[{id:serverId,name:"Creams",description:"Product story",asset_count:1},{id:jobId,name:"Campaign",description:"",asset_count:0}];
+  folderMembers=new Map([[serverId,new Set(["talk"])],[jobId,new Set()]]);
+  managedAssets[0].collection_count=1;
+}
+async function mountFolderHome() {
+  await act(async()=>root.render(React.createElement(MediaLibrary)));
+  await waitFor(()=>document.querySelector('button[aria-label="Open folder Creams"]'));
+}
+async function openCreams() {
+  await click(document.querySelector('button[aria-label="Open folder Creams"]'));
+  await waitFor(()=>document.querySelector('input[aria-label="Select Product introduction"]'));
+}
+
+test("library opens with folder cards and opening a folder scopes search without writing",async()=>{
+  setupFolders(); await mountFolderHome();
+  assert.equal(document.querySelector('input[aria-label="Select Product introduction"]'),null);
+  await openCreams();
+  assert.equal(document.querySelector('input[aria-label="Select Cream close-up"]'),null);
+  await type('input[type="search"]',"shelf");
+  await waitFor(()=>calls.some(call=>call.route.startsWith("catalog/search?")));
+  assert.equal(document.querySelector('input[aria-label="Select Cream close-up"]'),null,"global search evidence must not escape a folder");
+  assert.equal(calls.filter(call=>call.method!=="GET").length,0);
+});
+
+test("bulk folder membership preserves originals, supports photos and removes only that grouping",async()=>{
+  setupFolders(); managedAssets[1].mime_type="image/png";
+  await mountBrowser();
+  await click(document.querySelector('input[aria-label="Select Cream close-up"]'));
+  await chooseOption('#folder-destination',serverId);
+  assert.equal(posts(`library/collections/${serverId}/assets/batch`).length,0);
+  await click(button("Add to folder"));
+  await waitFor(()=>folderMembers.get(serverId).has("broll"));
+  assert.equal(managedAssets[1].source_name,"VID_0002.mp4");
+  assert.equal(managedAssets[1].library_status,"active");
+  await click(button("Folders"));await openCreams();
+  await click(document.querySelector('input[aria-label="Select Cream close-up"]'));
+  await click(button("Remove from this folder"));
+  await waitFor(()=>!folderMembers.get(serverId).has("broll"));
+  assert.ok(folderMembers.get(serverId).has("talk"));
+  assert.equal(managedAssets.length,3);
+  assert.equal(posts("library/assets/batch").length,0);
+  assert.equal(posts("projects").length,0);
+});
+
+test("failed folder action keeps selection and server error for retry",async()=>{
+  setupFolders();await mountBrowser();
+  await click(document.querySelector('input[aria-label="Select Cream close-up"]'));
+  await chooseOption('#folder-destination',serverId);folderFailure=true;
+  await click(button("Add to folder"));
+  await waitFor(()=>document.querySelector('[role="alert"]')?.textContent.includes("Refresh this folder"));
+  assert.equal(document.querySelector('input[aria-label="Select Cream close-up"]').checked,true);
+  assert.equal(folderMembers.get(serverId).has("broll"),false);
+});
+
+test("folder create and rename require submission; deleting grouping leaves sources and other folder intact",async()=>{
+  setupFolders();await mountFolderHome();
+  await click(button("New folder"));
+  await type('input[placeholder="e.g. Castor oil cream"]',"Soap");
+  assert.equal(posts("library/collections").length,0);
+  await click(button("Create folder"));
+  await waitFor(()=>folderList.some(folder=>folder.name==="Soap"));
+  assert.equal(managedAssets.length,3);
+  await click(button("Folders"));await openCreams();
+  await click([...document.querySelectorAll("summary")].find(item=>item.textContent==="Folder options"));
+  await click(button("Rename folder"));await type('input[placeholder="e.g. Castor oil cream"]',"Cream demonstrations");
+  assert.equal(calls.some(call=>call.method==="PATCH"),false);
+  await click(button("Save folder name"));
+  await waitFor(()=>folderList[0].name==="Cream demonstrations");
+  await click(button("Remove folder"));
+  assert.equal(calls.some(call=>call.method==="DELETE"),false);
+  await click(button("Confirm remove folder"));
+  await waitFor(()=>!folderList.some(folder=>folder.id===serverId));
+  assert.equal(managedAssets.length,3);
+  assert.equal(managedAssets[0].job_references,2);
+  assert.ok(folderList.some(folder=>folder.id===jobId));
+  assert.equal(managedAssets[0].library_status,"active");
+});
+
+test("folder, layout and filters return after leaving the library without replaying a selection",async()=>{
+  setupFolders();await mountFolderHome();await openCreams();
+  await click(document.querySelector('button[aria-label="List view"]'));
+  await click(document.querySelector('input[aria-label="Select Product introduction"]'));
+  await type('input[type="search"]',"Product");
+  await act(async()=>root.unmount());root=createRoot(document.getElementById("root"));
+  await act(async()=>root.render(React.createElement(MediaLibrary)));
+  await waitFor(()=>document.querySelector('input[aria-label="Select Product introduction"]'));
+  assert.equal(document.querySelector('input[type="search"]').value,"Product");
+  assert.equal(document.querySelector('button[aria-label="List view"]').getAttribute("aria-pressed"),"true");
+  assert.equal(document.querySelector('input[aria-label="Select Product introduction"]').checked,false);
+  assert.match(document.querySelector('[aria-label="Library breadcrumb"]').textContent,/Creams/);
+  assert.equal(calls.filter(call=>call.method!=="GET").length,0);
+});
+
+test("folder concept shortcut preselects scope without submitting AI or opening unrelated ideas",async()=>{
+  setupFolders();await mountFolderHome();await openCreams();
+  assert.equal(document.querySelector('a[href^="/concepts?collection="]').getAttribute("href"),`/concepts?collection=${serverId}`);
+  await act(async()=>root.unmount());root=createRoot(document.getElementById("root"));
+  window.history.replaceState(null,"",`/concepts?collection=${serverId}`);
+  conceptHistory=[conceptSession()];
+  await mountConcepts();
+  assert.equal(document.querySelector('select[aria-label="Concept footage scope"]').value,serverId);
+  assert.equal(document.querySelector('input[aria-label="Choose Recorded story 1"]'),null);
+  assert.equal(posts("concepts").length,0);
+});
+
+test("missing folder shortcut asks for a scope instead of silently generating from the whole library",async()=>{
+  window.history.replaceState(null,"",`/concepts?collection=${serverId}`);
+  await act(async()=>root.render(React.createElement(ConceptDesk)));
+  await waitFor(()=>document.querySelector('[role="alert"]')?.textContent.includes("folder is unavailable"));
+  assert.equal(button("Generate reel ideas").disabled,true);
+  assert.equal(posts("concepts").length,0);
+  await chooseOption('select[aria-label="Concept footage scope"]',"");
+  assert.equal(button("Generate reel ideas").disabled,false);
+  assert.equal(posts("concepts").length,0);
 });

@@ -608,3 +608,7 @@ Proposal discovery still uses four fixed local note-pattern templates; it is not
 ### Combined technical checkpoint — 2026-11-02
 
 Build `84b96419` is deployed and the migration-040 learning contract is available. Combined local regressions, read-only live readiness, desktop/phone-width page inspection and an isolated zero-AI NVENC fixture passed. Verification helpers now preserve teaching feedback and isolate render fixtures from working edits. See the [acceptance report](phase-reports/combined-acceptance-2026-11-02.md) for counts, limits and the remaining container-core, real-footage, phone, recovery and pilot checks. Those checks remain pending; no learning lesson or publication was promoted during this pass.
+
+### Folder-first library, increment 1 — 2026-11-03
+
+Source implemented; deployment and real-library acceptance pending. Existing collections now appear as flat folders with cover cards, sidebar navigation, Grid/List browsing, remembered per-tab location/filters and explicit bulk membership controls. Folder renaming/removal changes grouping only. A folder shortcut opens scoped concept discovery without generating ideas automatically. No migration, source reanalysis or hosted call is added. See the [implementation and acceptance report](phase-reports/library-folders-2026-11-03.md). Next increments are assisted Inbox organisation, then browsable useful moments; nesting, drag-and-drop and full server-side metadata pagination are not included in this checkpoint.
