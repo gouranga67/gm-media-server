@@ -176,9 +176,11 @@ def library_intake_information() -> dict[str, Any]:
     with connection() as database:
         row = database.execute("SELECT to_regclass('library_intakes') IS NOT NULL AS ready").fetchone()
         folders = database.execute("SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version='047_organization_folders.sql') AS ready").fetchone()
+        nesting = database.execute("SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version='048_nested_library_folders.sql') AS ready").fetchone()
     return {"version": 1, "schema_ready": bool(row and row["ready"]),
         "durable_registration": True, "server_pagination": True, "automatic_hosted_model_calls": 0,
-        "folder_suggestions_schema_ready": bool(folders and folders["ready"])}
+        "folder_suggestions_schema_ready": bool(folders and folders["ready"]),
+        "nested_folders_schema_ready": bool(nesting and nesting["ready"]), "folder_max_depth": 4}
 
 
 @app.get("/api/v1/system/learning-evaluation")

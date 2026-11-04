@@ -460,11 +460,13 @@ class LibraryCollectionResponse(BaseModel):
     description: str
     asset_count: int = Field(ge=0)
     cover_asset_id: UUID | None = None
+    parent_id: UUID | None = None
+    child_count: int = Field(default=0, ge=0)
     created_at: datetime
     updated_at: datetime
 
 
-class LibraryCollectionCreate(BaseModel):
+class LibraryCollectionRename(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1, max_length=120)
@@ -477,6 +479,16 @@ class LibraryCollectionCreate(BaseModel):
         if not normalized:
             raise ValueError("collection name cannot be blank")
         return normalized
+
+
+class LibraryCollectionCreate(LibraryCollectionRename):
+    parent_id: UUID | None = None
+
+
+class LibraryCollectionMove(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    parent_id: UUID | None
+    expected_parent_id: UUID | None
 
 
 class LibraryCollectionBatch(BaseModel):

@@ -87,6 +87,7 @@ const { SourceRanges } = require(path.join(repo, "apps/web/app/_components/sourc
 const { SubtitleEditor } = require(path.join(repo, "apps/web/app/_components/subtitle-editor.tsx"));
 const { splitSubtitle, mergeSubtitles } = require(path.join(repo, "apps/web/lib/subtitle-editing.ts"));
 const { LibraryUpload } = require(path.join(repo, "apps/web/app/_components/library-upload.tsx"));
+const { folderTrail, folderTree, folderLabel, folderDestinations } = require(path.join(repo, "apps/web/lib/library-folder-tree.ts"));
 
 let intakeItems = [];
 let caseSaveFailure=false;
@@ -222,7 +223,11 @@ globalThis.fetch = async (url, options = {}) => {
   }
   else if (route === "library/collections") {
     if (options.method === "POST") { const folder={id:crypto.randomUUID(),...body,asset_count:0}; folderList.push(folder); folderMembers.set(folder.id,new Set()); payload=folder; }
-    else payload=folderList.map(folder=>({...folder,asset_count:managedAssets.filter(asset=>asset.library_status==="active" && folderMembers.get(folder.id)?.has(asset.id)).length}));
+    else payload=folderList.map(folder=>({...folder,child_count:folderList.filter(child=>child.parent_id===folder.id).length,asset_count:managedAssets.filter(asset=>asset.library_status==="active" && folderMembers.get(folder.id)?.has(asset.id)).length}));
+  }
+  else if (/^library\/collections\/[^/]+\/move$/.test(route)) {
+    if(folderFailure)return {ok:false,status:409,json:async()=>({detail:"This folder changed; refresh before moving"})};
+    const folder=folderList.find(item=>item.id===route.split('/')[2]);folder.parent_id=body.parent_id;payload=folder;
   }
   else if (/^library\/collections\/[^/]+\/assets\/batch$/.test(route)) {
     if(folderFailure) return {ok:false,status:409,json:async()=>({detail:"Refresh this folder; no changes were made"})};
@@ -1900,4 +1905,76 @@ test('new build refresh resets acceptance confirmation without carrying old obse
   assert.equal(document.querySelector('[aria-label="Acceptance observation note"]').value,'');
   assert.equal(document.querySelector('[aria-label="Confirm actual observation"]').checked,false);
   assert.equal(posts('release/acceptance').length,0);
+});
+
+test("nested folder paths, order and destination limits stay bounded", () => {
+  const folders=[{id:'a',name:'Products'}, {id:'b',name:'Cream',parent_id:'a'},
+    {id:'c',name:'B-roll',parent_id:'b'}, {id:'d',name:'Details',parent_id:'c'},
+    {id:'e',name:'Other'}, {id:'f',name:'Reviews',parent_id:'e'}];
+  assert.equal(folderLabel(folders,'d'),'Products / Cream / B-roll / Details');
+  assert.deepEqual(folderTree(folders).map(({folder})=>folder.id),['e','f','a','b','c','d']);
+  assert.equal(folderDestinations(folders).some(folder=>folder.id==='d'),false);
+  assert.deepEqual(folderDestinations(folders,'e').map(folder=>folder.id),['a','b']);
+  assert.equal(folderDestinations(folders,'a').some(folder=>['a','b','c','d'].includes(folder.id)),false);
+  const malformed=[{id:'x',name:'X',parent_id:'y'},{id:'y',name:'Y',parent_id:'x'},{id:'orphan',name:'Orphan',parent_id:'missing'}];
+  assert.equal(folderTree(malformed).length,3);assert.equal(folderTrail(malformed,'x').length,2);
+});
+
+function setupNestedFolders() {
+  setupFolders();folderList.push({id:'55555555-5555-4555-8555-555555555555',name:'Cream B-roll',parent_id:serverId,description:'',asset_count:1});
+  folderMembers.set(folderList[2].id,new Set(['broll']));
+}
+
+test("folder home shows top levels; subfolder cards, breadcrumbs and uploads use exact paths",async()=>{
+  setupNestedFolders();await mountFolderHome();
+  assert.equal(document.querySelector('button[aria-label="Open folder Cream B-roll"]'),null);
+  await openCreams();
+  await click(document.querySelector('button[aria-label="Open folder Cream B-roll"]'));
+  await waitFor(()=>document.querySelector('input[aria-label="Select Cream close-up"]'));
+  assert.equal(document.querySelector('input[aria-label="Select Product introduction"]'),null);
+  const breadcrumb=document.querySelector('[aria-label="Library breadcrumb"]');
+  assert.match(breadcrumb.textContent,/LibraryCreamsCream B-roll/);
+  assert.match(document.querySelector('select[aria-label="Upload destination folder"]').textContent,/Creams \/ Cream B-roll/);
+  await click([...breadcrumb.querySelectorAll('button')].find(item=>item.textContent==='Creams'));
+  await waitFor(()=>document.querySelector('input[aria-label="Select Product introduction"]'));
+  assert.equal(calls.filter(call=>call.method!=='GET').length,0);
+});
+
+test("creating a subfolder saves its parent only after explicit submission",async()=>{
+  setupNestedFolders();await mountFolderHome();await openCreams();
+  await click(button('Create a subfolder'));
+  assert.equal(document.querySelector('select[aria-label="Parent folder"]').value,serverId);
+  await type('input[placeholder="e.g. Castor oil cream"]','Cream reviews');
+  assert.equal(posts('library/collections').length,0);
+  await click(button('Create folder'));await waitFor(()=>posts('library/collections').length===1);
+  assert.equal(posts('library/collections')[0].body.parent_id,serverId);
+  await waitFor(()=>document.querySelector('[aria-label="Library breadcrumb"]').textContent.includes('Cream reviews'));
+  assert.equal(document.querySelector('input[aria-label="Select Product introduction"]'),null);
+});
+
+test("moving a folder excludes descendants and preserves failed form choices for retry",async()=>{
+  setupNestedFolders();await mountFolderHome();await openCreams();
+  await click(button('Move folder'));
+  const options=[...document.querySelector('select[aria-label="Parent folder"]').options];
+  assert.deepEqual(options.map(option=>option.value),['',jobId]);
+  await chooseOption('select[aria-label="Parent folder"]',jobId);
+  assert.equal(posts(`library/collections/${serverId}/move`).length,0);
+  folderFailure=true;await click(document.querySelector('form button[type="submit"]'));
+  await waitFor(()=>document.querySelector('[role="alert"]')?.textContent.includes('refresh before moving'));
+  assert.equal(document.querySelector('select[aria-label="Parent folder"]').value,jobId);
+  assert.equal(folderList[0].parent_id,undefined);
+  folderFailure=false;await click(document.querySelector('form button[type="submit"]'));
+  await waitFor(()=>folderList[0].parent_id===jobId);
+  const request=posts(`library/collections/${serverId}/move`).at(-1);
+  assert.deepEqual(request.body,{parent_id:jobId,expected_parent_id:null});
+  await waitFor(()=>document.querySelector('[aria-label="Library breadcrumb"]').textContent.includes('CampaignCreams'));
+  assert.equal(folderList[2].parent_id,serverId);assert.equal(folderMembers.get(serverId).has('talk'),true);
+});
+
+test("removing a parent folder is blocked while its subfolders remain",async()=>{
+  setupNestedFolders();await mountFolderHome();await openCreams();
+  await click(button('Remove folder'));
+  assert.equal(button('Confirm remove folder').disabled,true);
+  assert.match(document.querySelector('[aria-label="Folder settings"]').textContent,/subfolders first/);
+  assert.equal(calls.filter(call=>call.method==='DELETE').length,0);
 });

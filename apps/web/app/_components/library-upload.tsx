@@ -1,5 +1,7 @@
 "use client";
 
+import { folderLabel } from "@/lib/library-folder-tree";
+
 import { useEffect, useRef, useState } from "react";
 import type { Upload } from "tus-js-client";
 import { CheckIcon, LoaderCircleIcon, PauseIcon, PlayIcon, UploadCloudIcon, XIcon } from "lucide-react";
@@ -231,7 +233,7 @@ export function LibraryUpload({ onReady, folders = [], destination = "" }: {
         </button>
       </div>
       <div className="grid gap-3 sm:grid-cols-3">
-        <label className="text-xs font-bold text-[#666862]">Destination folder<select aria-label="Upload destination folder" className="mt-1 min-h-11 w-full rounded-md border border-[#D7D9D3] bg-white px-3 text-sm text-[#20211F]" disabled={starting} onChange={(event) => setFolderId(event.currentTarget.value)} value={folderId}><option value="">Not in folders</option>{folders.map((folder) => <option key={folder.id} value={folder.id}>{folder.name}</option>)}</select></label>
+        <label className="text-xs font-bold text-[#666862]">Destination folder<select aria-label="Upload destination folder" className="mt-1 min-h-11 w-full rounded-md border border-[#D7D9D3] bg-white px-3 text-sm text-[#20211F]" disabled={starting} onChange={(event) => setFolderId(event.currentTarget.value)} value={folderId}><option value="">Not in folders</option>{folders.map((folder) => <option key={folder.id} value={folder.id}>{folderLabel(folders, folder.id)}</option>)}</select></label>
         <label className="text-xs font-bold text-[#666862]">Name these files <span className="font-normal">(optional)</span><input aria-label="Upload file name prefix" className="mt-1 min-h-11 w-full rounded-md border border-[#D7D9D3] px-3 text-sm text-[#20211F]" disabled={starting || hasProject} maxLength={230} onChange={(event) => setNamePrefix(event.currentTarget.value)} placeholder="e.g. Cream close-up → Cream close-up 001" value={namePrefix} /></label>
         <label className="text-xs font-bold text-[#666862]">Footage role<select aria-label="Upload footage role" className="mt-1 min-h-11 w-full rounded-md border border-[#D7D9D3] bg-white px-3 text-sm text-[#20211F]" disabled={starting || hasProject} onChange={(event) => setMediaRole(event.currentTarget.value as MediaRole)} value={mediaRole}><option value="auto">Unsorted video</option><option value="talking">Talking footage</option><option value="broll">B-roll</option></select></label>
       </div>

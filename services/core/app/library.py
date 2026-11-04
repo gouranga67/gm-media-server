@@ -16,6 +16,8 @@ from app.schemas import (
     LibraryAssetUpdate,
     LibraryBatchUpdate,
     LibraryCollectionCreate,
+    LibraryCollectionRename,
+    LibraryCollectionMove,
     LibraryCollectionBatch,
     LibraryCollectionResponse,
     ManagedLibraryAssetResponse,
@@ -219,6 +221,9 @@ def get_library_asset_detail(asset_id: UUID) -> dict[str, Any]:
             """
             SELECT library_collections.id, library_collections.name,
                    library_collections.description,
+                   library_collections.parent_id,
+                   (SELECT count(*)::integer FROM library_collections child
+                     WHERE child.parent_id=library_collections.id) AS child_count,
                    COUNT(all_assets.asset_id)::integer AS asset_count,
                    library_collections.created_at, library_collections.updated_at
             FROM library_collections
@@ -338,6 +343,9 @@ def list_collections() -> list[dict[str, Any]]:
             """
             SELECT library_collections.id, library_collections.name,
                    library_collections.description,
+                   library_collections.parent_id,
+                   (SELECT count(*)::integer FROM library_collections child
+                     WHERE child.parent_id=library_collections.id) AS child_count,
                    COUNT(assets.id) FILTER (WHERE assets.library_status = 'active'
                        AND assets.status = 'ready' AND asset_ingests.status = 'ready')::integer AS asset_count,
                    (array_agg(assets.id ORDER BY library_collection_assets.created_at DESC, assets.id)
@@ -364,30 +372,33 @@ def list_collections() -> list[dict[str, Any]]:
     status_code=status.HTTP_201_CREATED,
 )
 def create_collection(payload: LibraryCollectionCreate) -> dict[str, Any]:
+    from app.library_folder_tree import locked_tree, validate_parent
     try:
         with connection() as database:
+            validate_parent(locked_tree(database), None, payload.parent_id)
             row = database.execute(
                 """
-                INSERT INTO library_collections (name, description)
-                VALUES (%s, %s)
-                RETURNING id, name, description, 0::integer AS asset_count,
+                INSERT INTO library_collections (name, description, parent_id)
+                VALUES (%s, %s, %s)
+                RETURNING id, name, description, parent_id, 0::integer AS asset_count,
                           created_at, updated_at
                 """,
-                (payload.name, payload.description),
+                (payload.name, payload.description, payload.parent_id),
             ).fetchone()
     except UniqueViolation as error:
-        raise HTTPException(status_code=409, detail="a collection with that name already exists") from error
+        raise HTTPException(status_code=409, detail="a folder with that name already exists in the library; choose a unique name") from error
     assert row is not None
     return row
 
 
 @router.patch("/collections/{collection_id}", response_model=LibraryCollectionResponse)
-def rename_collection(collection_id: UUID, payload: LibraryCollectionCreate) -> dict[str, Any]:
+def rename_collection(collection_id: UUID, payload: LibraryCollectionRename) -> dict[str, Any]:
     try:
         with connection() as database:
             row = database.execute(
                 "UPDATE library_collections SET name = %s, description = %s, updated_at = now() "
-                "WHERE id = %s RETURNING id, name, description, created_at, updated_at, "
+                "WHERE id = %s RETURNING id, name, description, parent_id, created_at, updated_at, "
+                "(SELECT count(*)::integer FROM library_collections child WHERE child.parent_id=library_collections.id) AS child_count, "
                 "(SELECT COUNT(*) FROM library_collection_assets member JOIN assets ON assets.id = member.asset_id "
                 "JOIN asset_ingests ON asset_ingests.asset_id = assets.id "
                 "WHERE member.collection_id = library_collections.id AND assets.library_status = 'active' "
@@ -398,6 +409,25 @@ def rename_collection(collection_id: UUID, payload: LibraryCollectionCreate) -> 
                 raise HTTPException(status_code=404, detail="folder not found")
     except UniqueViolation as error:
         raise HTTPException(status_code=409, detail="a folder with that name already exists") from error
+    return row
+
+
+@router.post("/collections/{collection_id}/move", response_model=LibraryCollectionResponse)
+def move_collection(collection_id: UUID, payload: LibraryCollectionMove) -> dict[str, Any]:
+    from app.library_folder_tree import locked_tree, validate_parent
+    with connection() as database:
+        rows = locked_tree(database)
+        validate_parent(rows, collection_id, payload.parent_id)
+        current = next(row for row in rows if row['id'] == collection_id)
+        if current['parent_id'] != payload.expected_parent_id:
+            raise HTTPException(status_code=409, detail="this folder was moved elsewhere; refresh the library before moving it")
+        row = database.execute("""UPDATE library_collections SET parent_id=%s, updated_at=now()
+            WHERE id=%s RETURNING id,name,description,parent_id,created_at,updated_at,
+            (SELECT count(*)::integer FROM library_collections child WHERE child.parent_id=library_collections.id) AS child_count,
+            (SELECT count(*)::integer FROM library_collection_assets member JOIN assets ON assets.id=member.asset_id
+             JOIN asset_ingests ON asset_ingests.asset_id=assets.id WHERE member.collection_id=library_collections.id
+             AND assets.library_status='active' AND assets.status='ready' AND asset_ingests.status='ready') AS asset_count""",
+            (payload.parent_id, collection_id)).fetchone()
     return row
 
 
@@ -474,7 +504,11 @@ def remove_collection_asset(collection_id: UUID, asset_id: UUID) -> Response:
 
 @router.delete("/collections/{collection_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_collection(collection_id: UUID) -> Response:
+    from app.library_folder_tree import locked_tree
     with connection() as database:
+        rows = locked_tree(database)
+        if any(row['parent_id'] == collection_id for row in rows):
+            raise HTTPException(status_code=409, detail="move or remove this folder's subfolders first; nothing was removed")
         result = database.execute("DELETE FROM library_collections WHERE id = %s", (collection_id,))
     if result.rowcount == 0:
         raise HTTPException(status_code=404, detail="collection not found")

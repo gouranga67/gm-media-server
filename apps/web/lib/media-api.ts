@@ -247,6 +247,8 @@ export type LibraryCollection = {
   readonly description: string;
   readonly asset_count: number;
   readonly cover_asset_id?: string | null;
+  readonly parent_id?: string | null;
+  readonly child_count?: number;
   readonly created_at: string;
   readonly updated_at: string;
 };
@@ -1092,10 +1094,10 @@ export function getLibraryCollections() {
   return apiRequest<readonly LibraryCollection[]>("library/collections", { cache: "no-store" });
 }
 
-export function createLibraryCollection(name: string, description = "") {
+export function createLibraryCollection(name: string, description = "", parentId: string | null = null) {
   return apiRequest<LibraryCollection>("library/collections", {
     method: "POST",
-    body: JSON.stringify({ name, description }),
+    body: JSON.stringify({ name, description, parent_id: parentId }),
   });
 }
 
@@ -1114,6 +1116,12 @@ export function updateLibraryFolder(collectionId: string, name: string, descript
 
 export function deleteLibraryFolder(collectionId: string) {
   return apiRequest<undefined>(`library/collections/${encodeURIComponent(collectionId)}`, { method: "DELETE" });
+}
+
+export function moveLibraryFolder(collectionId: string, parentId: string | null, expectedParentId: string | null) {
+  return apiRequest<LibraryCollection>(`library/collections/${encodeURIComponent(collectionId)}/move`, {
+    method: "POST", body: JSON.stringify({ parent_id: parentId, expected_parent_id: expectedParentId }),
+  });
 }
 
 export function updateLibraryFolderMembers(collectionId: string, assetIds: readonly string[], action: "add" | "remove") {
