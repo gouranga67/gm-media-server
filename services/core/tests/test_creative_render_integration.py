@@ -12,6 +12,7 @@ from unittest.mock import patch
 from uuid import uuid4
 import zlib
 import wave
+from PIL import Image
 
 from app.config import Settings
 from app.edit_plan import CreativeEffectCue, MontageEditPlan, TalkingHeadEditPlan
@@ -175,9 +176,11 @@ class CreativeRenderIntegrationTests(unittest.TestCase):
                                               for x in range(32)) for _ in range(32))
             sticker.write_bytes(b"\x89PNG\r\n\x1a\n" + png_chunk(b"IHDR", struct.pack(">IIBBBBB", 32, 32, 8, 6, 0, 0, 0))
                                 + png_chunk(b"IDAT", zlib.compress(rows)) + png_chunk(b"IEND", b""))
-            self.ffmpeg("-f", "lavfi", "-i", "color=c=lime:s=32x32:r=4:d=0.25",
-                        "-f", "lavfi", "-i", "color=c=blue:s=32x32:r=4:d=0.25",
-                        "-filter_complex", "[0:v][1:v]concat=n=2:v=1:a=0", str(gif))
+            # Use exact palette colours: FFmpeg 5.1's default GIF encoder
+            # quantizes blue to 170, below the content assertion's threshold.
+            Image.new("RGB", (32, 32), "lime").save(gif, save_all=True,
+                append_images=[Image.new("RGB", (32, 32), "blue")],
+                duration=250, loop=0, disposal=2)
             self.ffmpeg("-f", "lavfi", "-i", "sine=frequency=1000:sample_rate=22050:duration=1", str(sound))
             image = root / "photo.png"
             self.ffmpeg("-i", str(source), "-frames:v", "1", str(image))

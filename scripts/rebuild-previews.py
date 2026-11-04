@@ -9,7 +9,7 @@ from pathlib import Path
 from uuid import UUID
 
 
-TIMING_PIPELINE = "frame_sample_clocks_v2"
+TIMING_PIPELINE = "frame_sample_clocks_v3"
 
 
 def rebuild(job_id, request, *, wait_seconds=1800):

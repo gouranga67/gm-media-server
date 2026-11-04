@@ -13,9 +13,10 @@ from uuid import uuid4
 import wave
 
 from app.audio_cleanup import choose_profile, inspect_pcm, measure_source, prepare_voice_cleanup, cleanup_manifest
-from app.edit_plan import TalkingHeadEditPlan
+from app.edit_plan import TalkingHeadEditPlan, MontageEditPlan, CreativeEffectCue
 from app.edit_renderer import _ffmpeg_filter, _render_video, render_ass
-from app.finishing_tools import FinishingTools, clip_voice_cleanup_filter, audio_join_sources, timed_denoise_filter
+from app.montage_renderer import _render as render_montage
+from app.finishing_tools import FinishingTools, clip_voice_cleanup_filter, audio_join_sources, timed_denoise_filter, _denoise_latency_seconds
 
 
 def pcm_fixture(noise=.012, speech=.16):
@@ -31,6 +32,18 @@ def pcm_fixture(noise=.012, speech=.16):
 
 
 class VoiceCleanupTests(unittest.TestCase):
+    def test_denoise_delay_matches_installed_ffmpeg_generation(self):
+        try:
+            for version, expected in (("4.4.2", 0), ("5.1.8", .025), ("8.0.1", .025)):
+                _denoise_latency_seconds.cache_clear()
+                with patch("app.finishing_tools.subprocess.run", return_value=SimpleNamespace(
+                        stdout=f"ffmpeg version {version} Copyright FFmpeg")) as inspect:
+                    self.assertEqual(_denoise_latency_seconds(), expected)
+                    self.assertEqual(_denoise_latency_seconds(), expected)
+                    inspect.assert_called_once()
+        finally:
+            _denoise_latency_seconds.cache_clear()
+
     def setUp(self):
         self.asset_id = str(uuid4())
         self.asset = dict(asset_id=self.asset_id, _storage_key="source.wav", sha256="a" * 64,
@@ -127,6 +140,87 @@ class VoiceCleanupTests(unittest.TestCase):
         self.assertIn("afftdn", next(p for p in graph.split(";") if p.startswith("[1:a:0]")))
 
     @unittest.skipUnless(shutil.which("ffmpeg"), "FFmpeg required")
+    def test_compressed_dialogue_survives_concat_music_and_effects(self):
+        # FFmpeg 5.1 (the worker runtime) can negotiate a different clock after
+        # acompressor. Checking only a single clip or the MP4 duration misses
+        # the resulting short/sped-up dialogue track. Distinct recorded tones
+        # prove every take remains audible at its intended time.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            sources, clips, assets, profiles = [], [], [], []
+            durations = (2.137, 1.781, 2.283)
+            frequencies = (440, 660, 880)
+            for index, (duration, frequency) in enumerate(zip(durations, frequencies)):
+                source = root / f"take-{index}.mp4"
+                subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i",
+                    f"color=c=blue:s=96x160:r={30 if index == 0 else 60}:d=3",
+                    "-f", "lavfi", "-i", f"sine=f={frequency}:r=48000:d=3",
+                    "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", str(source)],
+                    check=True, capture_output=True, timeout=15)
+                identity = str(uuid4())
+                clips.append(dict(asset_id=identity, source_in=.1, source_out=.1+duration,
+                    crop="center_fill", transition="cross_dissolve" if index else "cut"))
+                sources.append((source, .1, .1+duration))
+                assets.append(dict(asset_id=identity, _storage_key=source.name, has_audio=True))
+                profiles.append(dict(asset_id=identity, status="measured", compress=True,
+                    balance_gain_db=3, noise_reduction_db=6, noise_floor_dbfs=-40))
+            music, sound = root / "music.wav", root / "sound.wav"
+            for path, frequency, rate in ((music, 180, 44100), (sound, 1200, 22050)):
+                subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i",
+                    f"sine=f={frequency}:r={rate}:d=7", str(path)],
+                    check=True, capture_output=True, timeout=10)
+            music_id, effect_id = uuid4(), uuid4()
+            cue = CreativeEffectCue(asset_id=effect_id, start_seconds=2.5, duration_seconds=.3,
+                                    position="top", intensity="subtle")
+            captions = root / "captions.ass"
+            captions.write_text(render_ass([], width=96, height=160))
+            for recipe in ("talking_head", "montage"):
+                for with_music in (False, True):
+                    for final in (False, True):
+                        with self.subTest(recipe=recipe, music=with_music, final=final):
+                            effect = dict(asset_id=str(effect_id), kind="sound_effect", path=sound,
+                                _storage_key=sound.name, cue=cue,
+                                input_index=len(clips)+int(with_music))
+                            values = dict(schema_version="1.4", recipe=recipe, end_card="none",
+                                editorial_summary="Preserve the three recorded takes.", effects=[cue],
+                                music_track_id=music_id if with_music else None,
+                                music_mix="present" if with_music else "none",
+                                finishing=dict(voice_cleanup="auto", voice_cleanup_profiles=profiles))
+                            output = root / f"{recipe}-{with_music}-{final}.mp4"
+                            if recipe == "talking_head":
+                                plan = TalkingHeadEditPlan(**values, clips=clips,
+                                    audio_preset="spoken_voice_v1", caption_style="clean_blue_v1")
+                                _render_video(sources, plan, captions, output, 60, width=96, height=160,
+                                    final_quality=final, music_source=music if with_music else None,
+                                    effect_sources=[effect])
+                            else:
+                                plan = MontageEditPlan(**values, clips=[dict(c, duration=d,
+                                    media_kind="video", include_source_audio=True)
+                                    for c, d in zip(clips, durations)], audio_preset="montage_mix_v1")
+                                context = dict(assets=assets, creative_effect_library=[effect],
+                                    music_library=[dict(track_id=str(music_id), _storage_key=music.name)])
+                                with patch("app.montage_renderer._render_source",
+                                           side_effect=lambda _settings, _asset, **kwargs: root / _asset["_storage_key"]):
+                                    render_montage(context, plan, output, width=96, height=160,
+                                        final=final, settings=SimpleNamespace(media_root=root,
+                                            analysis_command_timeout_seconds=60), captions_path=captions)
+                            pcm = array.array("h", subprocess.check_output(["ffmpeg", "-v", "error",
+                                "-i", str(output), "-vn", "-ac", "1", "-ar", "8000", "-f", "s16le", "pipe:1"],
+                                timeout=15))
+                            self.assertAlmostEqual(len(pcm)/8000, sum(durations), delta=.06)
+                            start = 0
+                            for duration, frequency in zip(durations, frequencies):
+                                # Inspect the last 150 ms of each take as well
+                                # as its middle: padding silence cannot pass.
+                                for at in (start+duration/2, start+duration-.2):
+                                    samples = pcm[round(at*8000):round((at+.15)*8000)]
+                                    magnitude = math.hypot(
+                                        sum(v*math.cos(2*math.pi*frequency*i/8000) for i,v in enumerate(samples)),
+                                        sum(v*math.sin(2*math.pi*frequency*i/8000) for i,v in enumerate(samples))) / len(samples)
+                                    self.assertGreater(magnitude, 100, "dialogue must stay in sync through the last take")
+                                start += duration
+
+    @unittest.skipUnless(shutil.which("ffmpeg"), "FFmpeg required")
     def test_real_denoise_flushes_first_and_last_speech_without_moving_it(self):
         # A tone up against both boundaries catches a filter that has the right
         # duration but silently delays speech or discards its final 25 ms.
@@ -135,7 +229,9 @@ class VoiceCleanupTests(unittest.TestCase):
             "-af", timed_denoise_filter(6, -40, 1), "-f", "s16le", "pipe:1"], input=raw.tobytes(), timeout=5)
         self.assertEqual(len(output), len(raw) * 2)
         samples = array.array("h", output)
-        for edge in (samples[:960], samples[-960:]):
+        # Allow the FFT's initial window to settle, while still proving both
+        # boundary words survive. The separate onset test checks 10 ms sync.
+        for edge in (samples[:1920], samples[-1920:]):
             self.assertGreater(math.sqrt(sum(float(v) ** 2 for v in edge) / len(edge)) / 32768, .08)
 
     @unittest.skipUnless(shutil.which("ffmpeg"), "FFmpeg required")

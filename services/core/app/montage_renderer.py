@@ -241,6 +241,8 @@ def _filter_graph(
             f"[acat]apad=pad_dur={total_duration:.3f},"
             f"atrim=0:{total_duration:.3f},asetpts=PTS-STARTPTS,"
             "loudnorm=I=-16:LRA=11:TP=-1.5,"
+            "aresample=48000,aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo,"
+            "asettb=1/48000,asetpts=N/SR/TB,"
             f"apad=pad_dur={total_duration:.3f},atrim=0:{total_duration:.3f}[aout]"
         )
     else:
@@ -266,6 +268,8 @@ def _filter_graph(
         filters.append(
             "[source][ducked]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,"
             "loudnorm=I=-14:LRA=11:TP=-1.0,"
+            "aresample=48000,aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo,"
+            "asettb=1/48000,asetpts=N/SR/TB,"
             f"apad=pad_dur={total_duration:.3f},atrim=0:{total_duration:.3f}[aout]"
         )
     return apply_graph_finishing(";".join(filters), plan, width=width, height=height, fps=fps, join_sources=join_sources)

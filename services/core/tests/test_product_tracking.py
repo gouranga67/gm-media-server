@@ -223,12 +223,12 @@ class ProductTrackingTests(unittest.TestCase):
                     dest=root/f'{montage}-{n}.mkv';args=['ffmpeg','-v','error','-nostdin','-threads','1','-i',str(source)]
                     if montage:args+=['-threads','1','-i',str(source)]
                     run(args+['-filter_complex_threads','1','-filter_complex',g,'-map','[vout]','-map','[aout]',
-                        '-c:v','ffv1','-c:a','pcm_s16le',str(dest)])
+                        '-vsync','0','-c:v','ffv1','-c:a','pcm_s16le',str(dest)])
                     outputs.append(dest)
                 pcm=lambda path:run(['ffmpeg','-v','error','-i',str(path),'-map','0:a:0','-f','s16le','pipe:1'])
                 self.assertEqual(pcm(outputs[0]),pcm(outputs[1]))
                 # Inspect the tracked first shot, not montage's unmarked second shot.
-                raw=run(['ffmpeg','-v','error','-i',str(outputs[0]),'-t','3','-f','rawvideo','-pix_fmt','rgb24','pipe:1'])
+                raw=run(['ffmpeg','-v','error','-i',str(outputs[0]),'-t','3','-vsync','0','-f','rawvideo','-pix_fmt','rgb24','pipe:1'])
                 pictures=np.frombuffer(raw,np.uint8).reshape(-1,320,180,3)
                 self.assertEqual(len(pictures),90)
                 for picture in pictures[::5]:

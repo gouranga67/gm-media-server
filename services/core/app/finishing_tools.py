@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import re
+import subprocess
+from functools import lru_cache
 from typing import Annotated, Any, Literal
 from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator, model_serializer
@@ -437,13 +439,28 @@ def voice_finishing_filter(plan: Any) -> str:
     return ",".join(filters)
 
 
+@lru_cache(maxsize=1)
+def _denoise_latency_seconds() -> float:
+    # 4.4 compensates afftdn's window internally; 5+ exposes the 25 ms delay.
+    # Inspect the installed executable once, not the Python image's version.
+    try:
+        version = subprocess.run(["ffmpeg", "-hide_banner", "-version"],
+            capture_output=True, text=True, check=True, timeout=5).stdout
+        match = re.search(r"ffmpeg version (\d+)\.", version)
+        if match and int(match[1]) <= 4:
+            return 0.0
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return 0.025
+
+
 def timed_denoise_filter(reduction: int, floor: float, duration: float) -> str:
-    # afftdn's overlap window delays audio by two 12.5ms advances. Feed a
-    # bounded tail through its FFT/FIFO before restoring the original clock.
-    # https://github.com/FFmpeg/FFmpeg/blob/n4.4/libavfilter/af_afftdn.c
+    # Flush the FFT/FIFO tail, compensating only for delay exposed by this
+    # runtime. Removing 25 ms on 4.4 advances speech and cuts its ending.
     # Keep historical manual-denoise plans unchanged unless explicitly opted in.
+    latency = _denoise_latency_seconds()
     return (f"apad=pad_dur=0.075,afftdn=nr={reduction}:nf={floor:.1f},"
-            f"atrim=start=0.025:end={duration + .025:.3f},asetpts=PTS-STARTPTS")
+            f"atrim=start={latency:.3f}:end={duration + latency:.3f},asetpts=PTS-STARTPTS")
 
 
 def clip_voice_cleanup_filter(plan: Any, index: int, *, duration: float | None = None) -> str:
@@ -464,6 +481,15 @@ def clip_voice_cleanup_filter(plan: Any, index: int, *, duration: float | None =
         filters.append(f"volume={profile.balance_gain_db:.1f}dB")
     if profile.compress:
         filters.append("acompressor=threshold=0.125:ratio=2:attack=15:release=200:makeup=1")
+        # Older FFmpeg compressors change sample format during negotiation.
+        # Re-establish the clip's sample clock after that conversion, before
+        # concat/loudnorm/music consume it. Otherwise a successful encode can
+        # contain only a fraction of the dialogue (also with CPU encoding).
+        filters.extend([
+            "aresample=48000",
+            "aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo",
+            "asettb=1/48000", "asetpts=N/SR/TB",
+        ])
     return ",".join(filters)
 
 
@@ -889,7 +915,10 @@ def assemble_clip_graph(plan: Any, fps: int) -> str:
     if not any(clip.transition == "cross_dissolve" for clip in plan.clips):
         parts.append(
             "".join(f"[xfv{i}]" for i in range(len(plan.clips)))
-            + f"concat=n={len(plan.clips)}:v=1:a=0,{clock}[vcat]"
+            # Older fps filters can round EOF down by one frame. Restore at
+            # most that one frame, bounded by the approved cumulative clock.
+            + f"concat=n={len(plan.clips)}:v=1:a=0,{clock},"
+              f"tpad=stop_mode=clone:stop=1,trim=end_frame={boundaries[-1]}[vcat]"
         )
         parts.append(audio)
         return ";".join(parts)

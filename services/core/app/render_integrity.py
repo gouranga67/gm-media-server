@@ -4,7 +4,7 @@ import math
 from typing import Any
 
 
-RENDER_TIMING_VERSION = "frame_sample_clocks_v2"
+RENDER_TIMING_VERSION = "frame_sample_clocks_v3"
 
 
 def render_timing_error(probe: dict[str, Any], expected_duration: float) -> str | None:

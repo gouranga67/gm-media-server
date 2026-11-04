@@ -109,7 +109,7 @@ class StabilizationTests(unittest.TestCase):
                 '-f','lavfi','-i','sine=frequency=700:sample_rate=48000:duration=3','-t','3','-c:v','ffv1','-c:a','pcm_s16le',str(source)],input=b''.join(f.tobytes() for f in frames))
             caption=root/'empty.ass';caption.write_text(render_ass([],width=w,height=h))
             def decode(path):
-                raw=run(['ffmpeg','-v','error','-i',str(path),'-map','0:v:0','-f','rawvideo','-pix_fmt','gray','pipe:1'])
+                raw=run(['ffmpeg','-v','error','-i',str(path),'-map','0:v:0','-vsync','0','-f','rawvideo','-pix_fmt','gray','pipe:1'])
                 pics=np.frombuffer(raw,np.uint8).reshape(-1,h,w)
                 movements=[]
                 for a,b in zip(pics[10:-1],pics[11:]):
@@ -122,7 +122,7 @@ class StabilizationTests(unittest.TestCase):
                     plan=plan_for(montage,stabilize_clips=list(range(2 if montage else 1)) if enabled else [])
                     output=root/f'{montage}-{enabled}.mkv';graph=self.graph(plan,caption,w,h)
                     run(['ffmpeg','-v','error','-nostdin','-filter_complex_threads','1',*[arg for _ in plan.clips for arg in ('-i',str(source))],'-filter_complex',graph,
-                        '-map','[vout]','-map','[aout]','-c:v','ffv1','-c:a','pcm_s16le',str(output)])
+                        '-map','[vout]','-map','[aout]','-vsync','0','-c:v','ffv1','-c:a','pcm_s16le',str(output)])
                     pics,jitter=decode(output)
                     self.assertEqual(len(pics),90 * len(plan.clips))
                     audio=run(['ffmpeg','-v','error','-i',str(output),'-map','0:a:0','-f','s16le','pipe:1'])

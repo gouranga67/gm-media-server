@@ -39,7 +39,10 @@ def effect_input_arguments(effects: list[dict[str, Any]]) -> list[str]:
         kind = effect["kind"]
         path = Path(effect["path"])
         if kind == "gif":
-            arguments.extend(["-stream_loop", "-1", "-i", str(path)])
+            # Let the GIF demuxer retain each frame's delay. Reopening it only
+            # through stream_loop corrupts animation timing on FFmpeg 4.4/5.1.
+            # Keep stream_loop as a fallback for GIFs without loop metadata.
+            arguments.extend(["-ignore_loop", "0", "-stream_loop", "-1", "-i", str(path)])
         elif kind in {"sticker", "meme_image"}:
             arguments.extend(["-loop", "1", "-i", str(path)])
         else:
