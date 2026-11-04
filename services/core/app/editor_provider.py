@@ -224,6 +224,8 @@ def _base_public_context(context: dict[str, Any], max_characters: int) -> dict[s
         previous_tools.pop("voice_cleanup_profiles", None)  # Replay locally; not story-planning evidence.
         previous_tools.pop("visual_profiles", None)
         previous_tools.pop("stabilize_clips", None)
+        previous_tools.pop("product_tracks", None)
+        previous_tools.pop("product_profiles", None)
     for key in list(public):
         if key.startswith("_"):
             public.pop(key)

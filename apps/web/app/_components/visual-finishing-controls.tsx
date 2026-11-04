@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { getFinishingTools, requestRevision, type FinishingTools, type StabilizationChoice } from "@/lib/media-api";
+import { getFinishingTools, requestRevision, type FinishingTools, type StabilizationChoice, type ProductTrack, type ProductTrackingReport } from "@/lib/media-api";
+import { ProductTrackingControls } from "./product-tracking-controls";
 
 type VisualReport = {
   readonly smart_framing?: "off" | "face";
@@ -9,6 +10,7 @@ type VisualReport = {
   readonly safe_overlays?: boolean;
   readonly stabilize_clips?: readonly number[];
   readonly profiles?: FinishingTools["visual_profiles"];
+  readonly product_tracking?: ProductTrackingReport;
 };
 
 export function VisualFinishingControls({ jobId, version, report, onUpdated }: {
@@ -21,11 +23,14 @@ export function VisualFinishingControls({ jobId, version, report, onUpdated }: {
   const [balance, setBalance] = useState(Boolean(report?.shot_match));
   const [safe, setSafe] = useState(Boolean(report?.safe_overlays));
   const [stabilize, setStabilize] = useState<readonly number[]>(report?.stabilize_clips ?? []);
+  const [products, setProducts] = useState<readonly ProductTrack[]>(report?.product_tracking?.selections ?? []);
+  const [markDraft, setMarkDraft] = useState(false);
   const [choices, setChoices] = useState<readonly StabilizationChoice[]>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const profiles = report?.profiles ?? [];
   const followed = profiles.filter((profile) => profile.framing_applied).length;
+  const productConflict = (face && products.length > 0) || products.some((p) => stabilize.includes(p.clip_index));
 
   async function chooseClips() {
     setBusy(true); setError("");
@@ -40,6 +45,7 @@ export function VisualFinishingControls({ jobId, version, report, onUpdated }: {
 
   async function apply(event: FormEvent) {
     event.preventDefault();
+    if (markDraft) { setError("Add or update the marked shot, or clear the Source shot choice, before creating the preview."); return; }
     setBusy(true);
     setError("");
     try {
@@ -48,7 +54,7 @@ export function VisualFinishingControls({ jobId, version, report, onUpdated }: {
       await requestRevision(jobId, {
         note: "", captionCorrections: [], baseVersion: version,
         finishingSettings: { ...current.settings, smart_framing: face ? "face" : "off", shot_match: balance,
-          safe_overlays: safe, visual_profiles: [], stabilize_clips: [...stabilize].sort((a, b) => a - b) },
+          safe_overlays: safe, visual_profiles: [], stabilize_clips: [...stabilize].sort((a, b) => a - b), product_tracks: products, product_profiles: [] },
       });
       onUpdated();
     } catch (error) {
@@ -91,9 +97,12 @@ export function VisualFinishingControls({ jobId, version, report, onUpdated }: {
             <span><strong>Clip {clip.clip_index + 1} · {clip.duration_seconds}s</strong><span className="block text-[#666862]">Source {clip.source_in.toFixed(1)}–{clip.source_out.toFixed(1)}s{clip.note ? ` · ${clip.note}` : " · Select only if this shot is shaky."}</span></span>
           </label>)}</div> : null}
         </section>
-        <p className="text-xs leading-5 text-[#666862]">Face and brightness analysis use small samples from up to eight shots. Shake reduction processes only the clips you choose. Review the new preview before export.</p>
+        <ProductTrackingControls jobId={jobId} version={version} value={products} onChange={setProducts} onDraftChange={setMarkDraft} disabled={busy} />
+        {markDraft ? <p className="text-xs leading-5 text-[#173F5F]">Add or update the marked shot before creating the preview. To discard this mark, clear the Source shot choice.</p> : null}
+        {productConflict ? <p role="alert" className="text-xs text-[#A23B2A]">Product follow needs single-face follow turned off and no shake reduction on the same shot.</p> : null}
+        <p className="text-xs leading-5 text-[#666862]">Face and brightness analysis use small samples from up to eight shots. Shake reduction and product follow process only the clips you choose. Review the new preview before export.</p>
         {error ? <p role="alert" className="text-sm text-[#A23B2A]">{error}</p> : null}
-        <button type="submit" disabled={busy || (face && stabilize.length > 0)} className="min-h-11 rounded-md border border-[#173F5F] px-3 text-xs font-bold text-[#173F5F] disabled:opacity-50">
+        <button type="submit" disabled={busy || markDraft || productConflict || (face && stabilize.length > 0)} className="min-h-11 rounded-md border border-[#173F5F] px-3 text-xs font-bold text-[#173F5F] disabled:opacity-50">
           {busy ? "Creating visual preview…" : "Create visual preview"}
         </button>
       </form>
@@ -104,6 +113,7 @@ export function VisualFinishingControls({ jobId, version, report, onUpdated }: {
           {profiles.map((profile) => <li key={profile.clip_index}><strong>Clip {profile.clip_index + 1}:</strong> {profile.note}</li>)}
         </ul>
       </details> : null}
+      {report?.product_tracking?.profiles?.length ? <ul className="mt-3 space-y-2 text-xs leading-5 text-[#666862]">{report.product_tracking.profiles.map((p) => <li key={p.clip_index}><strong>Product in clip {p.clip_index + 1} · {p.framing_applied ? "followed" : "framing retained"}:</strong> {p.note}</li>)}</ul> : null}
     </details>
   );
 }

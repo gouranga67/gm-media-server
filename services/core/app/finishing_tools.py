@@ -131,6 +131,59 @@ class VisualProfile(ToolModel):
         return self
 
 
+class ProductTrack(ToolModel):
+    clip_index: Annotated[int, Field(strict=True, ge=0, le=47)]
+    # Centre and size in the full, rotated source frame, not the output crop.
+    x: float = Field(ge=0, le=1)
+    y: float = Field(ge=0, le=1)
+    width: float = Field(ge=.04, le=.8)
+    height: float = Field(ge=.04, le=.8)
+
+    @model_validator(mode="after")
+    def inside(self):
+        if self.x < self.width / 2 or self.x + self.width / 2 > 1 or self.y < self.height / 2 or self.y + self.height / 2 > 1:
+            raise ValueError("product selection must be inside the source picture")
+        return self
+
+
+class ProductPoint(ToolModel):
+    time: float = Field(ge=0, le=8)
+    x: float = Field(ge=0, le=1)
+    y: float = Field(ge=0, le=1)
+    width: float = Field(gt=0, le=1)
+    height: float = Field(gt=0, le=1)
+
+    @model_validator(mode="after")
+    def inside(self):
+        if self.x - self.width / 2 < -.001 or self.x + self.width / 2 > 1.001 or self.y - self.height / 2 < -.001 or self.y + self.height / 2 > 1.001:
+            raise ValueError("tracked product bounds must be inside the source picture")
+        return self
+
+
+class ProductProfile(ProductTrack):
+    version: Literal["selected_product_v1"] = "selected_product_v1"
+    asset_id: UUID
+    source_in: float = Field(ge=0, le=86400)
+    source_out: float = Field(gt=0, le=86520)
+    status: Literal["measured", "unavailable"]
+    source_width: int = Field(default=0, ge=0, le=32768)
+    source_height: int = Field(default=0, ge=0, le=32768)
+    points: list[ProductPoint] = Field(default_factory=list, max_length=33)
+    note: str = Field(max_length=400)
+
+    @model_validator(mode="after")
+    def valid_path(self):
+        duration = self.source_out - self.source_in
+        if not 1 <= duration <= 8:
+            raise ValueError("product paths belong to 1–8 second shots")
+        if self.points:
+            if self.status != "measured" or not self.source_width or not self.source_height or len(self.points) < 2 or self.points[0].time != 0 or any(b.time <= a.time for a, b in zip(self.points, self.points[1:])) or not duration - .251 <= self.points[-1].time < duration:
+                raise ValueError("product path must cover the selected source range")
+        elif self.status == "measured":
+            raise ValueError("measured product tracking needs a complete path")
+        return self
+
+
 class FinishingTools(ToolModel):
     callouts: list[Callout] = Field(default_factory=list, max_length=8)
     pointers: list[Pointer] = Field(default_factory=list, max_length=8)
@@ -157,6 +210,9 @@ class FinishingTools(ToolModel):
             data.pop("visual_profiles", None)
         if not data.get("stabilize_clips"):
             data.pop("stabilize_clips", None)
+        for name in ("product_tracks", "product_profiles"):
+            if not data.get(name):
+                data.pop(name, None)
         return data
 
     motions: list[ClipMotion] = Field(default_factory=list, max_length=24)
@@ -173,6 +229,8 @@ class FinishingTools(ToolModel):
     safe_overlays: bool = False
     visual_profiles: list[VisualProfile] = Field(default_factory=list, max_length=48)
     stabilize_clips: list[Annotated[int, Field(strict=True, ge=0, le=47)]] = Field(default_factory=list, max_length=4)
+    product_tracks: list[ProductTrack] = Field(default_factory=list, max_length=2)
+    product_profiles: list[ProductProfile] = Field(default_factory=list, max_length=2)
     audio_joins: list[AudioJoin] = Field(default_factory=list, max_length=8)
 
 
@@ -186,6 +244,8 @@ def validate_finishing(
         return
     from app.stabilization import validate_stabilization
     validate_stabilization(plan)
+    from app.product_tracking import validate_product_tracking
+    validate_product_tracking(plan)
     if tools.music_start_seconds:
         track = next(
             (
@@ -658,6 +718,8 @@ def retime_finishing(
     # A chosen shot is an exact cut, not an index that can migrate to unrelated
     # footage after trimming, repetition or reordering. Explicitly choose again.
     data.pop("stabilize_clips", None)
+    data.pop("product_tracks", None)
+    data.pop("product_profiles", None)
     for name in ("audio_regions", "caption_regions", "layers", "callouts", "pointers", "music_regions"):
         result = []
         for region in data.get(name, []):

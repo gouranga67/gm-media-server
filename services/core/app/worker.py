@@ -1375,10 +1375,16 @@ def process_one_edit(state: WorkerState) -> bool:
                     # Shot indexes may change in a hosted story revision. The
                     # owner can choose stabilization again on the resulting cut.
                     plan.finishing.stabilize_clips = []
+                    plan.finishing.product_tracks = []
+                    plan.finishing.product_profiles = []
             with measure_processing("visual_finishing") as timing:
                 timing["did_work"] = bool(plan.finishing and (plan.finishing.smart_framing == "face" or plan.finishing.shot_match)
                     and not plan.finishing.visual_profiles)
                 plan = prepare_visual_finishing(context, plan)
+            from app.product_tracking import prepare_product_tracking
+            with measure_processing("product_tracking") as timing:
+                timing["did_work"] = bool(plan.finishing and plan.finishing.product_tracks and not plan.finishing.product_profiles)
+                plan = prepare_product_tracking(context, plan)
             _persist_generated_plan(run, plan, provenance)
 
         from app.story_contract import check_story_contract

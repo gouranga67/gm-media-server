@@ -127,7 +127,10 @@ export const finishingToolsSchema = z
     voice_denoise: z.boolean(),
     voice_cleanup: z.enum(["off", "auto"]).optional(),
     smart_framing: z.enum(["off", "face"]).optional(),
-  stabilize_clips: z.array(z.number().int().min(0).max(47)).max(4).optional(),
+    stabilize_clips: z.array(z.number().int().min(0).max(47)).max(4).optional(),
+    product_tracks: z.array(z.object({ clip_index: z.number().int().min(0).max(47),
+      x: z.number().min(0).max(1), y: z.number().min(0).max(1),
+      width: z.number().min(.04).max(.8), height: z.number().min(.04).max(.8) }).strict()).max(2).optional(),
     shot_match: z.boolean().optional(),
     safe_overlays: z.boolean().optional(),
   })

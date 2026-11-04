@@ -180,13 +180,13 @@ def face_track(measured, duration):
     return result, "Sparse single-face follow; review motion and product visibility in playback."
 
 
-def _crop_fits(points, sw, sh, aspect, zoom=1.18):
+def _crop_fits(points, sw, sh, aspect, zoom=1.18, anchor=.38):
     cw, ch = min(sw, sh * aspect), min(sh, sw / aspect)
     # Reserve the existing punch-in's maximum and some room around the face.
     for point in points:
         cx, cy = point["x"] * sw, point["y"] * sh
         left = max(0, min(sw - cw, cx - cw / 2))
-        top = max(0, min(sh - ch, cy - ch * .38))
+        top = max(0, min(sh - ch, cy - ch * anchor))
         mx, my = cw * (1 - 1 / zoom) / 2 + cw * .04, ch * (1 - 1 / zoom) / 2 + ch * .04
         if cx - point["width"] * sw / 2 < left + mx or cx + point["width"] * sw / 2 > left + cw - mx or cy - point["height"] * sh / 2 < top + my or cy + point["height"] * sh / 2 > top + ch - my:
             return False
@@ -254,6 +254,10 @@ def prepare_visual_finishing(context, plan, settings=None):
 
 def source_crop_filter(plan, index, width, height):
     """Replace only the first centre-fill crop; never touch frame/audio clocks."""
+    from app.product_tracking import crop_filter
+    product = crop_filter(plan, index, width, height)
+    if product:
+        return product
     tools = plan.finishing
     if not tools or tools.smart_framing != "face" or any(m.clip_index == index for m in tools.motions):
         return ""
@@ -263,33 +267,49 @@ def source_crop_filter(plan, index, width, height):
     points = [p.model_dump() for p in profile.points]
     if not _crop_fits(points, profile.source_width, profile.source_height, width / height):
         return ""  # Delivery variants may use a tighter aspect than the preview.
+    return tracked_crop(profile, width, height)
+
+
+def tracked_crop(profile, width, height, anchor=.38):
 
     def curve(field):
-        expression = f"{getattr(profile.points[-1], field):.5f}"
-        for a, b in reversed(list(zip(profile.points, profile.points[1:]))):
+        intervals = []
+        for a, b in zip(profile.points, profile.points[1:]):
             av, bv = getattr(a, field), getattr(b, field)
             part = f"{av:.5f}+({bv - av:.5f})*max(0,min(1,(t-{a.time:.3f})/{b.time - a.time:.3f}))"
-            expression = f"if(lt(t,{b.time:.3f}),{part},{expression})"
-        return expression
+            intervals.append((part, b.time))
+        intervals.append((f"{getattr(profile.points[-1], field):.5f}", float("inf")))
+
+        def balanced(items):
+            if len(items) == 1:
+                return items[0][0]
+            middle = len(items) // 2
+            return f"if(lt(t,{items[middle - 1][1]:.3f}),{balanced(items[:middle])},{balanced(items[middle:])})"
+
+        # Keep parser depth bounded for full saved paths. The same piecewise
+        # interpolation needs only logarithmic rather than linear depth here.
+        return balanced(intervals)
 
     return (f"scale={width}:{height}:force_original_aspect_ratio=increase,"
         f"crop={width}:{height}:x='max(0,min(iw-ow,iw*({curve('x')})-ow/2))':"
-        f"y='max(0,min(ih-oh,ih*({curve('y')})-oh*.38))'")
+        f"y='max(0,min(ih-oh,ih*({curve('y')})-oh*{anchor}))'")
 
 
 def visual_manifest(plan, aspect="vertical"):
     from app.stabilization import stabilization_manifest
+    from app.product_tracking import tracking_manifest
     tools = plan.finishing
     width, height = {"vertical": (540, 960), "square": (540, 540), "landscape": (960, 540)}.get(aspect, (540, 960))
     profiles = []
     for p in tools.visual_profiles if tools else []:
-        applied = bool(source_crop_filter(plan, p.clip_index, width, height))
+        applied = bool(tools.smart_framing == "face" and source_crop_filter(plan, p.clip_index, width, height))
         note = p.note
         if p.points and not applied:
             note += " Saved face path is not used for this aspect or manual camera choice."
         profiles.append({**p.model_dump(mode="json"), "framing_applied": applied, "note": note})
     return {"version": VERSION, "smart_framing": tools.smart_framing if tools else "off", "shot_match": bool(tools and tools.shot_match),
         "stabilize_clips": list(tools.stabilize_clips) if tools else [], "stabilization": stabilization_manifest(plan),
+        "product_tracking": tracking_manifest(plan, width, height),
         "detector": "yunet_2023mar", "detector_sha256": MODEL_SHA256,
         "safe_overlays": bool(tools and tools.safe_overlays),
         "profiles": profiles,

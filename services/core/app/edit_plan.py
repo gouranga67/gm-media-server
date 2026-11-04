@@ -240,6 +240,12 @@ def derive_duration_variant(plan: EditPlan, target_seconds: int) -> EditPlan:
             visual_profiles.append(VisualProfile.model_validate({**profile.model_dump(), "source_out": clip.source_out,
                 "points": points}))
         tools.visual_profiles = visual_profiles
+        # Keep only unchanged approved source ranges. A shortened shot needs a
+        # fresh explicit selection; never silently measure it during export.
+        retained_products = {s.clip_index for s in plan.finishing.product_tracks if s.clip_index < len(clips)
+            and abs(clips[s.clip_index].source_out - plan.clips[s.clip_index].source_out) < .001}
+        tools.product_tracks = [s.model_copy(deep=True) for s in plan.finishing.product_tracks if s.clip_index in retained_products]
+        tools.product_profiles = [p.model_copy(deep=True) for p in plan.finishing.product_profiles if p.clip_index in retained_products]
         tools.stabilize_clips = [index for index in plan.finishing.stabilize_clips if index < len(clips)
             and 1 <= float(getattr(clips[index], "duration", clips[index].source_out - clips[index].source_in)) <= 8]
         tools.audio_joins = [join.model_copy(update={"tail_seconds": min(join.tail_seconds, max(0, variant_duration-sum(float(c.duration if isinstance(plan,MontageEditPlan) else c.source_out-c.source_in) for c in clips[:join.clip_index+1])))})

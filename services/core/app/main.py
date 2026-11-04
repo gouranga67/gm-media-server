@@ -120,6 +120,8 @@ def system_information() -> dict[str, Any]:
             "automatic_paid_trials":False,"automatic_promotion":False},
         "visual_finishing": {"version": "selected_visual_v1", "single_face_follow": True,
             "selected_shot_stabilization": True, "stabilization_max_clips": 4, "stabilization_max_clip_seconds": 8,
+            "marked_product_tracking": True, "product_tracking_max_clips": 2, "product_tracking_max_clip_seconds": 8,
+            "product_tracking_budget_seconds": 12, "automatic_product_recognition": False,
             "detector": "yunet_2023mar",
             "small_exposure_match": True, "explicit_opt_in": True, "hosted_model_calls": 0,
             "resolved_caption_avoidance": True,

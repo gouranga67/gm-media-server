@@ -489,3 +489,16 @@ After deployment, `python3 scripts/verify-phase28.py` reads the declared bounded
 5. Reopen the saved version and export a final delivery. Check speech sync and the selected treatment in the downloaded file. A normal prefix delivery variant retains surviving selected shots, except a shortened tail below one second. A source/timeline change or hosted story rebuild clears the selection so unrelated clips never inherit an old numeric index; choose the new shots again.
 
 The tool is a small translation-shake aid, not a gimbal, product tracker, rolling-shutter correction or blur repair. It adds bounded local CPU work during each render and zero hosted editing-model calls. Test a small example before trying the full four-clip allowance. Background cutout and product tracking remain separate work.
+
+
+## Phase 28 follow-up — marked product follow
+
+Deploy, run `python3 scripts/verify-phase28.py`, and open a ready edit's **Smart visual finishing → Choose a product shot**. See [the marked product follow checkpoint](phase-reports/phase-28-product-tracking.md) for bounds and limitations.
+
+1. Choose a short main-picture video shot, tap a detailed label/edge in its full first source frame, and adjust the box. Numeric controls must work on keyboard and phone. An unapplied box must block preview submission until added, updated or discarded by clearing Source shot.
+2. Add at most two marks, then explicitly create the visual preview. Marking, changing controls and removing marks alone must not process a job. Face follow, manual anchors and same-shot shake reduction must not compete with the target.
+3. Watch an easily tracked labelled bottle moving slowly. Check the product stays visible, the speaker's framing is acceptable, and words, picture speed and audio sync are unchanged. Existing zooms still apply; the mark does not create a new zoom.
+4. Try occlusion, a rotating bottle and repeated adjacent jars. Uncertain tracking should retain existing framing and explain the decline. A measured path does not guarantee aesthetic quality; review the whole shot.
+5. Reopen and export. Check the same tracking in the final download, then test a square delivery variant. A shot that cannot fit an aspect must retain existing framing. Timeline/source changes clear old marks; a shortened prefix variant retains only wholly unchanged marked shots.
+
+Automated checks cover both actual CPU renderers, source-frame/version safety, bounded tracking, cache replay, timeouts and user interactions. Phone/desktop checks use synthetic intercepted responses; owner footage, NVENC and deployed final-download acceptance remain separate. No new database migration is required.

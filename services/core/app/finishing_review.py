@@ -38,6 +38,13 @@ def treatment_timeline(context, plan):
 
     tools = plan.finishing
     if tools:
+        from app.product_tracking import crop_filter
+        size = {"vertical": (540, 960), "square": (540, 540), "landscape": (960, 540)}.get(context.get("job", {}).get("output_aspect"), (540, 960))
+        for profile in tools.product_profiles:
+            if crop_filter(plan, profile.clip_index, *size):
+                at = starts[profile.clip_index]
+                add("framing", "Marked product follow", at, at + durations[profile.clip_index],
+                    "Owner-selected first-frame region; local appearance matching, no semantic recognition. Review the whole shot.", profile.clip_index)
         for index in tools.stabilize_clips:
             add("framing", "Gentle camera-shake reduction", starts[index], starts[index] + durations[index],
                 "Local translation-shake filter and approximately 6% edge crop; review motion and subject framing.", index)
@@ -45,7 +52,7 @@ def treatment_timeline(context, plan):
             at = starts[profile.clip_index]
             from app.visual_finishing import source_crop_filter
             size = {"vertical": (540, 960), "square": (540, 540), "landscape": (960, 540)}.get(context.get("job", {}).get("output_aspect"), (540, 960))
-            if source_crop_filter(plan, profile.clip_index, *size):
+            if tools.smart_framing == "face" and source_crop_filter(plan, profile.clip_index, *size):
                 add("framing", "Sampled face follow", at, at + durations[profile.clip_index],
                     "Local single-face samples; no identity or product recognition. Tighter delivery crops may retain centre framing.", profile.clip_index)
             if tools.shot_match and profile.brightness and not any(c.clip_index == profile.clip_index for c in tools.colours):

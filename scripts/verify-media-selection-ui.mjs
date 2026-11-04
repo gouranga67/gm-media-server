@@ -154,7 +154,7 @@ globalThis.fetch = async (url, options = {}) => {
     if (alternativeFailure) return {ok:false,status:409,json:async()=>({detail:"This alternative could not be queued. Your original is unchanged."})};
     payload={id:"alternative",version:3,status:"pending"};
   }
-  else if (route === `jobs/${jobId}/finishing-tools`) payload = { version: 2, settings: { motions:[],colours:[],audio_regions:[],caption_regions:[],layers:[],music_start_seconds:0,voice_denoise:false,audio_joins:[] }, sources:[{ asset_id:serverId,name:"Review image",media_kind:"image",duration_seconds:0 }], stabilization_candidates:Array.from({length:6},(_,clip_index)=>({clip_index,asset_id:serverId,duration_seconds:clip_index===5?14:3,source_in:0,source_out:clip_index===5?14:3,eligible:clip_index!==5,note:clip_index===5?"Choose a 1–8 second shot":""})) };
+  else if (route === `jobs/${jobId}/finishing-tools`) payload = { version: 2, settings: { motions:[],colours:[],audio_regions:[],caption_regions:[],layers:[],music_start_seconds:0,voice_denoise:false,audio_joins:[] }, sources:[{ asset_id:serverId,name:"Review image",media_kind:"image",duration_seconds:0 }], product_tracking_candidates:Array.from({length:3},(_,clip_index)=>({clip_index,asset_id:serverId,duration_seconds:3,source_in:2,source_out:5,eligible:true,note:""})), stabilization_candidates:Array.from({length:6},(_,clip_index)=>({clip_index,asset_id:serverId,duration_seconds:clip_index===5?14:3,source_in:0,source_out:clip_index===5?14:3,eligible:clip_index!==5,note:clip_index===5?"Choose a 1–8 second shot":""})) };
   else if (route === "concepts/library-status") payload = { unique_sources: 3, catalogued_sources: 3, spoken_sources: 2, visually_indexed_sources: 3, still_processing: 0 };
   else if (route === "concepts" && (options.method ?? "GET") === "GET") payload = conceptHistory;
   else if (route === "concepts") {
@@ -872,6 +872,57 @@ test("visual finishing explains declined shots and refuses stale versions",async
  await waitFor(()=>document.querySelector('[role="alert"]'));
  assert.ok(document.body.textContent.includes("A newer edit is available"));
  assert.equal(posts(`jobs/${jobId}/revisions`).length,0);
+});
+test("product follow marks a full source frame without automatic revisions and submits the bounded selection",async()=>{
+ await act(async()=>root.render(React.createElement(VisualFinishingControls,{jobId,version:2,onUpdated:()=>{readyEvents+=1;}})));
+ assert.equal(calls.some(c=>c.route.endsWith("finishing-tools")),false);
+ await click(button("Choose a product shot"));
+ await waitFor(()=>document.querySelector('select'));
+ await chooseOption('select',"0");
+ const image=document.querySelector('img');
+ assert.ok(image.src.includes("source-frame?base_version=2&clip_index=0"));
+ assert.equal(button("Add marked shot").disabled,true);
+ await act(async()=>image.dispatchEvent(new Event("load")));
+ await type('input[type="number"]',"60");
+ assert.equal(button("Create visual preview").disabled,true);
+ await act(async()=>document.querySelector('form').dispatchEvent(new Event("submit",{bubbles:true,cancelable:true})));
+ assert.equal(posts(`jobs/${jobId}/revisions`).length,0);
+ await click(button("Add marked shot"));
+ assert.equal(button("Create visual preview").disabled,false);
+ assert.equal(posts(`jobs/${jobId}/revisions`).length,0);
+ assert.ok(document.body.textContent.includes("1 of 2 shots"));
+ await act(async()=>document.querySelector('form').dispatchEvent(new Event("submit",{bubbles:true,cancelable:true})));
+ await waitFor(()=>readyEvents===1);
+ const body=posts(`jobs/${jobId}/revisions`)[0].body;
+ assert.deepEqual(body.finishing_settings.product_tracks,[{clip_index:0,x:.6,y:.5,width:.25,height:.25}]);
+ assert.deepEqual(body.finishing_settings.product_profiles,[]);
+ assert.deepEqual(body.finishing_settings.audio_joins,[]);
+ assert.equal(body.base_version,2);
+});
+test("product follow caps two shots, reports conflicts and removes marks without processing",async()=>{
+ const seeds=[{clip_index:0,x:.5,y:.5,width:.2,height:.2},{clip_index:1,x:.5,y:.5,width:.2,height:.2}];
+ await act(async()=>root.render(React.createElement(VisualFinishingControls,{jobId,version:2,report:{product_tracking:{selections:seeds,profiles:[{clip_index:0,framing_applied:false,note:"Target lost; framing retained."}]}},onUpdated:()=>{readyEvents+=1;}})));
+ assert.ok(document.body.textContent.includes("Target lost"));
+ await click(button("Choose a product shot"));await waitFor(()=>document.querySelector('select'));
+ await chooseOption('select',"2");
+ await act(async()=>document.querySelector('img').dispatchEvent(new Event("load")));
+ assert.equal(button("Remove a shot to add another").disabled,true);
+ await click(document.querySelector('input[type="checkbox"]'));
+ assert.equal(button("Create visual preview").disabled,true);
+ assert.ok(document.body.textContent.includes("needs single-face follow turned off"));
+ await click(document.querySelector('input[type="checkbox"]'));
+ await click(button("Remove clip 1"));
+ assert.equal(posts(`jobs/${jobId}/revisions`).length,0);
+ assert.equal(button("Add marked shot").disabled,false);
+ await act(async()=>document.querySelector('img').dispatchEvent(new Event("error")));
+ assert.equal(button("Add marked shot").disabled,true);
+});
+test("product marking rejects a stale edit before loading a source frame",async()=>{
+ await act(async()=>root.render(React.createElement(VisualFinishingControls,{jobId,version:1,onUpdated:()=>{readyEvents+=1;}})));
+ await click(button("Choose a product shot"));
+ await waitFor(()=>document.querySelector('[role="alert"]'));
+ assert.ok(document.body.textContent.includes("A newer edit is available"));
+ assert.equal(document.querySelector('img'),null);assert.equal(posts(`jobs/${jobId}/revisions`).length,0);
 });
 test("voice cleanup explains source decisions and can be disabled without a model request",async()=>{
  await act(async()=>root.render(React.createElement(AudioCleanupControls,{jobId,version:2,

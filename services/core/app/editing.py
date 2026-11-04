@@ -3,7 +3,7 @@ from typing import Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, status
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -842,6 +842,9 @@ def _request_revision(job_id: UUID, payload: RevisionCreate,
                     profiles = payload.finishing_settings.model_dump(mode="json").get("visual_profiles") or []
                     if profiles and profiles != (source_plan["document"].get("finishing") or {}).get("visual_profiles", []):
                         raise ValueError("visual measurements are read-only; clear them to request a local recheck")
+                    product_profiles = payload.finishing_settings.model_dump(mode="json").get("product_profiles") or []
+                    if product_profiles and product_profiles != (source_plan["document"].get("finishing") or {}).get("product_profiles", []):
+                        raise ValueError("product measurements are read-only; clear them to request a local recheck")
                     document.update(
                         schema_version="1.5",
                         finishing=payload.finishing_settings.model_dump(mode="json"),
@@ -1328,9 +1331,11 @@ def inspect_finishing_tools(job_id: UUID):
         raise HTTPException(status_code=409, detail="a ready preview is required")
     from app.finishing_tools import FinishingTools
     from app.stabilization import clip_choices
+    from app.product_tracking import clip_choices as product_choices
     return {
         "version": row["version"],
         "stabilization_candidates": clip_choices(row["document"]),
+        "product_tracking_candidates": product_choices(row["document"]),
         "settings": row["document"].get("finishing")
         or FinishingTools().model_dump(mode="json"),
         "clips": [
@@ -1363,10 +1368,37 @@ def inspect_finishing_tools(job_id: UUID):
             "automatic_tracking": False,
             "single_face_follow": True,
             "selected_shot_stabilization": True,
+            "marked_product_tracking": True,
             "small_exposure_match": True,
         },
         "hosted_model_calls": 0,
     }
+
+
+@router.get("/jobs/{job_id}/finishing-tools/source-frame")
+def product_source_frame(job_id: UUID, base_version: int = Query(gt=0), clip_index: int = Query(ge=0, le=47)):
+    """Private full-source first frame, bound to a ready edit and bounded shot."""
+    import subprocess
+    from app.editor_context import resolve_internal_asset_source
+    from app.product_tracking import clip_choices, first_frame
+    context = _context_or_http(job_id, internal=True)
+    with connection() as database:
+        row = database.execute("""SELECT r.version,p.document FROM edit_runs r JOIN edit_plans p ON p.id=r.edit_plan_id
+            WHERE r.job_id=%s AND r.status='ready' ORDER BY r.version DESC LIMIT 1""", (job_id,)).fetchone()
+    if not row or row["version"] != base_version:
+        raise HTTPException(status_code=409, detail="A newer edit is available. Refresh before marking a product.")
+    choice = next((c for c in clip_choices(row["document"]) if c["clip_index"] == clip_index), None)
+    if not choice or not choice["eligible"]:
+        raise HTTPException(status_code=422, detail=choice["note"] if choice else "Select an existing clip.")
+    asset = next((a for a in context["assets"] if str(a["asset_id"]) == choice["asset_id"]), None)
+    if not asset:
+        raise HTTPException(status_code=404, detail="Source is unavailable.")
+    try:
+        source = resolve_internal_asset_source(get_settings(), asset)
+        picture = first_frame(source, choice["source_in"], choice["duration_seconds"])
+    except (OSError, ValueError, StopIteration, subprocess.SubprocessError):
+        raise HTTPException(status_code=422, detail="Could not read this shot's first frame. Try another shot.")
+    return Response(picture, media_type="image/jpeg", headers={"Cache-Control": "private, no-store"})
 
 
 class LocalRepairRequest(BaseModel):
