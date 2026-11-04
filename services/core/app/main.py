@@ -28,6 +28,7 @@ from app.publishing_captions import router as publishing_captions_router
 from app.duration_routes import router as duration_router
 from app.render_integrity import RENDER_TIMING_VERSION
 from app.subtitle_editor import router as subtitle_editor_router
+from app.cutout_lab_routes import router as cutout_lab_router
 
 
 @asynccontextmanager
@@ -64,6 +65,7 @@ app.include_router(publishing_router)
 app.include_router(publishing_captions_router)
 app.include_router(duration_router)
 app.include_router(subtitle_editor_router)
+app.include_router(cutout_lab_router)
 from app.learning_cases import router as learning_cases_router
 app.include_router(learning_cases_router)
 from app.build_info import deployed_build_id
@@ -127,6 +129,10 @@ def system_information() -> dict[str, Any]:
             "resolved_caption_avoidance": True,
             "max_clips": 8, "max_shot_seconds": 12, "inspection_budget_seconds": 20,
             "background_cutout": False, "automatic_stabilization": False},
+        "cutout_lab": {"version": "person_cutout_lab_v1", "manual_comparison_only": True,
+            "model": "PPHumanSeg 2023mar", "max_sample_seconds": 3, "sample_fps": 8,
+            "processing_budget_seconds": 20, "cpu_only": True, "automatic_processing": False,
+            "edit_application": False, "quality_approved": False, "hosted_model_calls": 0},
         "grounded_revisions": {"version": 1, "quoted_phrase_audio": True, "verified_quiet_pause": True, "server_preflight": True, "hosted_model_calls": 0},
         "context_intelligence": {"version": 2, "incident_bundle_version": 2, "complete_attempt_and_response": True,
             "library_context_links": True, "manual_blooper_range_hints": True, "additional_analysis_model_calls": 0,

@@ -9,7 +9,8 @@ import sys
 
 def main():
     request = runpy.run_path(str(Path(__file__).with_name("verify-phase14.py")))["request"]
-    capability = request("system").get("visual_finishing") or {}
+    system = request("system")
+    capability = system.get("visual_finishing") or {}
     if capability.get("version") != "selected_visual_v1" or capability.get("detector") != "yunet_2023mar" or not all(capability.get(k) for k in (
         "single_face_follow", "small_exposure_match", "explicit_opt_in", "resolved_caption_avoidance")):
         raise RuntimeError("deploy the Phase 28 build before running this check")
@@ -19,8 +20,11 @@ def main():
         raise RuntimeError("deploy the selected-shot stabilization follow-up before running this check")
     if not capability.get("marked_product_tracking") or capability.get("product_tracking_max_clips") != 2 or capability.get("product_tracking_max_clip_seconds") != 8 or capability.get("product_tracking_budget_seconds") != 12 or capability.get("automatic_product_recognition") is not False:
         raise RuntimeError("deploy the explicit product marking follow-up before running this check")
+    lab = system.get("cutout_lab") or {}
+    if lab.get("version") != "person_cutout_lab_v1" or lab.get("manual_comparison_only") is not True or lab.get("max_sample_seconds") != 3 or lab.get("processing_budget_seconds") != 20 or lab.get("automatic_processing") is not False or lab.get("edit_application") is not False or capability.get("background_cutout") is not False:
+        raise RuntimeError("deploy the gated cutout comparison lab; ordinary cutout application must remain disabled")
     print(json.dumps({"status": "passed", "capability": capability, "read_only": True,
-        "renders_started": 0, "model_calls": 0,
+        "cutout_lab": lab, "renders_started": 0, "model_calls": 0,
         "note": "Deployment contract only. Turn on the optional tools in a new visual preview and inspect actual motion, product visibility and card readability."}, indent=2))
 
 

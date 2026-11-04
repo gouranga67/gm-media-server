@@ -1,0 +1,56 @@
+{
+  "model_sha256": "552d8a984054e59b5d773d24b9b12022b22046ceb2bbc4c9aaeaceb36a9ddf24",
+  "source": "NASA astronaut sample documented at https://scikit-image.org/docs/stable/api/skimage.data.html#skimage.data.astronaut",
+  "fixture": "3-second 30fps translated public-domain still; not representative natural-video acceptance",
+  "source_sha256_preserved": true,
+  "metrics": {
+    "source_dimensions": [
+      480,
+      480
+    ],
+    "analysis_dimensions": [
+      480,
+      480
+    ],
+    "sampled_frames": 24,
+    "sample_fps": 8,
+    "sample_source_times": [
+      0.0,
+      1.5,
+      2.875
+    ],
+    "backend": "opencv_cpu",
+    "opencv_version": "4.13.0",
+    "threads": 1,
+    "decode_and_model_seconds": 1.0488,
+    "inference_and_panels_seconds": 0.5381,
+    "encode_seconds": 0.2046,
+    "processing_seconds": 1.831,
+    "process_peak_rss_kib": 282076,
+    "subprocess_peak_rss_kib": 282076,
+    "foreground_fraction_range": [
+      0.3949,
+      0.4094
+    ],
+    "uncertain_pixel_fraction_mean": 0.074,
+    "uncompensated_mask_change_max": 0.0086,
+    "warnings": [
+      "Sampled silent comparison only. This person mask may remove held products and fine hair.",
+      "Mask changes also reflect normal motion; the measurements do not certify flicker or visual quality."
+    ]
+  },
+  "manual_held_object_check": {
+    "object": "visible held helmet",
+    "interior_region_pixels": [
+      330,
+      390,
+      97,
+      75
+    ],
+    "foreground_fraction": 0.0,
+    "mean_segmentation_probability": 0.0011,
+    "observation": "Held helmet is removed; candidate fails this product-preservation check."
+  },
+  "quality_approved": false,
+  "eligible_for_edit_application": false
+}

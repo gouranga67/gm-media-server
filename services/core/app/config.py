@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     visual_encoder_timeout_seconds: int = Field(default=120, ge=10, le=600)
     visual_model_path: Path = Path("/models/clip-vit-base-patch32")
     visual_framing_model_path: Path = Path("/models/face_detection_yunet_2023mar.onnx")
+    cutout_model_path: Path = Path("/models/human_segmentation_pphumanseg_2023mar.onnx")
     appliance_status_path: Path = Path("/host-status/appliance-health.json")
     tailscale_owner_login: str = ""
     tailscale_auth_required: bool = False

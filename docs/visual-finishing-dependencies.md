@@ -45,3 +45,21 @@ Temporary smoke-test image: the [scikit-image astronaut example](https://scikit-
 The stabilization follow-up uses the existing worker FFmpeg binary's native `deshake` filter. No model, package, downloaded media asset or separate motion-analysis pass is added to production. The worker build explicitly checks that the filter is available. See the [primary filter documentation](https://www.ffmpeg.org/ffmpeg-filters.html#deshake) for its translation-shake search and edge handling.
 
 GM Studio fixes all filter arguments internally: a small bounded motion search, mirror edge handling, a fixed approximately 6% crop and restoration to output dimensions. The search is performed after resizing and frame-cadence normalization, before creative zooms. There is no configurable filter expression, output filename or GPU dependency. Existing source HDR-to-SDR conversion precedes this stage. The filter can mistake moving subjects for camera motion, and does not fix motion blur or rolling shutter; manual preview approval remains necessary.
+
+
+## Experimental person-cutout comparison lab
+
+The manually invoked lab uses OpenCV Zoo's PPHumanSeg 2023mar model at the same immutable repository revision `48b10fa505aeb51fbd127fc60a5c660040e823b7`. The model directory declares Apache-2.0 licensing. This is a person segmentation model, not a product-preserving matte model.
+
+| File | Size / SHA-256 |
+| --- | --- |
+| `human_segmentation_pphumanseg_2023mar.onnx` | 6,163,938 bytes; `552d8a984054e59b5d773d24b9b12022b22046ceb2bbc4c9aaeaceb36a9ddf24` |
+| `PPHumanSeg-LICENSE` | `d9cf3b547fa4232fb9285f2db52e909f10f00781aaf64a6d0bb90c55149f1363` |
+
+The full, unmodified notice is retained in `services/core/model-assets/PPHumanSeg-LICENSE` and installed under `/models/PPHumanSeg-LICENSE`. A late worker build step verifies the notice, downloads at most the expected weight size plus one byte and rejects a mismatched hash. It does not invalidate the existing speech/CLIP model layers. Every lab invocation validates the weight size/hash again. Runtime inference has no network/model-download path.
+
+The reference input contract is BGR-to-RGB, 192×192, normalized to [-1,1], with two output probabilities. The local implementation retains the foreground probability as a diagnostic alpha rather than claiming a learned fine-hair matte. Processing uses the existing CPU OpenCV package and makes no CUDA allocation. Ordinary editing does not invoke the lab.
+
+Primary sources: [model README and licensing declaration](https://github.com/opencv/opencv_zoo/blob/48b10fa505aeb51fbd127fc60a5c660040e823b7/models/human_segmentation_pphumanseg/README.md), [Apache-2.0 notice](https://github.com/opencv/opencv_zoo/blob/48b10fa505aeb51fbd127fc60a5c660040e823b7/models/human_segmentation_pphumanseg/LICENSE), [Git LFS size/hash pointer](https://github.com/opencv/opencv_zoo/blob/48b10fa505aeb51fbd127fc60a5c660040e823b7/models/human_segmentation_pphumanseg/human_segmentation_pphumanseg_2023mar.onnx), [reference inference/preprocessing](https://github.com/opencv/opencv_zoo/blob/48b10fa505aeb51fbd127fc60a5c660040e823b7/models/human_segmentation_pphumanseg/pphumanseg.py).
+
+The [cutout lab report](phase-reports/phase-28-cutout-lab.md) records the actual limitation: the tested candidate removed a held helmet. Model capability and speed are not recorded as a successful product-cutout acceptance result.

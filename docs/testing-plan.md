@@ -502,3 +502,12 @@ Deploy, run `python3 scripts/verify-phase28.py`, and open a ready edit's **Smart
 5. Reopen and export. Check the same tracking in the final download, then test a square delivery variant. A shot that cannot fit an aspect must retain existing framing. Timeline/source changes clear old marks; a shortened prefix variant retains only wholly unchanged marked shots.
 
 Automated checks cover both actual CPU renderers, source-frame/version safety, bounded tracking, cache replay, timeouts and user interactions. Phone/desktop checks use synthetic intercepted responses; owner footage, NVENC and deployed final-download acceptance remain separate. No new database migration is required.
+
+
+## Phase 28 — cutout comparison lab (not an editing option)
+
+After deployment, `python3 scripts/verify-phase28.py` must declare the manual lab and keep automatic background-cutout application disabled. Follow the [lab instructions](phase-reports/phase-28-cutout-lab.md) to generate one optional comparison from a ready job. Its main-picture clip numbers start at 1.
+
+Open the printed comparison video and still-image links on phone and desktop. The video is deliberately silent and sampled at 8 fps; it must show original/cutout/mask together. Review hair, hands, held bottles/labels, holes and mask flicker. A lost held product is a failed quality result even if processing was fast. The current person-only candidate already failed a held-helmet fixture, so it is not offered to the editor agent.
+
+The original job, preview, final export, captions and soundtrack must remain unchanged. Repeating the same sample should reuse saved results. A sample beyond the saved source range, unsupported picture type, changed artifact or concurrent trial should fail clearly rather than alter an edit. Production application and representative natural-video/load acceptance remain open.

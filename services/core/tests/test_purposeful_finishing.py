@@ -158,13 +158,24 @@ class AgentFinishingRenderTests(unittest.TestCase):
             events=finish_caption_events([dict(start=0,end=4,text="Recorded words")],plan.finishing)
             ass.write_text(render_ass(events,width=180,height=320))
             _render_video([(source,0,2),(source,2,4)],plan,ass,output,60,width=180,height=320)
+            frames={}
+            def picture(at):
+                if at not in frames:
+                    frames[at]=ffmpeg("-ss",str(at),"-i",str(output),"-frames:v","1","-pix_fmt","rgb24","-f","rawvideo","pipe:1")
+                return frames[at]
             def pixel(at):
-                raw=ffmpeg("-ss",str(at),"-i",str(output),"-frames:v","1","-pix_fmt","rgb24","-f","rawvideo","pipe:1")
+                raw=picture(at)
                 offset=(10*180+80)*3
                 return tuple(raw[offset:offset+3])
-            before,after=pixel(.1),pixel(1.8)
-            self.assertGreater(before[0]-after[0],100)
-            self.assertGreater(after[2]-before[2],100)
+            def colour_patch(at):
+                raw=picture(at)
+                return tuple(sum(raw[(y*180+x)*3+c] for y in range(5,15) for x in range(60,90))/300 for c in range(3))
+            # The old x=80 probe was exactly on the red/blue boundary: NVENC
+            # changed blue by 99 while x264 changed it by 106. A small region
+            # measures the actual anchored framing change without that alias.
+            before,after=colour_patch(.1),colour_patch(1.8)
+            self.assertGreater(before[0]-after[0],40)
+            self.assertGreater(after[2]-before[2],40)
             self.assertGreater(max(pixel(2.05)),100,"the dissolve must not introduce black")
             pcm=array.array('h',ffmpeg("-i",str(output),"-vn","-ac","1","-ar","8000","-f","s16le","pipe:1"))
             self.assertAlmostEqual(len(pcm)/8000,4,delta=.12)
