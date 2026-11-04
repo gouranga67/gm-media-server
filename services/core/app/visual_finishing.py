@@ -278,6 +278,7 @@ def source_crop_filter(plan, index, width, height):
 
 
 def visual_manifest(plan, aspect="vertical"):
+    from app.stabilization import stabilization_manifest
     tools = plan.finishing
     width, height = {"vertical": (540, 960), "square": (540, 540), "landscape": (960, 540)}.get(aspect, (540, 960))
     profiles = []
@@ -288,6 +289,7 @@ def visual_manifest(plan, aspect="vertical"):
             note += " Saved face path is not used for this aspect or manual camera choice."
         profiles.append({**p.model_dump(mode="json"), "framing_applied": applied, "note": note})
     return {"version": VERSION, "smart_framing": tools.smart_framing if tools else "off", "shot_match": bool(tools and tools.shot_match),
+        "stabilize_clips": list(tools.stabilize_clips) if tools else [], "stabilization": stabilization_manifest(plan),
         "detector": "yunet_2023mar", "detector_sha256": MODEL_SHA256,
         "safe_overlays": bool(tools and tools.safe_overlays),
         "profiles": profiles,

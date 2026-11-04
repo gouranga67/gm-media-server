@@ -1,5 +1,6 @@
 from app.duration_policy import duration_review
 from app.visual_finishing import source_crop_filter
+from app.stabilization import stabilization_filter
 from app.finishing_renderer import position_broll_cards
 from app.finishing_tools import (
     apply_graph_finishing,
@@ -108,6 +109,7 @@ def _video_filter(
     fps: int,
     hdr_mode: str | None = None,
     framing: str = "",
+    stabilization: str = "",
 ) -> str:
     chain = f"[{index}:v:0]"
     if hdr_mode is not None:
@@ -117,6 +119,8 @@ def _video_filter(
         f"crop={width}:{height},setsar=1"
     )
     frame_count = max(1, round(duration * fps))
+    if stabilization:
+        chain += "," + stabilization
     final_frame = max(1, frame_count - 1)
     if preset == "punch_in":
         zoom = "1.10"
@@ -196,6 +200,7 @@ def _filter_graph(
                 fps,
                 hdr_mode=hdr_modes[index] if hdr_modes else None,
                 framing=source_crop_filter(plan, index, width, height),
+                stabilization=stabilization_filter(plan, index, width, height, fps),
             )
         )
         asset = assets[str(clip.asset_id)]

@@ -38,3 +38,10 @@ SOFTWARE.
 ```
 
 Temporary smoke-test image: the [scikit-image astronaut example](https://scikit-image.org/docs/stable/api/skimage.data.html#skimage.data.astronaut) documents its NASA origin and public-domain status. It is not shipped as a library asset, used in production edits or uploaded to a hosted model. A synthetic moving composite was used to test sparse detection and crop motion, not to establish quality on real presenter footage.
+
+
+## Selected-shot shake reduction
+
+The stabilization follow-up uses the existing worker FFmpeg binary's native `deshake` filter. No model, package, downloaded media asset or separate motion-analysis pass is added to production. The worker build explicitly checks that the filter is available. See the [primary filter documentation](https://www.ffmpeg.org/ffmpeg-filters.html#deshake) for its translation-shake search and edge handling.
+
+GM Studio fixes all filter arguments internally: a small bounded motion search, mirror edge handling, a fixed approximately 6% crop and restoration to output dimensions. The search is performed after resizing and frame-cadence normalization, before creative zooms. There is no configurable filter expression, output filename or GPU dependency. Existing source HDR-to-SDR conversion precedes this stage. The filter can mistake moving subjects for camera motion, and does not fix motion blur or rolling shutter; manual preview approval remains necessary.

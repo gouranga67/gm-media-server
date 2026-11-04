@@ -476,3 +476,16 @@ After migration 047 is deployed, run `python3 scripts/verify-library-organizatio
 6. With disposable test folders, rename/delete a chosen existing folder in another tab before Apply. Application should report a conflict and roll back the whole batch. Refresh/request a new review, or apply names only. A source moved to Trash or edited since the suggestions must also block stale metadata application. Old saved sessions remain names-only.
 
 Folder suggestions add memberships, never move an original or remove its other memberships. Nested folders and automatic background filing are not implemented by this checkpoint. Existing successful edit-planning/render defaults remain unchanged.
+
+
+## Phase 28 follow-up — selected-shot shake reduction
+
+After deployment, `python3 scripts/verify-phase28.py` reads the declared bounded capability without queueing a render or calling a model. Actual owner playback acceptance is separate.
+
+1. Choose a ready edit containing genuinely shaky short main-picture shots. Open **Smart visual finishing → Choose shaky clips**. Loading choices must not queue a preview. Main-picture clip numbers and source ranges identify the exact selected cut; this tool does not stabilize separate B-roll overlays.
+2. Select up to four eligible 1–8 second normal-speed video clips. Photos, longer/held/retimed clips and shots with manual camera anchors explain why they cannot be selected. Turn single-face follow off before combining with shake reduction. There is no automatic selection or application.
+3. Press **Create visual preview**. Compare with the earlier version, preferably on your phone: shake should be less distracting, important faces/products should survive the approximately 6% edge crop, and pans/moving subjects/edges must look natural. Audio, words, captions and all cut timings must be unchanged. The treatment timeline and saved visual report list the selected clips; they do not certify visual quality.
+4. If the picture wobbles or looks worse, choose **Clear shake reduction**, then explicitly submit another visual preview. The earlier version stays available. Still photos and unselected shots must retain their existing treatment.
+5. Reopen the saved version and export a final delivery. Check speech sync and the selected treatment in the downloaded file. A normal prefix delivery variant retains surviving selected shots, except a shortened tail below one second. A source/timeline change or hosted story rebuild clears the selection so unrelated clips never inherit an old numeric index; choose the new shots again.
+
+The tool is a small translation-shake aid, not a gimbal, product tracker, rolling-shutter correction or blur repair. It adds bounded local CPU work during each render and zero hosted editing-model calls. Test a small example before trying the full four-clip allowance. Background cutout and product tracking remain separate work.

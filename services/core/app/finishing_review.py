@@ -38,6 +38,9 @@ def treatment_timeline(context, plan):
 
     tools = plan.finishing
     if tools:
+        for index in tools.stabilize_clips:
+            add("framing", "Gentle camera-shake reduction", starts[index], starts[index] + durations[index],
+                "Local translation-shake filter and approximately 6% edge crop; review motion and subject framing.", index)
         for profile in tools.visual_profiles:
             at = starts[profile.clip_index]
             from app.visual_finishing import source_crop_filter

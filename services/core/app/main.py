@@ -119,6 +119,7 @@ def system_information() -> dict[str, Any]:
             "paired_checklist":True,"usage_qualification":True,"promotion_history":True,
             "automatic_paid_trials":False,"automatic_promotion":False},
         "visual_finishing": {"version": "selected_visual_v1", "single_face_follow": True,
+            "selected_shot_stabilization": True, "stabilization_max_clips": 4, "stabilization_max_clip_seconds": 8,
             "detector": "yunet_2023mar",
             "small_exposure_match": True, "explicit_opt_in": True, "hosted_model_calls": 0,
             "resolved_caption_avoidance": True,

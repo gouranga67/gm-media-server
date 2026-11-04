@@ -1372,6 +1372,9 @@ def process_one_edit(state: WorkerState) -> bool:
                     plan = plan.model_copy(update={"finishing": tools.model_copy(update={
                         "smart_framing": "off", "shot_match": False, "safe_overlays": False,
                         **visual_options, "visual_profiles": []}, deep=True)}, deep=True)
+                    # Shot indexes may change in a hosted story revision. The
+                    # owner can choose stabilization again on the resulting cut.
+                    plan.finishing.stabilize_clips = []
             with measure_processing("visual_finishing") as timing:
                 timing["did_work"] = bool(plan.finishing and (plan.finishing.smart_framing == "face" or plan.finishing.shot_match)
                     and not plan.finishing.visual_profiles)

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, model_validator, model_serializer
 
@@ -155,6 +155,8 @@ class FinishingTools(ToolModel):
             data.pop("safe_overlays", None)
         if not data.get("visual_profiles"):
             data.pop("visual_profiles", None)
+        if not data.get("stabilize_clips"):
+            data.pop("stabilize_clips", None)
         return data
 
     motions: list[ClipMotion] = Field(default_factory=list, max_length=24)
@@ -170,6 +172,7 @@ class FinishingTools(ToolModel):
     shot_match: bool = False
     safe_overlays: bool = False
     visual_profiles: list[VisualProfile] = Field(default_factory=list, max_length=48)
+    stabilize_clips: list[Annotated[int, Field(strict=True, ge=0, le=47)]] = Field(default_factory=list, max_length=4)
     audio_joins: list[AudioJoin] = Field(default_factory=list, max_length=8)
 
 
@@ -181,6 +184,8 @@ def validate_finishing(
     tools = plan.finishing
     if tools is None:
         return
+    from app.stabilization import validate_stabilization
+    validate_stabilization(plan)
     if tools.music_start_seconds:
         track = next(
             (
@@ -650,6 +655,9 @@ def retime_finishing(
     # Measurements belong to exact source ranges, never to a mutable clip index.
     # The opted-in worker may inspect the newly selected ranges before saving.
     data.pop("visual_profiles", None)
+    # A chosen shot is an exact cut, not an index that can migrate to unrelated
+    # footage after trimming, repetition or reordering. Explicitly choose again.
+    data.pop("stabilize_clips", None)
     for name in ("audio_regions", "caption_regions", "layers", "callouts", "pointers", "music_regions"):
         result = []
         for region in data.get(name, []):

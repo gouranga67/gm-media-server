@@ -1,6 +1,6 @@
 # Phase 28 — selected-shot visual finishing
 
-Source checkpoint: 2026-11-03 UTC. This delivery adds optional face-aware cropping, small exposure matching and caption-aware image cards. Owner deployment and real-footage acceptance remain open. General object/product tracking, stabilization and learned background cutout are not implemented by this checkpoint; the wider Phase 28 gate remains open.
+Source checkpoint: 2026-11-03 UTC. This delivery adds optional face-aware cropping, small exposure matching and caption-aware image cards. Owner deployment and real-footage acceptance remain open. General object/product tracking, stabilization and learned background cutout were not implemented by this first checkpoint. The later [selected-shot stabilization follow-up](phase-28-stabilization.md) now adds opt-in small-shake reduction; the wider Phase 28 gate remains open.
 
 ## Controls and behaviour
 
@@ -35,4 +35,4 @@ python3 scripts/verify-phase28.py
 
 The helper checks the deployed capability contract only. It queues no work and is not a claim of visual quality. Follow the [visual finishing acceptance checklist](../testing-plan.md#selected-shot-visual-finishing-acceptance--2026-11-03). No database migration follows 043 for this checkpoint. The worker image gains the pinned CPU-only `opencv-python-headless==4.13.0.92` dependency, plus the pinned 232,589-byte MIT-licensed YuNet model and its license notice. The model is fetched at build time, checked against its SHA-256 and never downloaded during an edit. Its separate late Docker dependency layer preserves the existing cached speech/CLIP model download layers when that earlier build cache is available.
 
-Optional stabilization needs representative shaky-shot tests and motion/crop acceptance before enabling it. A background-cutout prototype still needs a pinned redistributable model, a measured selected-range compute budget, matte/edge tests and quality acceptance. Existing real green-screen keying remains available. These capabilities must not be advertised as shipped.
+Optional stabilization is now implemented in the [selected-shot follow-up](phase-28-stabilization.md); it remains off until explicitly selected, and real shaky-shot motion/crop acceptance is still required. A background-cutout prototype still needs a pinned redistributable model, a measured selected-range compute budget, matte/edge tests and quality acceptance. Existing real green-screen keying remains available. These capabilities must not be advertised as shipped.

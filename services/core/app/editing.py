@@ -1327,9 +1327,10 @@ def inspect_finishing_tools(job_id: UUID):
     if not row:
         raise HTTPException(status_code=409, detail="a ready preview is required")
     from app.finishing_tools import FinishingTools
-
+    from app.stabilization import clip_choices
     return {
         "version": row["version"],
+        "stabilization_candidates": clip_choices(row["document"]),
         "settings": row["document"].get("finishing")
         or FinishingTools().model_dump(mode="json"),
         "clips": [
@@ -1361,6 +1362,7 @@ def inspect_finishing_tools(job_id: UUID):
             "ai_background_removal": False,
             "automatic_tracking": False,
             "single_face_follow": True,
+            "selected_shot_stabilization": True,
             "small_exposure_match": True,
         },
         "hosted_model_calls": 0,

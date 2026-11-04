@@ -154,7 +154,7 @@ globalThis.fetch = async (url, options = {}) => {
     if (alternativeFailure) return {ok:false,status:409,json:async()=>({detail:"This alternative could not be queued. Your original is unchanged."})};
     payload={id:"alternative",version:3,status:"pending"};
   }
-  else if (route === `jobs/${jobId}/finishing-tools`) payload = { version: 2, settings: { motions:[],colours:[],audio_regions:[],caption_regions:[],layers:[],music_start_seconds:0,voice_denoise:false,audio_joins:[] }, sources:[{ asset_id:serverId,name:"Review image",media_kind:"image",duration_seconds:0 }] };
+  else if (route === `jobs/${jobId}/finishing-tools`) payload = { version: 2, settings: { motions:[],colours:[],audio_regions:[],caption_regions:[],layers:[],music_start_seconds:0,voice_denoise:false,audio_joins:[] }, sources:[{ asset_id:serverId,name:"Review image",media_kind:"image",duration_seconds:0 }], stabilization_candidates:Array.from({length:6},(_,clip_index)=>({clip_index,asset_id:serverId,duration_seconds:clip_index===5?14:3,source_in:0,source_out:clip_index===5?14:3,eligible:clip_index!==5,note:clip_index===5?"Choose a 1–8 second shot":""})) };
   else if (route === "concepts/library-status") payload = { unique_sources: 3, catalogued_sources: 3, spoken_sources: 2, visually_indexed_sources: 3, still_processing: 0 };
   else if (route === "concepts" && (options.method ?? "GET") === "GET") payload = conceptHistory;
   else if (route === "concepts") {
@@ -835,6 +835,34 @@ test("visual options do no work before explicit apply and preserve unrelated fin
  assert.equal(body.finishing_settings.shot_match,false);
  assert.deepEqual(body.finishing_settings.visual_profiles,[]);
  assert.deepEqual(body.finishing_settings.audio_joins,[]);
+});
+test("shake reduction loads clips explicitly, caps the selection and preserves other finishing",async()=>{
+ await act(async()=>root.render(React.createElement(VisualFinishingControls,{jobId,version:2,onUpdated:()=>{readyEvents+=1;}})));
+ assert.equal(calls.some(c=>c.route.endsWith("finishing-tools")),false);
+ await click(button("Choose shaky clips"));
+ await waitFor(()=>document.querySelector('input[aria-label="Reduce shake in clip 6"]'));
+ assert.equal(document.querySelector('input[aria-label="Reduce shake in clip 6"]').disabled,true);
+ for(let i=1;i<=4;i++)await click(document.querySelector(`input[aria-label="Reduce shake in clip ${i}"]`));
+ assert.equal(document.querySelector('input[aria-label="Reduce shake in clip 5"]').disabled,true);
+ assert.equal(posts(`jobs/${jobId}/revisions`).length,0);
+ const face=document.querySelector('fieldset input[type="checkbox"]');await click(face);
+ assert.equal(button("Create visual preview").disabled,true);
+ await click(face);
+ await act(async()=>document.querySelector('form').dispatchEvent(new Event("submit",{bubbles:true,cancelable:true})));
+ await waitFor(()=>readyEvents===1);
+ const body=posts(`jobs/${jobId}/revisions`)[0].body;
+ assert.deepEqual(body.finishing_settings.stabilize_clips,[0,1,2,3]);
+ assert.equal(body.base_version,2);assert.equal(body.note,"");
+ assert.deepEqual(body.finishing_settings.audio_joins,[]);
+});
+test("saved shake selection can be cleared only with explicit submit",async()=>{
+ await act(async()=>root.render(React.createElement(VisualFinishingControls,{jobId,version:2,report:{stabilize_clips:[1]},onUpdated:()=>{readyEvents+=1;}})));
+ assert.ok(document.body.textContent.includes("Saved shake reduction: clips 2"));
+ await click(button("Clear shake reduction"));
+ assert.equal(posts(`jobs/${jobId}/revisions`).length,0);
+ await act(async()=>document.querySelector('form').dispatchEvent(new Event("submit",{bubbles:true,cancelable:true})));
+ await waitFor(()=>readyEvents===1);
+ assert.deepEqual(posts(`jobs/${jobId}/revisions`)[0].body.finishing_settings.stabilize_clips,[]);
 });
 test("visual finishing explains declined shots and refuses stale versions",async()=>{
  await act(async()=>root.render(React.createElement(VisualFinishingControls,{jobId,version:1,

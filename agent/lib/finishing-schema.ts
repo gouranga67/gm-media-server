@@ -127,6 +127,7 @@ export const finishingToolsSchema = z
     voice_denoise: z.boolean(),
     voice_cleanup: z.enum(["off", "auto"]).optional(),
     smart_framing: z.enum(["off", "face"]).optional(),
+  stabilize_clips: z.array(z.number().int().min(0).max(47)).max(4).optional(),
     shot_match: z.boolean().optional(),
     safe_overlays: z.boolean().optional(),
   })

@@ -15,6 +15,8 @@ def main():
         raise RuntimeError("deploy the Phase 28 build before running this check")
     if capability.get("hosted_model_calls") != 0 or capability.get("max_clips") != 8 or capability.get("inspection_budget_seconds") != 20:
         raise RuntimeError("the bounded local visual finishing contract is incomplete")
+    if not capability.get("selected_shot_stabilization") or capability.get("stabilization_max_clips") != 4 or capability.get("stabilization_max_clip_seconds") != 8:
+        raise RuntimeError("deploy the selected-shot stabilization follow-up before running this check")
     print(json.dumps({"status": "passed", "capability": capability, "read_only": True,
         "renders_started": 0, "model_calls": 0,
         "note": "Deployment contract only. Turn on the optional tools in a new visual preview and inspect actual motion, product visibility and card readability."}, indent=2))

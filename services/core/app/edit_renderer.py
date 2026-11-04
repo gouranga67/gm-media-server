@@ -1,5 +1,6 @@
 from app.duration_policy import duration_review
 from app.visual_finishing import source_crop_filter
+from app.stabilization import stabilization_filter
 from app.finishing_renderer import position_broll_cards
 from app.finishing_tools import (
     apply_graph_finishing,
@@ -344,6 +345,7 @@ def _clip_video_filter(
     frames_per_second: int,
     hdr_mode: str | None = None,
     framing: str = "",
+    stabilization: str = "",
 ) -> str:
     chain = f"[{index}:v:0]"
     if hdr_mode is not None:
@@ -353,6 +355,8 @@ def _clip_video_filter(
         f"crop={width}:{height},setsar=1,setpts=PTS-STARTPTS"
     )
     total_frames = max(1, round(duration * frames_per_second) - 1)
+    if stabilization:
+        chain += "," + stabilization
     if visual_preset == "punch_in":
         zoom = "1.12"
     elif visual_preset == "strong_punch_in":
@@ -416,6 +420,7 @@ def _ffmpeg_filter(
                 frames_per_second=frames_per_second,
                 hdr_mode=hdr_modes[index] if hdr_modes else None,
                 framing=source_crop_filter(plan, index, width, height),
+                stabilization=stabilization_filter(plan, index, width, height, frames_per_second),
             )
         )
         audio = (

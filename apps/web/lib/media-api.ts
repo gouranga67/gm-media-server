@@ -1542,13 +1542,15 @@ export type FinishingTools = {
   readonly smart_framing?: "off" | "face";
   readonly shot_match?: boolean;
   readonly safe_overlays?: boolean;
+  readonly stabilize_clips?: readonly number[];
   readonly visual_profiles?: readonly { readonly clip_index: number; readonly asset_id: string; readonly source_in: number; readonly source_out: number;
     readonly status: "measured" | "skipped" | "unavailable"; readonly sampled_frames: number; readonly note: string;
     readonly source_width: number; readonly source_height: number; readonly brightness: number;
     readonly framing_applied?: boolean;
     readonly points: readonly { readonly time: number; readonly x: number; readonly y: number; readonly width: number; readonly height: number }[] }[];
 };
-export type FinishingInspection = { readonly version: number; readonly settings: FinishingTools; readonly sources: readonly { readonly asset_id: string; readonly name: string; readonly media_kind: "image" | "video"; readonly duration_seconds: number }[] };
+export type StabilizationChoice = { readonly clip_index: number; readonly asset_id: string; readonly duration_seconds: number; readonly eligible: boolean; readonly note: string; readonly source_in: number; readonly source_out: number };
+export type FinishingInspection = { readonly version: number; readonly settings: FinishingTools; readonly stabilization_candidates?: readonly StabilizationChoice[]; readonly sources: readonly { readonly asset_id: string; readonly name: string; readonly media_kind: "image" | "video"; readonly duration_seconds: number }[] };
 export const getFinishingTools = (id: string) => apiRequest<FinishingInspection>(`jobs/${id}/finishing-tools`);
 
 export type LearningLesson = { readonly id: string; readonly directive: string; readonly recipe: string; readonly edit_style: string; readonly status: "proposed" | "promoted" | "rolled_back"; readonly training_job_ids: readonly string[];
