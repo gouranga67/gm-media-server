@@ -1572,6 +1572,7 @@ export type LearningLesson = { readonly id: string; readonly directive: string; 
   readonly case_options?: readonly { readonly case_id: string; readonly eligible: boolean; readonly reason: string | null }[];
   readonly trial_options?: readonly { readonly job_id: string; readonly eligible: boolean; readonly reason: string | null }[];
   readonly evaluation: { readonly held_out_jobs: number; readonly can_promote: boolean; readonly rating_delta: number | null; readonly regressions: number;
+    readonly history_scope?: "all_saved_trials"; readonly total_trials?: number;
     readonly rated_jobs?: number; readonly excluded_comparisons?: number; readonly overlapping_comparisons?: number;
     readonly token_delta?: number | null; readonly costed_comparisons?: number; readonly note?: string; readonly blockers?: readonly string[];
     readonly rubric_regressions?: number; readonly unmeasured_pairs?: number; readonly budget_exceeded_pairs?: number; readonly technical_regressions?: number } };
@@ -1583,7 +1584,7 @@ export type LearningCase = { readonly id: string; readonly job_id: string; reado
   readonly expectations: string; readonly max_candidate_tokens: number | null; readonly recipe: string; readonly edit_style: string;
   readonly source_count: number; readonly brief: string; readonly archived_at: string | null; readonly baseline_available: boolean };
 export type LearningUsage = { readonly requests: number; readonly total_tokens: number; readonly model_latency_ms: number };
-export type LearningTrial = { readonly id: string; readonly job_id: string; readonly version: number; readonly baseline_version: number; readonly status: string; readonly evaluation_lesson_id: string; readonly project_name: string;
+export type LearningTrial = { readonly id: string; readonly job_id: string; readonly version: number; readonly baseline_version: number | null; readonly status: string; readonly evaluation_lesson_id: string; readonly project_name: string;
   readonly baseline_available?: boolean; readonly candidate_available?: boolean;
   readonly baseline_usage?: LearningUsage | null; readonly candidate_usage?: LearningUsage | null;
   readonly baseline_quality?: string | null; readonly candidate_quality?: string | null;
@@ -1596,6 +1597,8 @@ export type LearningLab = { readonly lessons: readonly LearningLesson[]; readonl
   readonly history?: readonly { readonly id: string; readonly lesson_id: string; readonly deployment_version: number; readonly action: string; readonly created_at: string; readonly directive_hash: string; readonly actor: string; readonly previous_status: string; readonly status: string }[];
   readonly jobs: readonly { readonly id: string; readonly name: string; readonly recipe: string; readonly edit_style: string; readonly version: number; readonly ordinary?: boolean }[]; readonly note: string };
 export const getLearningLab = () => apiRequest<LearningLab>("learning/lab");
+export type LearningComparisonPage = { readonly items: readonly LearningTrial[]; readonly next_before: string | null; readonly total: number; readonly limit: number; readonly hosted_model_calls: 0 };
+export const getLearningComparisons = (lessonId: string, before?: string) => apiRequest<LearningComparisonPage>(`learning/lab/lessons/${encodeURIComponent(lessonId)}/comparisons?limit=20${before ? `&before=${encodeURIComponent(before)}` : ""}`);
 export const proposeLearningLessons = () => apiRequest("learning/lab/propose",{method:"POST"});
 export const tryLearningLesson = (lessonId: string, jobId: string, version: number, caseId?: string) => apiRequest(`learning/lab/lessons/${lessonId}/trial`,{method:"POST",body:JSON.stringify({job_id:jobId,base_version:version,case_id:caseId})});
 export const evaluateLearningLesson = (lessonId: string, candidateId: string, baseline: number, candidate: number, note = "", assessment?: { rubric: PlaybackRubric; reviewed_both: boolean }) => apiRequest(`learning/lab/lessons/${lessonId}/evaluate`,{method:"POST",body:JSON.stringify({candidate_run_id:candidateId,baseline_rating:baseline,candidate_rating:candidate,note,...assessment})});

@@ -91,6 +91,7 @@ const { folderTrail, folderTree, folderLabel, folderDestinations } = require(pat
 
 let intakeItems = [];
 let caseSaveFailure=false;
+let comparisonPages = [], historyFailure = false;
 let releaseFixture, releaseFailure=false;
 const { PilotChecklist } = require(path.join(repo, "apps/web/app/_components/pilot-checklist.tsx"));
 globalThis.fetch = async (url, options = {}) => {
@@ -129,6 +130,11 @@ globalThis.fetch = async (url, options = {}) => {
   else if (/^publishing\/drafts\/[^/?]+$/.test(route)) { if(options.method==="PATCH"){publishingFixture.draft.caption=body.caption;publishingFixture.draft.revision+=1;}payload=publishingFixture.draft; }
   else if (route === "publishing/meta/complete") payload={connected:2};
   else if (route === "learning/lab") payload = labFixture ?? { lessons: lessonProposed ? [{ id:serverId,recipe:"talking_head",edit_style:"high_impact",status:"proposed",directive:"Keep complete clean speech.",training_job_ids:[jobId,"training-b","training-c"],evaluation:{held_out_jobs:0,can_promote:false,rating_delta:null,regressions:0} }] : [],trials:[],jobs:[] };
+  else if (/^learning\/lab\/lessons\/[^/]+\/comparisons\?/.test(route)) {
+    if(historyFailure)return {ok:false,status:409,json:async()=>({detail:"History changed; refresh the lesson"})};
+    const params=new URLSearchParams(route.split('?')[1]);
+    payload=structuredClone(comparisonPages.find(page=>(page.before??null)===(params.get('before')??null))?.response ?? {items:[],next_before:null,total:0,limit:20,hosted_model_calls:0});
+  }
   else if (route === "learning/lab/cases") {
     if(caseSaveFailure)return {ok:false,status:409,json:async()=>({detail:"The baseline changed. No test was saved."})};
     labFixture.cases ??= [];
@@ -297,7 +303,7 @@ beforeEach(() => {
   subtitleFailure=false;
   const subtitleCues=[{id:"cue-0000",start:.1,end:2.5,text:"Costa Royal!",position:null,hidden:false},{id:"cue-0001",start:3.2,end:5.8,text:"Our favourite cream.",position:null,hidden:false}];
   subtitleFixture={run_id:serverId,version:2,base_hash:"a".repeat(64),revision:0,cues:subtitleCues,baseline:subtitleCues,position:"lower_safe",duration:6,saved:false,applied_run_id:null,hosted_model_calls:0};
-  folderList=[];folderMembers=new Map();folderFailure=false;
+  folderList=[];folderMembers=new Map();folderFailure=false;comparisonPages=[];historyFailure=false;
   creativeImportAttempts = new Map();
   alternativeFailure=false;
   durationFailure=false;
@@ -1977,4 +1983,71 @@ test("removing a parent folder is blocked while its subfolders remain",async()=>
   assert.equal(button('Confirm remove folder').disabled,true);
   assert.match(document.querySelector('[aria-label="Folder settings"]').textContent,/subfolders first/);
   assert.equal(calls.filter(call=>call.method==='DELETE').length,0);
+});
+
+function setupComparisonHistory() {
+  labFixture=learningFixture();labFixture.lessons[0].evaluation={...labFixture.lessons[0].evaluation,history_scope:'all_saved_trials',total_trials:102,can_promote:false,blockers:['Review every finished trial pair; do not select only the favourites.']};
+  const row=(id,name,version)=>({id,job_id:jobId,version,baseline_version:1,status:'ready',evaluation_lesson_id:serverId,project_name:name,baseline_available:true,candidate_available:true});
+  const recent=row('recent','Recent pair',2),older=row('older','Older pair',3);
+  labFixture.trials=[recent];
+  comparisonPages=[{before:null,response:{items:[recent],next_before:'recent',total:102,limit:20,hosted_model_calls:0}},
+    {before:'recent',response:{items:[older],next_before:null,total:102,limit:20,hosted_model_calls:0}}];
+}
+const historyCalls=()=>calls.filter(call=>call.route.includes('/comparisons?'));
+
+test('all-trial readiness is shown and history loads only after it is opened',async()=>{
+  setupComparisonHistory();await act(async()=>root.render(React.createElement(LearningLabPanel)));
+  await waitFor(()=>document.body.textContent.includes('all 102 saved trials'));
+  assert.equal(historyCalls().length,0);assert.equal(button('Promote passed lesson').disabled,true);
+  await click(button('Browse all comparisons for this lesson'));
+  await waitFor(()=>document.body.textContent.includes('Page 1'));
+  assert.equal(historyCalls().length,1);assert.equal(historyCalls()[0].method,'GET');
+  assert.match(historyCalls()[0].route,/limit=20/);
+  await click(button('Older comparisons'));await waitFor(()=>document.body.textContent.includes('Older pair'));
+  assert.match(historyCalls().at(-1).route,/before=recent/);assert.equal(button('Older comparisons').disabled,true);
+  assert.equal(calls.some(call=>call.method!=='GET'),false);
+});
+
+test('unsaved playback ratings and notes survive history pages and recent-view toggles',async()=>{
+  setupComparisonHistory();await act(async()=>root.render(React.createElement(LearningLabPanel)));
+  await waitFor(()=>document.querySelector('[aria-label="Playback comparison note"]'));
+  await type('[aria-label="Playback comparison note"]','Check the ending carefully.');
+  await chooseOption('select:not([aria-label])','3');
+  await click(button('Browse all comparisons for this lesson'));await waitFor(()=>document.body.textContent.includes('Page 1'));
+  assert.equal(document.querySelector('[aria-label="Playback comparison note"]').value,'Check the ending carefully.');
+  await click(button('Older comparisons'));await waitFor(()=>document.body.textContent.includes('Older pair'));
+  await type('[aria-label="Playback comparison note"]','A second independent draft.');
+  await click(button('Newer comparisons'));await waitFor(()=>document.body.textContent.includes('Recent pair'));
+  assert.equal(document.querySelector('[aria-label="Playback comparison note"]').value,'Check the ending carefully.');
+  await click(button('Return to recent comparisons'));
+  assert.equal(document.querySelector('[aria-label="Playback comparison note"]').value,'Check the ending carefully.');
+  assert.equal(calls.some(call=>call.method!=='GET'),false);
+});
+
+test('failed history navigation retains the previous page and retries the same cursor',async()=>{
+  setupComparisonHistory();await act(async()=>root.render(React.createElement(LearningLabPanel)));
+  await waitFor(()=>document.body.textContent.includes('all 102 saved trials'));
+  await click(button('Browse all comparisons for this lesson'));await waitFor(()=>document.body.textContent.includes('Page 1'));
+  await type('[aria-label="Playback comparison note"]','Do not lose this review.');
+  historyFailure=true;await click(button('Older comparisons'));
+  await waitFor(()=>document.querySelector('[role="alert"]')?.textContent.includes('History changed'));
+  assert.match(document.body.textContent,/Page 1/);assert.equal(document.querySelector('[aria-label="Playback comparison note"]').value,'Do not lose this review.');
+  historyFailure=false;await click(button('Retry history page'));await waitFor(()=>document.body.textContent.includes('Page 2'));
+  const routes=historyCalls().slice(-2).map(call=>call.route);assert.equal(routes[0],routes[1]);
+  assert.equal(calls.some(call=>call.method!=='GET'),false);
+});
+
+test('refreshing comparisons refetches the current history page and preserves review drafts',async()=>{
+  setupComparisonHistory();await act(async()=>root.render(React.createElement(LearningLabPanel)));
+  await waitFor(()=>document.body.textContent.includes('all 102 saved trials'));
+  await click(button('Browse all comparisons for this lesson'));await waitFor(()=>document.body.textContent.includes('Page 1'));
+  await click(button('Older comparisons'));await waitFor(()=>document.body.textContent.includes('Page 2'));
+  await type('[aria-label="Playback comparison note"]','My review draft.');
+  comparisonPages[1].response.items[0].comparison={baseline_rating:3,candidate_rating:4,note:'Saved by owner'};
+  labFixture={...labFixture}; // A real JSON refresh supplies a new response object.
+  await click(button('Refresh comparisons'));
+  await waitFor(()=>document.body.textContent.includes('Saved comparison: baseline 3/5'));
+  assert.match(historyCalls().at(-1).route,/before=recent/);
+  assert.equal(document.querySelector('[aria-label="Playback comparison note"]').value,'My review draft.');
+  assert.equal(calls.some(call=>call.method!=='GET'),false);
 });

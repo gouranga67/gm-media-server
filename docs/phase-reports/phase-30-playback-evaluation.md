@@ -26,7 +26,7 @@ Explicit promote, rollback and protocol-upgrade actions record a monotonically i
 
 Saved cases freeze the task/source/baseline inputs described above, not the whole global music/effects catalogue, deployed build, global preferences or stochastic model state. Models and measured usage are recorded with the score. Keep those broader conditions stable when comparing trials, and treat preference as evidence rather than proof that one directive alone caused the improvement. Do not archive or discard inconvenient trials to manufacture a preferred result.
 
-The page lists the latest 100 cases, trial previews and activation events, plus the latest 100 lessons. Older database records are retained; full history pagination is future work. The promotion endpoint checks every trial for the selected lesson, so a recent-page summary can be more optimistic than the final server decision. Saving a case requires complete analysis/checksums for at most 100 attached sources. No extra media recognition model, hosted critique, paid trial, score, promotion or social post runs automatically.
+The overview lists the latest 100 cases, trial previews and activation events, plus the latest 100 lessons. The [comparison-history follow-up](phase-30-comparison-history.md) adds owner-only per-lesson trial pages and makes the dashboard readiness report use every trial for each displayed lesson, matching the promotion endpoint. Pagination of the lesson/case/event lists remains future work. Saving a case requires complete analysis/checksums for at most 100 attached sources. No extra media recognition model, hosted critique, paid trial, score, promotion or social post runs automatically.
 
 ## Validation and acceptance
 

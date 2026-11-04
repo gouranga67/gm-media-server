@@ -118,6 +118,7 @@ def system_information() -> dict[str, Any]:
             "reviewable_folder_suggestions": True,
             "upload_concurrency": 2, "automatic_hosted_model_calls": 0},
         "learning_evaluation": {"version": 2,"saved_test_cases":True,"recording_groups":True,
+            "complete_trial_readiness":True,"comparison_history_pagination":True,"comparison_page_size":20,
             "paired_checklist":True,"usage_qualification":True,"promotion_history":True,
             "automatic_paid_trials":False,"automatic_promotion":False},
         "visual_finishing": {"version": "selected_visual_v1", "single_face_follow": True,
@@ -189,7 +190,9 @@ def learning_evaluation_information() -> dict[str, Any]:
     with connection() as database:
         row = database.execute("SELECT to_regclass('learning_cases') IS NOT NULL AND "
             "to_regclass('learning_lesson_events') IS NOT NULL AS ready").fetchone()
-    return {"version":2,"schema_ready":bool(row and row["ready"]),"automatic_model_calls":0}
+        history = database.execute("SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version='049_learning_comparison_history.sql') AS ready").fetchone()
+    return {"version":2,"schema_ready":bool(row and row["ready"]),"automatic_model_calls":0,
+        "comparison_history_schema_ready":bool(history and history["ready"])}
 
 
 @app.get("/api/v1/system/performance")

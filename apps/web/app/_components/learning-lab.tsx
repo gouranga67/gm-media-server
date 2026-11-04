@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { LearningComparisonHistory } from "./learning-comparison-history";
 import { LearningTestCases } from "./learning-test-cases";
 import {
   getLearningLab,
@@ -110,6 +111,12 @@ function LessonCard({
   readonly busy: boolean;
   readonly action: (task: () => Promise<unknown>) => Promise<void>;
 }) {
+  const [fullHistory, setFullHistory] = useState(false);
+  const [drafts, setDrafts] = useState<Readonly<Record<string, PlaybackDraft>>>({});
+  function renderTrial(trial: LearningTrial) {
+    return <TrialReview key={trial.id} trial={trial} busy={busy} action={action} strict={(lesson.evaluation_protocol ?? 1) >= 2}
+      draft={drafts[trial.id] ?? playbackDraft(trial)} onDraft={(patch) => setDrafts(current => ({...current,[trial.id]:{...(current[trial.id] ?? playbackDraft(trial)),...patch}}))} />;
+  }
   const [jobId, setJobId] = useState("");
   const [caseId, setCaseId] = useState("");
   const caseMode = (lesson.evaluation_protocol ?? 1) >= 2;
@@ -141,6 +148,7 @@ function LessonCard({
         {lesson.evaluation.regressions} lower ratings
       </p>
       <p className="mt-2 text-xs text-[#53646F]">{caseMode ? "Saved-case protocol · complete playback checklist and measured usage required." : "Legacy protocol · existing ratings are preserved. Upgrade before starting new saved-case evaluations."} Deployment {lesson.deployment_version ?? 0}.</p>
+      {lesson.evaluation.history_scope === "all_saved_trials" ? <p className="mt-2 text-xs text-[#53646F]">Readiness checks all {lesson.evaluation.total_trials ?? 0} saved trials for this lesson, including older pages. It does not depend on which comparisons are open.</p> : null}
       {lesson.evaluation.blockers?.length ? <ul className="mt-2 list-disc space-y-1 pl-4 text-xs leading-5 text-[#A23B2A]">{lesson.evaluation.blockers.map(reason=><li key={reason}>{reason}</li>)}</ul> : null}
       {lesson.evaluation.excluded_comparisons ? <p className="mt-2 text-xs text-[#A23B2A]">{lesson.evaluation.excluded_comparisons} comparison(s) do not qualify. {caseMode ? "Older scores remain visible; use fresh saved-case trials for the new protocol." : "Review and save those pairs again before relying on them."}</p> : null}
       {lesson.evaluation.overlapping_comparisons ? <p className="mt-2 text-xs text-[#666862]">{lesson.evaluation.overlapping_comparisons} comparison(s) reuse footage and do not add independent evidence.</p> : null}
@@ -190,17 +198,9 @@ function LessonCard({
         </div>
       ) : null}
       <div className="mt-3 space-y-3">
-        {data.trials
-          .filter((t) => t.evaluation_lesson_id === lesson.id)
-          .map((trial) => (
-            <TrialReview
-              key={trial.id}
-              trial={trial}
-              busy={busy}
-              action={action}
-              strict={caseMode}
-            />
-          ))}
+        <button className={control} disabled={busy} onClick={() => setFullHistory(current=>!current)} type="button">{fullHistory ? "Return to recent comparisons" : "Browse all comparisons for this lesson"}</button>
+        {fullHistory ? <LearningComparisonHistory lessonId={lesson.id} busy={busy} refreshToken={data} renderTrial={renderTrial} />
+          : data.trials.filter(trial=>trial.evaluation_lesson_id===lesson.id).map(renderTrial)}
       </div>
       <div className="mt-4 flex flex-wrap gap-3">
         {!caseMode && lesson.status!=="promoted" ? <button className={control} disabled={busy} onClick={()=>{if(window.confirm("Use saved-case evaluation? Existing ratings remain visible, but new promotion will require three saved independent playback comparisons with the full checklist and measured usage."))void action(()=>setLearningLessonStatus(lesson.id,"upgrade"));}} type="button">Upgrade to saved-case evaluation</button> : null}
@@ -234,22 +234,23 @@ function LessonCard({
     </article>
   );
 }
+type PlaybackDraft = { baseline: number; candidate: number; note: string; watched: boolean; rubric: Partial<Record<PlaybackDimension,PlaybackVerdict>> };
+function playbackDraft(trial: LearningTrial): PlaybackDraft {
+  return {baseline:trial.comparison?.baseline_rating ?? 0,candidate:trial.comparison?.candidate_rating ?? 0,note:trial.comparison?.note ?? "",watched:false,rubric:trial.comparison?.rubric ?? {}};
+}
 function TrialReview({
   trial,
   busy,
   action,
-  strict,
+  strict, draft, onDraft,
 }: {
   readonly trial: LearningTrial;
   readonly busy: boolean;
   readonly action: (task: () => Promise<unknown>) => Promise<void>;
   readonly strict: boolean;
+  readonly draft: PlaybackDraft; readonly onDraft: (patch: Partial<PlaybackDraft>) => void;
 }) {
-  const [baseline, setBaseline] = useState(trial.comparison?.baseline_rating ?? 0);
-  const [candidate, setCandidate] = useState(trial.comparison?.candidate_rating ?? 0);
-  const [note, setNote] = useState(trial.comparison?.note ?? "");
-  const [watched, setWatched] = useState(false);
-  const [rubric,setRubric] = useState<Partial<Record<PlaybackDimension,PlaybackVerdict>>>(trial.comparison?.rubric ?? {});
+  const {baseline,candidate,note,watched,rubric} = draft;
   const rubricRequired = Boolean(trial.evaluation_case_id);
   const dimensions: readonly {key:PlaybackDimension;label:string}[] = [
     {key:"brief",label:"Brief and test criteria"},{key:"story",label:"Story and ending"},{key:"speech",label:"Complete words and sync"},
@@ -291,14 +292,14 @@ function TrialReview({
           <p className="mt-2 text-xs text-[#53646F]">Local technical checks: baseline {trial.baseline_quality ?? "not recorded"} · trial {trial.candidate_quality ?? "not recorded"}. Inspect any warnings on the job page; passing checks do not prove a good story.</p>
           {trial.comparison ? <p className="mt-2 text-xs font-bold text-[#173F5F]">Saved comparison: baseline {trial.comparison.baseline_rating}/5 · trial {trial.comparison.candidate_rating}/5.</p> : null}
           {trial.executable_changed === false ? <p className="mt-2 text-xs text-[#A23B2A]">The executable edit was unchanged. A higher rating alone will not count as an improvement.</p> : null}
-          {rubricRequired ? <fieldset className="mt-4 grid gap-3 sm:grid-cols-2"><legend className="mb-2 text-sm font-bold text-[#173F5F]">How does the trial compare with the baseline?</legend>{dimensions.map(({key,label})=><label className="min-w-0 text-xs" key={key}>{label}<select aria-label={`Compare ${key}`} className={`${control} mt-1 w-full`} disabled={busy} value={rubric[key] ?? ""} onChange={event=>{const value=event.currentTarget.value as PlaybackVerdict;setRubric(current=>({...current,[key]:value}));}}><option value="">Choose…</option><option value="better">Better</option><option value="same">Same</option><option value="worse">Worse</option><option value="not_applicable">Not applicable</option></select></label>)}</fieldset> : null}
+          {rubricRequired ? <fieldset className="mt-4 grid gap-3 sm:grid-cols-2"><legend className="mb-2 text-sm font-bold text-[#173F5F]">How does the trial compare with the baseline?</legend>{dimensions.map(({key,label})=><label className="min-w-0 text-xs" key={key}>{label}<select aria-label={`Compare ${key}`} className={`${control} mt-1 w-full`} disabled={busy} value={rubric[key] ?? ""} onChange={event=>{const value=event.currentTarget.value as PlaybackVerdict;onDraft({rubric:{...rubric,[key]:value}});}}><option value="">Choose…</option><option value="better">Better</option><option value="same">Same</option><option value="worse">Worse</option><option value="not_applicable">Not applicable</option></select></label>)}</fieldset> : null}
           <div className="mt-3 flex flex-wrap items-end gap-3">
             <label className="text-xs">
               Baseline rating
               <select
                 className={`${control} mt-1 block`}
                 value={baseline}
-                onChange={(e) => setBaseline(Number(e.currentTarget.value))}
+                onChange={(e) => onDraft({baseline:Number(e.currentTarget.value)})}
               >
                 <option value={0}>Choose…</option>
                 {[1, 2, 3, 4, 5].map((r) => (
@@ -311,7 +312,7 @@ function TrialReview({
               <select
                 className={`${control} mt-1 block`}
                 value={candidate}
-                onChange={(e) => setCandidate(Number(e.currentTarget.value))}
+                onChange={(e) => onDraft({candidate:Number(e.currentTarget.value)})}
               >
                 <option value={0}>Choose…</option>
                 {[1, 2, 3, 4, 5].map((r) => (
@@ -340,9 +341,9 @@ function TrialReview({
             </button>
           </div>
           <label className="mt-3 block text-xs">Comparison note
-            <textarea aria-label="Playback comparison note" className={`${control} mt-1 min-h-20 w-full py-2`} maxLength={1200} value={note} onChange={event => setNote(event.currentTarget.value)} placeholder="What changed? Check story, speech, captions, colour and effects." />
+            <textarea aria-label="Playback comparison note" className={`${control} mt-1 min-h-20 w-full py-2`} maxLength={1200} value={note} onChange={event => onDraft({note:event.currentTarget.value})} placeholder="What changed? Check story, speech, captions, colour and effects." />
           </label>
-          <label className="mt-3 flex min-h-11 items-center gap-2 text-xs"><input type="checkbox" checked={watched} onChange={event => setWatched(event.currentTarget.checked)} />I reviewed both exact previews, including any regressions.</label>
+          <label className="mt-3 flex min-h-11 items-center gap-2 text-xs"><input type="checkbox" checked={watched} onChange={event => onDraft({watched:event.currentTarget.checked})} />I reviewed both exact previews, including any regressions.</label>
         </>
       ) : (
         <p className="mt-2 text-xs text-[#666862]">

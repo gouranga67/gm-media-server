@@ -5,7 +5,7 @@ import re
 from collections import defaultdict
 from typing import Any, Literal
 from uuid import UUID, uuid4, uuid5, NAMESPACE_URL
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Header, HTTPException, Query
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel, ConfigDict, Field
 from app.database import connection
@@ -107,6 +107,64 @@ TRIAL_SOURCES_SQL = """SELECT DISTINCT r.evaluation_lesson_id,r.job_id,a.sha256
     WHERE r.evaluation_lesson_id=ANY(%s::uuid[])"""
 
 
+TRIAL_SELECT_SQL = """SELECT r.id,r.created_at,r.job_id,r.version,r.status,r.preview_path,r.evaluation_lesson_id,r.evaluation_case_id,r.based_on_run_id,b.version AS baseline_version,
+            b.status AS baseline_status,b.preview_path AS baseline_path,p.name AS project_name,
+            b.provider AS baseline_provider,r.provider AS candidate_provider,
+            b.manifest->'quality_review'->>'status' AS baseline_quality,r.manifest->'quality_review'->>'status' AS candidate_quality,
+            CASE WHEN saved.id IS NOT NULL THEN jsonb_build_object('id',saved.id,'label',saved.label,'category',saved.category,
+                'expectations',saved.expectations,'max_candidate_tokens',saved.max_candidate_tokens) END AS test_case
+            FROM edit_runs r LEFT JOIN edit_runs b ON b.id=r.based_on_run_id JOIN jobs j ON j.id=r.job_id JOIN projects p ON p.id=j.project_id
+            LEFT JOIN learning_cases saved ON saved.id=r.evaluation_case_id
+"""
+TRIAL_STATES_SQL = """SELECT id,status,evaluation_case_id,evaluation_lesson_id FROM edit_runs
+    WHERE evaluation_lesson_id=ANY(%s::uuid[])"""
+
+
+def promotion_report(item, evaluations, trials):
+    return {**with_trial_readiness(evaluation_result(evaluations,item=item),item,trials,evaluations),
+        "history_scope":"all_saved_trials", "total_trials":len(trials)}
+
+
+def public_trials(trials, evaluations, usage, media_root):
+    scores = {str(row["candidate_run_id"]):row for row in evaluations}
+    for trial in trials:
+        trial["baseline_available"] = preview_available({"status":trial.pop("baseline_status"),"preview_path":trial.pop("baseline_path")},media_root)
+        trial["candidate_available"] = preview_available(trial,media_root)
+        trial.pop("preview_path",None)
+        trial["baseline_usage"] = usage_snapshot({"provider":trial.get("baseline_provider")},usage.get(str(trial["based_on_run_id"])))
+        trial["candidate_usage"] = usage_snapshot({"provider":trial.get("candidate_provider")},usage.get(str(trial["id"])))
+        saved = scores.get(str(trial["id"]))
+        trial["comparison"] = {**{key:saved[key] for key in ("baseline_rating","candidate_rating","note")},
+            "rubric":(saved.get("evidence") or {}).get("rubric")} if saved else None
+        trial["executable_changed"] = (saved.get("evidence") or {}).get("executable_changed") if saved else None
+    return trials
+
+
+@router.get("/lessons/{lesson_id}/comparisons")
+def lesson_comparisons(lesson_id: UUID, before: UUID | None = None,
+    limit: int = Query(default=20, ge=1, le=50), x_gm_user_login: str | None = Header(default=None)):
+    require_owner(actor_login(x_gm_user_login))
+    with connection() as database:
+        lesson(database,lesson_id)
+        cursor = None
+        if before:
+            cursor = database.execute("SELECT id,created_at FROM edit_runs WHERE id=%s AND evaluation_lesson_id=%s",(before,lesson_id)).fetchone()
+            if not cursor:
+                raise HTTPException(409,"the comparison page changed; refresh this lesson's history")
+        total = database.execute("SELECT count(*)::integer AS count FROM edit_runs WHERE evaluation_lesson_id=%s",(lesson_id,)).fetchone()["count"]
+        where, values = " WHERE r.evaluation_lesson_id=%s", [lesson_id]
+        if cursor:
+            where += " AND (r.created_at,r.id)<(%s,%s)"
+            values += [cursor["created_at"],cursor["id"]]
+        rows = list(database.execute(TRIAL_SELECT_SQL + where + " ORDER BY r.created_at DESC,r.id DESC LIMIT %s",(*values,limit+1)).fetchall())
+        more, rows = len(rows)>limit, rows[:limit]
+        evaluations = list(database.execute("SELECT candidate_run_id,baseline_rating,candidate_rating,note,evidence FROM learning_evaluations WHERE lesson_id=%s AND candidate_run_id=ANY(%s::uuid[])",
+            (lesson_id,[row["id"] for row in rows])).fetchall())
+        usage = usage_for_runs(database,list({identity for row in rows for identity in (row["id"],row["based_on_run_id"]) if identity}))
+    return {"items":public_trials(rows,evaluations,usage,get_settings().media_root),
+        "next_before":str(rows[-1]["id"]) if more else None,"total":total,"limit":limit,"hosted_model_calls":0}
+
+
 def trial_block_reason(item, job, previous):
     if editing_policy(job)["bloopers_requested"] or str(job["recipe"]) != item["recipe"] or str(job["edit_style"]) != item["edit_style"]:
         return "Choose a non-blooper job matching this lesson recipe and style; clean-take lessons do not apply to outtakes."
@@ -146,16 +204,9 @@ def lab():
             ).fetchall()
         )
         trials = list(
-            database.execute("""SELECT r.id,r.job_id,r.version,r.status,r.preview_path,r.evaluation_lesson_id,r.evaluation_case_id,r.based_on_run_id,b.version AS baseline_version,
-            b.status AS baseline_status,b.preview_path AS baseline_path,p.name AS project_name,
-            b.provider AS baseline_provider,r.provider AS candidate_provider,
-            b.manifest->'quality_review'->>'status' AS baseline_quality,r.manifest->'quality_review'->>'status' AS candidate_quality,
-            CASE WHEN saved.id IS NOT NULL THEN jsonb_build_object('id',saved.id,'label',saved.label,'category',saved.category,
-                'expectations',saved.expectations,'max_candidate_tokens',saved.max_candidate_tokens) END AS test_case
-            FROM edit_runs r JOIN edit_runs b ON b.id=r.based_on_run_id JOIN jobs j ON j.id=r.job_id JOIN projects p ON p.id=j.project_id
-            LEFT JOIN learning_cases saved ON saved.id=r.evaluation_case_id
-            WHERE r.evaluation_lesson_id IS NOT NULL ORDER BY r.created_at DESC LIMIT 100""").fetchall()
+            database.execute(TRIAL_SELECT_SQL + " WHERE r.evaluation_lesson_id IS NOT NULL ORDER BY r.created_at DESC,r.id DESC LIMIT 100").fetchall()
         )
+        states = list(database.execute(TRIAL_STATES_SQL,([item["id"] for item in lessons],)).fetchall())
         jobs = list(database.execute(JOBS_SQL).fetchall())
         previous = list(database.execute(TRIAL_SOURCES_SQL, ([item["id"] for item in lessons],)).fetchall())
         usage = usage_for_runs(database, list({identity for trial in trials for identity in (trial["id"],trial["based_on_run_id"])}))
@@ -164,8 +215,8 @@ def lab():
         history = list(database.execute("SELECT * FROM learning_lesson_events ORDER BY created_at DESC,id LIMIT 100").fetchall())
     for item in lessons:
         scored = [e for e in evaluations if e["lesson_id"] == item["id"]]
-        item["evaluation"] = with_trial_readiness(evaluation_result(scored,item=item),item,
-            [trial for trial in trials if trial["evaluation_lesson_id"] == item["id"]],scored)
+        item["evaluation"] = promotion_report(item,scored,
+            [trial for trial in states if trial["evaluation_lesson_id"] == item["id"]])
         item["trial_options"] = []
         for job in jobs:
             if str(job["recipe"]) != item["recipe"] or str(job["edit_style"]) != item["edit_style"]:
@@ -185,18 +236,7 @@ def lab():
             elif not preview_available(case,media_root):
                 reason = "The saved baseline preview is unavailable."
             item["case_options"].append({"case_id":str(case["id"]),"eligible":reason is None,"reason":reason})
-    for trial in trials:
-        trial["baseline_available"] = preview_available({"status":trial.pop("baseline_status"),"preview_path":trial.pop("baseline_path")},media_root)
-        trial["candidate_available"] = preview_available(trial,media_root)
-        trial.pop("preview_path",None)
-        trial["baseline_usage"] = usage_snapshot({"provider":trial.get("baseline_provider")},usage.get(str(trial["based_on_run_id"])))
-        trial["candidate_usage"] = usage_snapshot({"provider":trial.get("candidate_provider")},usage.get(str(trial["id"])))
-        saved = next((e for e in evaluations if e["candidate_run_id"] == trial["id"]),None)
-        trial["comparison"] = {**{key:saved[key] for key in ("baseline_rating","candidate_rating","note")},
-            "rubric":(saved.get("evidence") or {}).get("rubric")} if saved else None
-        trial["executable_changed"] = (saved.get("evidence") or {}).get("executable_changed") if saved else None
-        case = next((case for case in cases if case["id"] == trial.get("evaluation_case_id")),None)
-        trial["test_case"] = {key:case[key] for key in ("id","label","category","expectations","max_candidate_tokens")} if case else trial.get("test_case")
+    public_trials(trials,evaluations,usage,media_root)
     for case in cases:
         case["baseline_available"] = preview_available(case,media_root)
         case["source_count"] = len(case.pop("sources"))
@@ -397,8 +437,8 @@ def change_status(
                 "SELECT * FROM learning_evaluations WHERE lesson_id=%s", (lesson_id,)
             ).fetchall()
         )
-        report = with_trial_readiness(evaluation_result(rows,item=item),item,
-            list(database.execute("SELECT id,status,evaluation_case_id FROM edit_runs WHERE evaluation_lesson_id=%s",(lesson_id,)).fetchall()),rows)
+        report = promotion_report(item,rows,
+            list(database.execute("SELECT id,status,evaluation_case_id FROM edit_runs WHERE evaluation_lesson_id=%s",(lesson_id,)).fetchall()))
         if payload.action == "promote" and not report["can_promote"]:
             raise HTTPException(
                 status_code=409,
