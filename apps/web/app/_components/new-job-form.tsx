@@ -7,7 +7,9 @@ import Link from "next/link";
 import { DurationFields } from "./duration-fields";
 import { AssemblyReadiness } from "./assembly-readiness";
 import { StudioNav } from "./studio-nav";
-import { readMediaBasket, writeMediaBasket } from "@/lib/media-basket";
+import { useJobLibrary } from "./use-job-library";
+import { writeMediaBasket } from "@/lib/media-basket";
+import { folderLabel } from "@/lib/library-folder-tree";
 import { useRouter } from "next/navigation";
 import type { Upload } from "tus-js-client";
 import {
@@ -41,14 +43,12 @@ import {
   getEditorModels,
   getAsset,
   getMusicTracks,
-  getServerLibraryAssets,
   getSystemInformation,
   getVisualIndexStatus,
   libraryAssetThumbnailUrl,
   mediaTypeForFile,
   registerAsset,
   requestPreview,
-  searchCatalog,
   visualIndexFrameUrl,
   type Asset,
   type CatalogSearchResult,
@@ -80,7 +80,6 @@ const READY_POLL_ATTEMPTS = 45;
 const READY_POLL_INTERVAL_MS = 1_000;
 
 type ServerStatus = "checking" | "online" | "offline";
-type LibraryKind = "all" | "video" | "image" | "audio";
 type UploadPhase =
   | "queued"
   | "registering"
@@ -315,21 +314,6 @@ function formatCatalogTime(seconds: number): string {
   const rounded = Math.max(0, Math.floor(seconds));
   const minutes = Math.floor(rounded / 60);
   return `${minutes}:${(rounded % 60).toString().padStart(2, "0")}`;
-}
-
-function catalogResultAsAsset(result: CatalogSearchResult): LibraryAsset {
-  return {
-    id: result.asset_id,
-    project_id: result.project_id,
-    project_name: result.project_name,
-    source_name: result.source_name,
-    mime_type: result.mime_type,
-    byte_size: result.byte_size,
-    sha256: result.sha256,
-    duration_seconds: result.duration_seconds,
-    thumbnail_available: result.thumbnail_available,
-    created_at: result.created_at,
-  };
 }
 
 function phaseLabel(entry: UploadEntry): string {
@@ -695,20 +679,18 @@ function NewJobFormContent() {
   const [musicTracks, setMusicTracks] = useState<readonly MusicTrack[]>([]);
   const [creativeAssets, setCreativeAssets] = useState<readonly CreativeAsset[]>([]);
   const [entries, setEntries] = useState<UploadEntry[]>([]);
-  const [libraryPurpose, setLibraryPurpose] = useState("all");
-  const [libraryAssets, setLibraryAssets] = useState<readonly LibraryAsset[]>([]);
-  const [selectedLibraryAssetIds, setSelectedLibraryAssetIds] = useState<ReadonlySet<string>>(new Set());
-  const [basketLoaded, setBasketLoaded] = useState(false);
-  useEffect(() => { setSelectedLibraryAssetIds(new Set(readMediaBasket())); setBasketLoaded(true); }, []);
-  useEffect(() => { if (basketLoaded) writeMediaBasket(Array.from(selectedLibraryAssetIds)); }, [basketLoaded, selectedLibraryAssetIds]);
-  const [libraryQuery, setLibraryQuery] = useState("");
-  const [libraryKind, setLibraryKind] = useState<LibraryKind>("all");
-  const [libraryProjectId, setLibraryProjectId] = useState("all");
-  const [libraryLoading, setLibraryLoading] = useState(true);
-  const [libraryError, setLibraryError] = useState<string>();
-  const [catalogMatches, setCatalogMatches] = useState<ReadonlyMap<string, CatalogSearchResult>>(new Map());
-  const [catalogSearching, setCatalogSearching] = useState(false);
-  const [catalogSearchError, setCatalogSearchError] = useState<string>();
+  const library = useJobLibrary();
+  const { query: libraryQuery, kind: libraryKind, purpose: libraryPurpose, projectId: libraryProjectId } = library.filters;
+  const selectedLibraryAssetIds = library.selectedIds;
+  const selectedLibraryAssets = library.selectedAssets;
+  const selectedLibraryById = new Map(selectedLibraryAssets.map(asset => [asset.id, asset]));
+  const libraryLoading = library.loading;
+  const libraryError = library.error;
+  const catalogMatches = library.matches;
+  const catalogSearching = library.searching;
+  const catalogSearchError = library.searchError;
+  const normalizedLibraryQuery = libraryQuery.trim().toLocaleLowerCase();
+  const filteredLibraryAssets = library.items;
   const [visualIndexStatus, setVisualIndexStatus] = useState<VisualIndexStatus>();
   const [serverStatus, setServerStatus] = useState<ServerStatus>("checking");
   const [formError, setFormError] = useState<string>();
@@ -740,20 +722,6 @@ function NewJobFormContent() {
       .catch(() => {
         if (!cancelled) setServerStatus("offline");
       });
-    void getServerLibraryAssets()
-      .then((assets) => {
-        if (!cancelled) {
-          setLibraryAssets(assets);
-          setLibraryLoading(false);
-          setLibraryError(undefined);
-        }
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          setLibraryLoading(false);
-          setLibraryError(toErrorMessage(error));
-        }
-      });
     return () => {
       cancelled = true;
       mountedRef.current = false;
@@ -784,50 +752,6 @@ function NewJobFormContent() {
       if (timer !== undefined) window.clearTimeout(timer);
     };
   }, []);
-
-  useEffect(() => {
-    const query = libraryQuery.trim();
-    if (query.length < 2) {
-      setCatalogMatches(new Map());
-      setCatalogSearching(false);
-      setCatalogSearchError(undefined);
-      return;
-    }
-    let cancelled = false;
-    setCatalogSearching(true);
-    setCatalogSearchError(undefined);
-    const timer = window.setTimeout(() => {
-      void searchCatalog({
-        query,
-        mediaKind: libraryKind,
-        projectId: libraryProjectId,
-      }).then((search) => {
-        if (cancelled) return;
-        const matches = new Map<string, CatalogSearchResult>();
-        for (const result of search.results) {
-          if (!matches.has(result.asset_id)) matches.set(result.asset_id, result);
-        }
-        setCatalogMatches(matches);
-        setLibraryAssets((current) => {
-          const assets = new Map(current.map((asset) => [asset.id, asset]));
-          for (const result of matches.values()) {
-            if (!assets.has(result.asset_id)) assets.set(result.asset_id, catalogResultAsAsset(result));
-          }
-          return Array.from(assets.values());
-        });
-        setCatalogSearching(false);
-      }).catch((error: unknown) => {
-        if (cancelled) return;
-        setCatalogMatches(new Map());
-        setCatalogSearching(false);
-        setCatalogSearchError(toErrorMessage(error));
-      });
-    }, 250);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-  }, [libraryKind, libraryProjectId, libraryQuery]);
 
   useEffect(() => {
     settleRootScroll();
@@ -884,7 +808,6 @@ function NewJobFormContent() {
     };
   }, []);
 
-  const selectedLibraryAssets = libraryAssets.filter((asset) => selectedLibraryAssetIds.has(asset.id));
   const totalItems = entries.length + selectedLibraryAssets.length;
   const totalBytes = entries.reduce((total, entry) => total + entry.file.size, 0)
     + selectedLibraryAssets.reduce((total, asset) => total + asset.byte_size, 0);
@@ -899,33 +822,6 @@ function NewJobFormContent() {
     (asset) => asset.allowed_platforms.includes("all_social")
       || asset.allowed_platforms.includes(targetPlatform),
   ).length;
-  const libraryProjects = Array.from(
-    new Map(libraryAssets.map((asset) => [asset.project_id, asset.project_name])).entries(),
-  ).sort((left, right) => left[1].localeCompare(right[1]));
-  const normalizedLibraryQuery = libraryQuery.trim().toLocaleLowerCase();
-  const filteredLibraryAssets = libraryAssets
-    .filter((asset) => {
-      const matchesQuery = normalizedLibraryQuery.length === 0
-        || (asset.display_name ?? "").toLocaleLowerCase().includes(normalizedLibraryQuery)
-        || asset.source_name.toLocaleLowerCase().includes(normalizedLibraryQuery)
-        || asset.project_name.toLocaleLowerCase().includes(normalizedLibraryQuery)
-        || catalogMatches.has(asset.id);
-      const matchesKind = libraryKind === "all" || asset.mime_type.startsWith(`${libraryKind}/`);
-      const matchesProject = libraryProjectId === "all" || asset.project_id === libraryProjectId;
-      const matchesPurpose = libraryPurpose === "all" || (asset.mime_type.startsWith("video/") && (asset.media_role ?? "auto") === libraryPurpose);
-      return matchesQuery && matchesKind && matchesProject && matchesPurpose;
-    })
-    .sort((left, right) => {
-      const leftMatch = catalogMatches.get(left.id);
-      const rightMatch = catalogMatches.get(right.id);
-      if (leftMatch !== undefined && rightMatch !== undefined) {
-        return rightMatch.rank - leftMatch.rank;
-      }
-      if (leftMatch !== undefined) return -1;
-      if (rightMatch !== undefined) return 1;
-      return new Date(right.created_at).getTime() - new Date(left.created_at).getTime();
-    });
-
   const updateEntry = (localId: string, changes: Partial<UploadEntry>) => {
     if (!mountedRef.current) return;
     setEntries((current) =>
@@ -1094,15 +990,7 @@ function NewJobFormContent() {
 
   const toggleLibraryAsset = (asset: LibraryAsset) => {
     if (formLocked) return;
-    setSelectedLibraryAssetIds((current) => {
-      const next = new Set(current);
-      if (next.has(asset.id)) {
-        next.delete(asset.id);
-      } else {
-        next.add(asset.id);
-      }
-      return next;
-    });
+    library.toggle(asset);
     setFormError(undefined);
   };
 
@@ -1124,6 +1012,7 @@ function NewJobFormContent() {
       return;
     }
 
+    if (!library.selectionReady) { setFormError("Review the selected server media before creating this job (maximum 100 originals)."); return; }
     setIsSubmitting(true);
     setFormError(undefined);
     try {
@@ -1383,7 +1272,8 @@ function NewJobFormContent() {
                 <Input
                   className="h-12 rounded-sm border-[#D7D9D3] bg-white pr-3 pl-10 text-[#20211F] shadow-none focus-visible:border-[#173F5F] focus-visible:ring-[#173F5F]/20 dark:bg-white dark:text-[#20211F]"
                   id="library-search"
-                  onChange={(event) => setLibraryQuery(event.currentTarget.value)}
+                  maxLength={160}
+                  onChange={(event) => library.changeFilters({ query: event.currentTarget.value })}
                   placeholder="Search speech or what appears in scenes"
                   type="search"
                   value={libraryQuery}
@@ -1452,7 +1342,7 @@ function NewJobFormContent() {
                         : "border border-[#D7D9D3] text-[#666862]",
                     )}
                     key={option.value}
-                    onClick={() => setLibraryKind(option.value)}
+                    onClick={() => library.changeFilters({ kind: option.value })}
                     type="button"
                   >
                     {option.label}
@@ -1460,7 +1350,7 @@ function NewJobFormContent() {
                 ))}
               </div>
               <label className="block space-y-2 text-xs font-bold text-[#173F5F]" htmlFor="library-purpose">FOOTAGE ROLE
-                <select className="h-11 w-full rounded-md border border-[#D7D9D3] bg-white px-3 text-sm text-[#20211F]" id="library-purpose" onChange={(event) => setLibraryPurpose(event.currentTarget.value)} value={libraryPurpose}>
+                <select className="h-11 w-full rounded-md border border-[#D7D9D3] bg-white px-3 text-sm text-[#20211F]" id="library-purpose" onChange={(event) => library.changeFilters({ purpose: event.currentTarget.value })} value={libraryPurpose}>
                   <option value="all">All roles</option><option value="talking">Talking footage</option><option value="broll">B-roll</option><option value="auto">Unsorted video</option>
                 </select>
               </label>
@@ -1469,15 +1359,27 @@ function NewJobFormContent() {
                 <select
                   className="h-11 w-full rounded-md border border-[#D7D9D3] bg-white px-3 text-sm text-[#20211F] shadow-none focus:border-[#173F5F] focus:outline-none focus:ring-2 focus:ring-[#173F5F]/20"
                   id="library-project"
-                  onChange={(event) => setLibraryProjectId(event.currentTarget.value)}
+                  onChange={(event) => library.changeFilters({ projectId: event.currentTarget.value })}
                   value={libraryProjectId}
                 >
                   <option value="all">All projects</option>
-                  {libraryProjects.map(([id, projectName]) => (
+                  {library.projects.map(({id, name: projectName}) => (
                     <option key={id} value={id}>{projectName}</option>
                   ))}
                 </select>
               </label>
+              <label className="block space-y-2 text-xs font-bold text-[#173F5F]" htmlFor="library-folder">FOLDER
+                <select className="min-h-11 w-full min-w-0 rounded-md border border-[#D7D9D3] bg-white px-3 text-sm" id="library-folder" value={library.filters.folderId} onChange={event => library.changeFilters({ folderId: event.currentTarget.value })}>
+                  <option value="">All folders</option><option value="unfiled">Not in folders</option>
+                  {library.folders.map(folder => <option key={folder.id} value={folder.id}>{folderLabel(library.folders, folder.id)}</option>)}
+                </select>
+                <span className="block text-xs font-normal text-[#666862]">Shows media filed directly in this folder. Choose a subfolder to see its files.</span>
+              </label>
+              {library.optionsError ? <p role="alert" className="text-xs text-[#A23B2A]">Folder/project choices could not be loaded. Refresh server media to retry.</p> : null}
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[#53646F]">
+                <span aria-live="polite">{libraryLoading ? "Loading server media…" : libraryError ? "Server media unavailable" : `${library.total ? library.filters.offset + 1 : 0}–${Math.min(library.filters.offset + filteredLibraryAssets.length, library.total)} of ${library.total} matching originals`}</span>
+                <button className="min-h-11 rounded border border-[#D7D9D3] px-3 font-bold text-[#173F5F]" onClick={library.refresh} type="button">Refresh server media</button>
+              </div>
               {libraryError ? (
                 <p className="flex items-start gap-1.5 text-xs leading-relaxed text-[#A23B2A]" role="alert">
                   <CircleAlertIcon aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
@@ -1493,7 +1395,7 @@ function NewJobFormContent() {
                   {filteredLibraryAssets.map((asset) => (
                     <LibraryAssetRow
                       asset={asset}
-                      disabled={formLocked}
+                      disabled={formLocked || isSubmitting || (!selectedLibraryAssetIds.has(asset.id) && selectedLibraryAssetIds.size >= 100)}
                       key={asset.id}
                       match={catalogMatches.get(asset.id)}
                       onChange={toggleLibraryAsset}
@@ -1505,9 +1407,23 @@ function NewJobFormContent() {
                 <div className="rounded-md border border-[#D7D9D3] bg-white p-6 text-center">
                   <FolderIcon aria-hidden="true" className="mx-auto size-6 text-[#173F5F]" />
                   <p className="mt-2 text-sm font-bold text-[#173F5F]">No matching server media</p>
-                  <p className="mt-1 text-xs text-[#666862]">Ready uploads will appear here automatically.</p>
+                  <p className="mt-1 text-xs text-[#666862]">Try another folder or filter, or refresh server media after uploads finish.</p>
                 </div>
               )}
+              <div aria-label="Server media pages" className="flex flex-wrap gap-2">
+                <button className="min-h-11 rounded border border-[#D7D9D3] px-3 text-sm disabled:opacity-50" disabled={libraryLoading || library.filters.offset === 0} onClick={() => library.changeFilters({ offset: Math.max(0, library.filters.offset - 60) })} type="button">Previous media page</button>
+                <button className="min-h-11 rounded border border-[#D7D9D3] px-3 text-sm disabled:opacity-50" disabled={libraryLoading || Boolean(libraryError) || library.filters.offset + 60 >= library.total} onClick={() => library.changeFilters({ offset: library.filters.offset + 60 })} type="button">Next media page</button>
+              </div>
+              {!library.selectionReady && selectedLibraryAssetIds.size > 0 ? <p role="status" className="text-xs text-[#A23B2A]">{selectedLibraryAssetIds.size > 100 ? "Choose at most 100 server originals." : library.selectionError || library.unavailableIds.length ? "Review your selected server media below, then refresh or remove unavailable items." : "Loading selected originals before this job can be created…"}</p> : null}
+              {selectedLibraryAssetIds.size ? <details className="rounded border border-[#BFD2DE] bg-[#EFF6FA] p-3" aria-label="Selected server media">
+                <summary className="min-h-11 cursor-pointer content-center text-sm font-bold text-[#173F5F]">{selectedLibraryAssetIds.size} selected server originals · kept across pages and filters</summary>
+                <p className="my-2 text-xs text-[#53646F]">Up to 100 originals per job. Device uploads are listed separately above.</p>
+                {library.selectionError ? <p role="alert" className="my-2 text-xs text-[#A23B2A]">Selection details could not be loaded. Refresh server media to retry.</p> : null}
+                {library.unavailableIds.length ? <p role="alert" className="my-2 text-xs text-[#A23B2A]">{library.unavailableIds.length} selected originals are unavailable or still processing. Remove them or restore them in Library, then refresh.</p> : null}
+                {selectedLibraryAssetIds.size > 100 ? <p role="alert" className="my-2 text-xs text-[#A23B2A]">Choose at most 100 server originals before creating this job.</p> : null}
+                <ul className="max-h-64 space-y-1 overflow-y-auto">{[...selectedLibraryAssetIds].map(id => <li key={id} className="flex min-w-0 items-center justify-between gap-2 text-xs"><span className="min-w-0 break-words">{selectedLibraryById.get(id)?.display_name || selectedLibraryById.get(id)?.source_name || (library.unavailableIds.includes(id) ? `Unavailable original ${id.slice(0, 8)}` : `Loading original ${id.slice(0, 8)}…`)}</span><button className="min-h-11 shrink-0 px-2 font-bold text-[#173F5F]" disabled={formLocked || isSubmitting} onClick={() => library.remove(id)} type="button" aria-label={`Remove selected original ${id}`}>Remove</button></li>)}</ul>
+                <button className="mt-2 min-h-11 rounded border border-[#BFD2DE] bg-white px-3 text-xs font-bold text-[#173F5F] disabled:opacity-50" disabled={formLocked || isSubmitting} onClick={library.clear} type="button">Clear server selection</button>
+              </details> : null}
               <p className="text-center font-mono text-[10px] leading-relaxed text-[#666862]">
                 Selecting an item attaches the existing original. It does not copy or re-upload the file.
               </p>
@@ -1982,7 +1898,7 @@ function NewJobFormContent() {
         </div>
         <Button
           className="h-14 w-full touch-manipulation rounded-md bg-[#173F5F] text-sm font-bold text-white hover:bg-[#12344F] focus-visible:ring-[#173F5F]/35 disabled:bg-[#8A9CAB]"
-          disabled={isSubmitting || (jobId !== undefined && (!allReady || !assemblyReady))}
+          disabled={isSubmitting || !library.selectionReady || (jobId !== undefined && (!allReady || !assemblyReady))}
           onClick={jobId !== undefined && allReady ? () => void startEditing() : undefined}
           type={jobId !== undefined && allReady ? "button" : "submit"}
         >

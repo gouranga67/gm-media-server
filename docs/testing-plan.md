@@ -512,6 +512,18 @@ Open the printed comparison video and still-image links on phone and desktop. Th
 
 The original job, preview, final export, captions and soundtrack must remain unchanged. Repeating the same sample should reuse saved results. A sample beyond the saved source range, unsupported picture type, changed artifact or concurrent trial should fail clearly rather than alter an edit. Production application and representative natural-video/load acceptance remain open.
 
+## Phase 29 — Create source-picker acceptance
+
+Deploy with the normal installer, then run the read-only `python3 scripts/verify-phase29.py`. No new migration is required beyond the existing folder schema.
+
+1. In Create → New edit, browse server media using the previous/next controls. Each page should contain at most 60 originals; older footage must remain reachable beyond the first 500 files if the library is that large. Project, photo/audio/video and footage-role filters should apply across the whole eligible library, not only the open page.
+2. Choose a nested folder by its full path. It should show only files directly in that folder; choose its subfolder separately. Check Not in folders. Select footage, switch pages/folders/searches, and confirm the selected count and expandable list retain the same originals. Remove a selection from that list while it is outside the open page.
+3. Start from Library with a selected older original, then open Create. Its name and size should load even if it is outside the first page. Add one device file and create a job. Verify both sources attach; editing must still wait for upload/analysis and your explicit Start editing action.
+4. Search for a recorded phrase or pictured object. Inspect its evidence and time range. Change page or folder while keeping the query: results should reuse local search evidence. A failed/late page response must not replace a newer filter or erase selected files. Refresh server media should retry the current page. These actions should add no model usage or jobs.
+5. If a carried selection is unavailable or archived, Create should explain that it needs review and block creation until removed or restored/refreshed. A failed lookup must retain the basket for retry. Do not archive working originals merely to test this; use a disposable original or an already-unavailable selection. More than 100 server selections should require explicit reduction before a project is created.
+
+Real bulk-library responsiveness, device upload recovery and final playback remain acceptance observations. Synthetic paging/browser checks are not evidence of better story quality or higher production throughput.
+
 ## Phase 29 — nested folder acceptance
 
 After migration 048, run `python3 scripts/verify-phase29.py`. Create a parent and child, move an existing folder into it, then check cards, breadcrumbs, sidebar, upload destination, Inbox filing and exact concept scope. Move a parent with children and confirm their IDs/memberships and old job sources stay intact. A fourth-level folder accepts media but cannot get another child; self/descendant moves and stale parent changes must fail without changing the tree. A parent with children cannot be removed. Deleting a leaf removes only its grouping, and originals remain in All media. Folder counts and search refer to direct membership. Existing unique folder names remain required. See the [checkpoint and full steps](phase-reports/phase-29-nested-folders.md). Real bulk-load/usability acceptance remains open.

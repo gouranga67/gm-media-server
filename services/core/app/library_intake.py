@@ -97,9 +97,19 @@ def review_intake(payload: IntakeReview) -> dict[str, Any]:
     return {"updated": len(rows), "action": payload.action}
 
 
-def browse_filter(view, category, favorite, collection_id, unfiled, query, match_ids):
+def browse_filter(view, category, favorite, collection_id, unfiled, query, match_ids,
+                  media_kind="all", project_id=None, for_editing=False):
     clauses = ["assets.status = 'ready'", "ingest.status = 'ready'", "assets.library_status = %s"]
     values: list[Any] = ["archived" if view == "trash" else "active"]
+    if for_editing:
+        clauses += ["assets.library_status = 'active'", "assets.sha256 IS NOT NULL",
+                    "assets.byte_size IS NOT NULL", "assets.mime_type IS NOT NULL"]
+    if media_kind != "all":
+        clauses.append("assets.mime_type LIKE %s")
+        values.append(media_kind + "/%")
+    if project_id:
+        clauses.append("assets.project_id = %s")
+        values.append(project_id)
     if view in ("image", "audio"):
         clauses.append("assets.mime_type LIKE %s")
         values.append(view + "/%")
@@ -132,11 +142,14 @@ def browse_library(
     match_ids: list[UUID] = Query(default=[], max_length=100),
     copies: bool = False, sort: Literal["newest", "name", "largest"] = "newest",
     limit: int = Query(default=60, ge=1, le=100), offset: int = Query(default=0, ge=0),
+    media_kind: Literal["all", "video", "image", "audio"] = "all",
+    project_id: UUID | None = None, for_editing: bool = False,
 ) -> dict[str, Any]:
     # The search service supplies at most 100 speech/visual hits. Text search still
     # covers the whole library. Filtering and canonical fallback happen BEFORE paging.
     from app.library import MANAGED_ASSET_SELECT
-    where, values = browse_filter(view, category, favorite, collection_id, unfiled, query, match_ids)
+    where, values = browse_filter(view, category, favorite, collection_id, unfiled, query, match_ids,
+                                  media_kind, project_id, for_editing)
     order = {"newest": "created_at DESC, id", "name": "lower(display_name), id", "largest": "byte_size DESC, id"}[sort]
     if query.strip() and sort == "newest":
         order = "search_order, " + order
@@ -171,3 +184,29 @@ def browse_library(
             COALESCE(sum(byte_size), 0)::bigint AS stored_bytes FROM assets WHERE status = 'ready'""").fetchone()
     return {"items": [by_id[id] for id in result["ids"] if id in by_id], "total": result["total"],
             "offset": offset, "limit": limit, "summary": stats}
+
+
+PICKER_READY = """assets.status='ready' AND assets.library_status='active' AND ingest.status='ready'
+    AND assets.sha256 IS NOT NULL AND assets.byte_size IS NOT NULL AND assets.mime_type IS NOT NULL"""
+
+
+@router.get("/picker/projects")
+def picker_projects() -> list[dict[str, Any]]:
+    with connection() as database:
+        return list(database.execute("""SELECT DISTINCT projects.id,projects.name FROM projects
+            JOIN assets ON assets.project_id=projects.id JOIN asset_ingests ingest ON ingest.asset_id=assets.id
+            WHERE """ + PICKER_READY + " ORDER BY projects.name,projects.id").fetchall())
+
+
+@router.get("/selection")
+def selected_library_assets(asset_ids: list[UUID] = Query(min_length=1, max_length=100)) -> list[dict[str, Any]]:
+    # Exact selections are not replaced by a canonical duplicate or clipped to a recent page.
+    with connection() as database:
+        return list(database.execute("""SELECT assets.id,assets.project_id,projects.name AS project_name,
+            assets.source_name,COALESCE(meta.display_name,assets.source_name) AS display_name,
+            COALESCE(meta.media_role,'auto') AS media_role,assets.mime_type,assets.byte_size,assets.sha256,assets.created_at,
+            NULLIF(ingest.manifest #>> '{probe,format,duration_seconds}','')::double precision AS duration_seconds,
+            COALESCE(ingest.manifest #>> '{derived,thumbnail}','') <> '' AS thumbnail_available
+            FROM assets JOIN projects ON projects.id=assets.project_id JOIN asset_ingests ingest ON ingest.asset_id=assets.id
+            LEFT JOIN asset_library_metadata meta ON meta.asset_id=assets.id
+            WHERE """ + PICKER_READY + " AND assets.id=ANY(%s::uuid[]) ORDER BY assets.id", (asset_ids,)).fetchall())

@@ -17,6 +17,14 @@ def main():
         raise RuntimeError("the bounded local intake contract is incomplete")
     if not schema.get("nested_folders_schema_ready") or schema.get("folder_max_depth") != 4:
         raise RuntimeError("deploy the nested-folder follow-up and migration 048 before running this check")
+    if not all(capability.get(key) for key in ("job_picker_pagination", "job_picker_folders", "exact_selection_lookup")):
+        raise RuntimeError("deploy the paginated Create source picker before running this check")
+    picker = request("library/browse?view=all&for_editing=true&media_kind=all&limit=1&offset=0")
+    if not isinstance(picker.get("items"), list) or len(picker["items"]) > 1:
+        raise RuntimeError("the editing source picker must return a bounded page")
+    request("library/picker/projects")
+    if picker["items"]:
+        request(f"library/selection?asset_ids={picker['items'][0]['id']}")
     folders = request("library/collections")
     from uuid import UUID
     parents = {UUID(folder["id"]): UUID(folder["parent_id"]) if folder.get("parent_id") else None for folder in folders}

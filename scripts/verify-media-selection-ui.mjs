@@ -92,6 +92,7 @@ const { folderTrail, folderTree, folderLabel, folderDestinations } = require(pat
 let intakeItems = [];
 let caseSaveFailure=false;
 let comparisonPages = [], historyFailure = false;
+let pickerAssets, pickerFailure=false, selectionFailure=false, pickerDelay;
 let releaseFixture, releaseFailure=false;
 const { PilotChecklist } = require(path.join(repo, "apps/web/app/_components/pilot-checklist.tsx"));
 globalThis.fetch = async (url, options = {}) => {
@@ -201,9 +202,14 @@ globalThis.fetch = async (url, options = {}) => {
   else if (/^library\/organization\/[^/?]+$/.test(route)) payload=organizationHistory.find((item) => item.id === route.split("/")[2]);
   else if (route.startsWith("library/browse?")) {
     const p = new URLSearchParams(route.split("?")[1]);
+    if(p.get('for_editing')==='true' && p.get('offset')==='60' && p.get('media_kind')==='all' && pickerDelay)await pickerDelay;
+    if(p.get('for_editing')==='true' && pickerFailure)return {ok:false,status:503,json:async()=>({detail:'Media page temporarily unavailable'})};
     const q = (p.get("query") || "").toLowerCase(), view=p.get("view"), ids=p.getAll("match_ids");
-    let items = managedAssets.filter(a => (view === "trash" ? a.library_status === "archived" : a.library_status === "active")
-      && (!["talking","broll","unsorted"].includes(view) || a.mime_type.startsWith("video/") && a.media_role === (view === "unsorted" ? "auto" : view))
+    const available=p.get('for_editing')==='true' ? (pickerAssets??[serverAsset]).map(a=>({notes:'',tags:[],library_status:'active',...a})) : managedAssets;
+    let items = available.filter(a => (view === "trash" ? a.library_status === "archived" : a.library_status === "active")
+      && (!p.get('media_kind') || p.get('media_kind')==='all' || a.mime_type.startsWith(p.get('media_kind')+'/'))
+      && (!p.get('project_id') || a.project_id===p.get('project_id'))
+      && (!["talking","broll","unsorted"].includes(view) || a.mime_type.startsWith("video/") && (a.media_role??'auto') === (view === "unsorted" ? "auto" : view))
       && (!["image","audio"].includes(view) || a.mime_type.startsWith(view+"/"))
       && (p.get("category") === "all" || (a.media_category || "auto") === p.get("category"))
       && (p.get("favorite") !== "true" || a.favorite)
@@ -215,6 +221,11 @@ globalThis.fetch = async (url, options = {}) => {
     items.sort((a,b)=>p.get("sort")==="name"?a.display_name.localeCompare(b.display_name):p.get("sort")==="largest"?b.byte_size-a.byte_size:Date.parse(b.created_at)-Date.parse(a.created_at)||a.id.localeCompare(b.id));
     const offset=Number(p.get("offset")),limit=Number(p.get("limit"));
     payload={items:items.slice(offset,offset+limit),total:items.length,summary:{active:managedAssets.filter(a=>a.library_status==="active").length,trash:managedAssets.filter(a=>a.library_status==="archived").length,stored_bytes:10000}};
+  }
+  else if(route==='library/picker/projects')payload=[...new Map((pickerAssets??[serverAsset]).map(a=>[a.project_id,{id:a.project_id,name:a.project_name}])).values()];
+  else if(route.startsWith('library/selection?')) {
+    if(selectionFailure)return {ok:false,status:503,json:async()=>({detail:'Selection temporarily unavailable'})};
+    const ids=new URLSearchParams(route.split('?')[1]).getAll('asset_ids');payload=(pickerAssets??[serverAsset]).filter(a=>ids.includes(a.id) && a.library_status!=='archived');
   }
   else if (route.startsWith("library/intake/status?")) payload=new URLSearchParams(route.split("?")[1]).getAll("asset_ids").map(id=>({id,intake_status:analysisStatus === "failed" ? "failed" : "ready",error:"local analysis failed"}));
   else if (route.startsWith("library/intake?")) {
@@ -304,6 +315,7 @@ beforeEach(() => {
   const subtitleCues=[{id:"cue-0000",start:.1,end:2.5,text:"Costa Royal!",position:null,hidden:false},{id:"cue-0001",start:3.2,end:5.8,text:"Our favourite cream.",position:null,hidden:false}];
   subtitleFixture={run_id:serverId,version:2,base_hash:"a".repeat(64),revision:0,cues:subtitleCues,baseline:subtitleCues,position:"lower_safe",duration:6,saved:false,applied_run_id:null,hosted_model_calls:0};
   folderList=[];folderMembers=new Map();folderFailure=false;comparisonPages=[];historyFailure=false;
+  pickerAssets=undefined;pickerFailure=false;selectionFailure=false;pickerDelay=undefined;
   creativeImportAttempts = new Map();
   alternativeFailure=false;
   durationFailure=false;
@@ -558,6 +570,7 @@ test("new-job picker shows readable names and filters footage roles without drop
     assert.equal(document.querySelector(`input[aria-label="Use ${serverAsset.source_name}"]`), null);
     assert.match(document.body.textContent, /1 from server \+ 0 from this device/);
     await chooseOption('#library-purpose', 'broll');
+    await waitFor(() => document.querySelector(`input[aria-label="Use ${serverAsset.source_name}"]`));
     assert.equal(document.querySelector(`input[aria-label="Use ${serverAsset.source_name}"]`).checked, true);
     await type('#library-search', 'Finished product');
     await waitFor(() => document.querySelector(`input[aria-label="Use ${serverAsset.source_name}"]`));
@@ -689,6 +702,7 @@ test("photos can be categorized and filtered without assigning a video footage r
   await mountBrowser();
   await waitFor(() => document.querySelector('input[aria-label="Select r3.png"]'));
   await click(button("Photos"));
+  await waitFor(() => document.querySelector('input[aria-label="Select r3.png"]'));
   await click(document.querySelector('input[aria-label="Select r3.png"]'));
   assert.equal(document.querySelector('select[aria-label="Label selected videos"]').disabled,true);
   await chooseOption('select[aria-label="Categorize selected files"]',"review");
@@ -2050,4 +2064,96 @@ test('refreshing comparisons refetches the current history page and preserves re
   assert.match(historyCalls().at(-1).route,/before=recent/);
   assert.equal(document.querySelector('[aria-label="Playback comparison note"]').value,'My review draft.');
   assert.equal(calls.some(call=>call.method!=='GET'),false);
+});
+
+function pickerFixture(count=620) {
+  pickerAssets=Array.from({length:count},(_,n)=>({...serverAsset,id:`00000000-0000-4000-8000-${String(n+1).padStart(12,'0')}`,
+    source_name:`clip-${String(n).padStart(3,'0')}.mp4`,display_name:`Clip ${n}`,media_role:'talking'}));
+}
+const sourcePages=()=>calls.filter(call=>call.route.startsWith('library/browse?') && call.route.includes('for_editing=true'));
+async function openPicker() {
+  await act(async()=>root.render(React.createElement(NewJobForm)));
+  await waitFor(()=>document.querySelector('input[aria-label="Use clip-000.mp4"]'));
+}
+
+test('Create pages past 500 sources and keeps exact selections across pages and folders',async()=>{
+  pickerFixture();
+  folderList=[{id:serverId,name:'Products',parent_id:null,asset_count:0},{id:jobId,name:'Cream B-roll',parent_id:serverId,asset_count:1}];
+  folderMembers.set(jobId,new Set([pickerAssets[619].id]));
+  window.sessionStorage.setItem('gm-studio:media-basket:v1',JSON.stringify([pickerAssets[619].id]));
+  await openPicker();await waitFor(()=>document.body.textContent.includes('1 from server + 0 from this device'));
+  assert.equal(document.querySelectorAll('[aria-label="Server media library"] input').length,60);
+  assert.equal(calls.some(call=>call.route.startsWith('assets/library')),false);
+  assert(calls.some(call=>call.route.startsWith('library/selection?') && call.route.includes(pickerAssets[619].id)));
+  await click(document.querySelector('input[aria-label="Use clip-000.mp4"]'));
+  await click(button('Next media page'));await waitFor(()=>document.querySelector('input[aria-label="Use clip-060.mp4"]'));
+  await click(document.querySelector('input[aria-label="Use clip-060.mp4"]'));
+  await chooseOption('#library-folder',jobId);await waitFor(()=>document.querySelector('input[aria-label="Use clip-619.mp4"]'));
+  assert.equal(document.querySelector('input[aria-label="Use clip-619.mp4"]').checked,true);
+  assert.match(document.body.textContent,/3 from server \+ 0 from this device/);
+  assert.match(document.querySelector('#library-folder').textContent,/Products \/ Cream B-roll/);
+  await chooseOption('#library-folder','');await waitFor(()=>document.querySelector('input[aria-label="Use clip-000.mp4"]'));
+  assert.equal(document.querySelector('input[aria-label="Use clip-000.mp4"]').checked,true);
+  assert(sourcePages().every(call=>new URLSearchParams(call.route.split('?')[1]).get('limit')==='60'));
+  assert.equal(calls.some(call=>call.method!=='GET' && !call.route.endsWith('client-diagnostics')),false);
+});
+
+test('source search is reused when paging or switching folders and selected media stays inspectable',async()=>{
+  pickerFixture();await openPicker();
+  await type('#library-search','clip');
+  await waitFor(()=>!button('Next media page').disabled && document.querySelector('input[aria-label="Use clip-000.mp4"]'));
+  const searches=calls.filter(call=>call.route.startsWith('catalog/search?')).length;
+  assert.equal(searches,1);
+  await click(button('Next media page'));await waitFor(()=>document.querySelector('input[aria-label="Use clip-060.mp4"]'));
+  await chooseOption('#library-folder','unfiled');await waitFor(()=>document.querySelector('input[aria-label="Use clip-000.mp4"]'));
+  assert.equal(calls.filter(call=>call.route.startsWith('catalog/search?')).length,searches);
+});
+
+test('failed source page preserves selected footage and refresh retries its offset',async()=>{
+  pickerFixture();await openPicker();await click(document.querySelector('input[aria-label="Use clip-000.mp4"]'));
+  pickerFailure=true;await click(button('Next media page'));
+  await waitFor(()=>document.body.textContent.includes('Media page temporarily unavailable'));
+  assert.match(document.body.textContent,/1 from server \+ 0 from this device/);
+  assert.equal(document.querySelector('[aria-label="Server media library"]'),null);
+  pickerFailure=false;await click(button('Refresh server media'));
+  await waitFor(()=>document.querySelector('input[aria-label="Use clip-060.mp4"]'));
+  assert.equal(new URLSearchParams(sourcePages().at(-1).route.split('?')[1]).get('offset'),'60');
+});
+
+test('late source page cannot replace a newer media filter',async()=>{
+  pickerFixture();pickerAssets.push({...serverAsset,id:jobId,source_name:'review.png',mime_type:'image/png'});
+  await openPicker();let release;pickerDelay=new Promise(resolve=>{release=resolve});
+  await click(button('Next media page'));await waitFor(()=>sourcePages().some(call=>call.route.includes('offset=60')));
+  await click(button('Photos'));await waitFor(()=>document.querySelector('input[aria-label="Use review.png"]'));
+  await act(async()=>release());await tick();
+  assert.ok(document.querySelector('input[aria-label="Use review.png"]'));
+  assert.equal(document.querySelector('input[aria-label="Use clip-060.mp4"]'),null);
+});
+
+test('unavailable carried selections block job creation until the owner removes them',async()=>{
+  pickerFixture(2);const missing='99999999-9999-4999-8999-999999999999';
+  window.sessionStorage.setItem('gm-studio:media-basket:v1',JSON.stringify([pickerAssets[0].id,missing]));
+  await openPicker();await waitFor(()=>document.body.textContent.includes('1 selected originals are unavailable'));
+  assert.equal(button('Create job').disabled,true);await type('#project-name','A selected-source check');
+  assert.equal(posts('/jobs').length,0);assert.equal(posts('projects').length,0);
+  await click(document.querySelector(`[aria-label="Remove selected original ${missing}"]`));
+  await waitFor(()=>!button('Create job').disabled);
+  await click(button('Create job'));await waitFor(()=>posts(`jobs/${jobId}/assets`).length===1);
+  assert.deepEqual(posts(`jobs/${jobId}/assets`)[0].body.asset_ids,[pickerAssets[0].id]);
+});
+
+test('selection lookup failures retain the basket and more than 100 sources require an explicit reduction',async()=>{
+  pickerFixture(101);selectionFailure=true;
+  window.sessionStorage.setItem('gm-studio:media-basket:v1',JSON.stringify(pickerAssets.map(asset=>asset.id)));
+  await openPicker();await waitFor(()=>document.body.textContent.includes('Selection details could not be loaded'));
+  assert.equal(button('Create job').disabled,true);
+  assert.equal(JSON.parse(window.sessionStorage.getItem('gm-studio:media-basket:v1')).length,101);
+  const lookups=calls.filter(call=>call.route.startsWith('library/selection?'));
+  assert.equal(lookups.length,2);assert(lookups.every(call=>new URLSearchParams(call.route.split('?')[1]).getAll('asset_ids').length<=100));
+  selectionFailure=false;await click(button('Refresh server media'));
+  await waitFor(()=>document.body.textContent.includes('101 from server + 0 from this device'));
+  assert.equal(button('Create job').disabled,true);
+  await click(button('Clear server selection'));await waitFor(()=>!document.querySelector('[aria-label="Selected server media"]'));
+  assert.equal(JSON.parse(window.sessionStorage.getItem('gm-studio:media-basket:v1')).length,0);
+  assert.equal(posts('/jobs').length,0);
 });

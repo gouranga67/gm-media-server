@@ -907,11 +907,15 @@ export function getLibraryIntakeStatus(assetIds: readonly string[]) {
 export function browseLibrary(options: {
   view: string; category: string; favorite: boolean; collectionId: string; unfiled: boolean;
   query: string; matchIds: readonly string[]; copies: boolean; sort: string; offset: number;
+  mediaKind?: "all" | "video" | "image" | "audio"; projectId?: string; forEditing?: boolean;
 }) {
   const params = new URLSearchParams({ view: options.view, category: options.category, favorite: String(options.favorite),
     unfiled: String(options.unfiled), query: options.query, copies: String(options.copies), sort: options.sort,
     limit: "60", offset: String(options.offset) });
   if (options.collectionId) params.set("collection_id", options.collectionId);
+  if (options.mediaKind) params.set("media_kind", options.mediaKind);
+  if (options.projectId && options.projectId !== "all") params.set("project_id", options.projectId);
+  if (options.forEditing) params.set("for_editing", "true");
   for (const id of options.matchIds.slice(0, 100)) params.append("match_ids", id);
   return apiRequest<{ readonly items: readonly ManagedLibraryAsset[]; readonly total: number;
     readonly summary: { readonly active: number; readonly trash: number; readonly stored_bytes: number } }>(
@@ -930,6 +934,13 @@ export function getAssetAnalysis(assetId: string) {
 
 export function getServerLibraryAssets() {
   return apiRequest<readonly LibraryAsset[]>("assets/library?limit=500", { cache: "no-store" });
+}
+
+export const getLibraryPickerProjects = () => apiRequest<readonly { readonly id: string; readonly name: string }[]>("library/picker/projects", { cache: "no-store" });
+export function getSelectedLibraryAssets(ids: readonly string[]) {
+  const params = new URLSearchParams();
+  for (const id of ids) params.append("asset_ids", id);
+  return apiRequest<readonly LibraryAsset[]>(`library/selection?${params}`, { cache: "no-store" });
 }
 
 export function attachServerAssets(jobId: string, assetIds: readonly string[]) {

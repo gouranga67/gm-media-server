@@ -116,6 +116,7 @@ def system_information() -> dict[str, Any]:
         "library_intake": {"version": 1, "durable_registration": True, "folder_upload": True,
             "reviewable_inbox": True, "server_pagination": True, "page_size": 60,
             "reviewable_folder_suggestions": True,
+            "job_picker_pagination": True, "job_picker_folders": True, "exact_selection_lookup": True,
             "upload_concurrency": 2, "automatic_hosted_model_calls": 0},
         "learning_evaluation": {"version": 2,"saved_test_cases":True,"recording_groups":True,
             "complete_trial_readiness":True,"comparison_history_pagination":True,"comparison_page_size":20,
