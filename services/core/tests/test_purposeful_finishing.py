@@ -88,7 +88,7 @@ class PurposefulFinishingTests(unittest.TestCase):
         plan.clips.append(plan.clips[0].model_copy(update={"source_in":10,"source_out":22,"story_role":"ending"}))
         document=plan.model_dump(mode="json")
         updated,_=repair_predictable_plan_defaults(document,creative_direction={"edit_style":"energetic"},complete_creative_defaults=True)
-        self.assertEqual(updated["clips"][1]["transition"],"cross_dissolve")
+        self.assertEqual(updated["clips"][1]["transition"],"cut")
         legacy,_=repair_predictable_plan_defaults(document,creative_direction={"edit_style":"energetic"})
         self.assertEqual(legacy["clips"][1]["transition"],"cut")
 

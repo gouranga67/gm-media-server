@@ -1025,6 +1025,7 @@ def process_one_edit(state: WorkerState) -> bool:
                 context["job"]["effect_level"] = "off"
 
         if run["edit_plan_id"]:
+            context["plan_source"] = "saved_plan"
             with connection() as database:
                 plan_row = database.execute(
                     "SELECT document, provider, model FROM edit_plans WHERE id = %s",
@@ -1047,6 +1048,7 @@ def process_one_edit(state: WorkerState) -> bool:
                 creative_effects=context["creative_effect_library"],
             )
             if persisted_repairs:
+                context.setdefault("local_plan_repairs", []).extend(persisted_repairs)
                 with connection() as database:
                     database.execute(
                         """
@@ -1204,6 +1206,10 @@ def process_one_edit(state: WorkerState) -> bool:
                     timing["did_work"] = True
                     proposed, provenance = create_edit_plan(context)
                 proposed = _guard_generated_broll(context, proposed)
+            from app.editing_contract import editing_contract
+            context["plan_source"] = "local_controls" if provenance["provider"].startswith("local_") else "model_plan"
+            if context["plan_source"] == "model_plan":
+                context["planning_contract"] = editing_contract(context)
             request_kind = "revision" if run.get("based_on_run_id") else "initial_plan"
             _record_plan_usage(run, provenance, request_kind)
             if not deterministic_revision:
@@ -1301,7 +1307,9 @@ def process_one_edit(state: WorkerState) -> bool:
                         creative_effects=context["creative_effect_library"],
                         enforce_story_quality=check_story,
                     )
-                    deterministic_repairs.extend(final_repairs)
+                    # Earlier attempted repairs belonged to the rejected plan.
+                    # Only changes applied to the accepted plan enter its receipt.
+                    deterministic_repairs = final_repairs
                 else:
                     with connection() as database:
                         database.execute(
@@ -1319,6 +1327,7 @@ def process_one_edit(state: WorkerState) -> bool:
                                 ),
                             ),
                         )
+                context.setdefault("local_plan_repairs", []).extend(deterministic_repairs)
             provider = provenance["provider"]
             model = provenance["model"]
             reasoning_effort = provenance.get("reasoning_effort")
@@ -1328,6 +1337,7 @@ def process_one_edit(state: WorkerState) -> bool:
                     music_tracks=context["music_library"], creative_effects=context["creative_effect_library"],
                     previous_plan=(context.get("revision") or {}).get("previous_plan"), complete_creative_defaults=True)
                 if finishing_changes:
+                    context.setdefault("local_plan_repairs", []).extend(finishing_changes)
                     plan = validate_edit_plan(finished_document, context["assets"],
                         allow_post_copy=bool(context["project"]["ai_copy_allowed"]),
                         creative_direction=context["job"], music_tracks=context["music_library"],
@@ -1578,7 +1588,7 @@ def process_one_final_export(state: WorkerState) -> bool:
         from app.duration_policy import apply_duration_snapshot
         apply_duration_snapshot(context, export)
         if isinstance(export.get("preview_manifest"), dict):
-            for key in ("story_contract_review", "story_finishing", "story_sequence_review"):
+            for key in ("story_contract_review", "story_finishing", "story_sequence_review", "editing_receipt"):
                 context[key] = export["preview_manifest"].get(key)
             context["duration_repair"] = (export["preview_manifest"].get("duration_review") or {}).get("local_repair")
         render_document, _ = repair_predictable_plan_defaults(

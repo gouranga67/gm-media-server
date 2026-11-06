@@ -14,6 +14,7 @@ from app.edit_plan import (
 from app.creative_selection import only_creative_treatments
 from app.media_analysis import resolve_source, run_command
 from app.quality_review import parse_render_measurements
+from app.editing_contract import editing_contract
 
 MAX_MEASURED_CLIPS = 6
 MAX_MEASURED_SECONDS = 12
@@ -123,8 +124,9 @@ def finish_new_story(context: dict, plan) -> tuple:
             instructions,
         )
     )
+    preserve_passages = editing_contract(context)["preserve_natural_audio"]
     adjustments = {}
-    if not preserve_opening and _disposable_opening(plan, inventory):
+    if not preserve_passages and not preserve_opening and _disposable_opening(plan, inventory):
         adjustments[0] = {"clip_index": 0, "action": "remove"}
         report["changes"].append(
             "Removed a disposable opening fragment; retained the following recorded sentence."
@@ -181,7 +183,7 @@ def finish_new_story(context: dict, plan) -> tuple:
         measurements[index] = measured
         report["measured_clips"] += 1
         verified = []
-        if re.search(
+        if preserve_passages or re.search(
             r"\b(?:hold|breathe|reaction|laugh|pause)\b",
             str(clip.editorial_intent).lower(),
         ):

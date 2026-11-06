@@ -6,7 +6,7 @@ from typing import Any
 from app.config import Settings
 from app.edit_plan import EditPlan
 from app.editor_context import resolve_internal_asset_render_source, resolve_internal_asset_source
-from app.media_analysis import hdr_to_sdr_filter, probe_media, video_probe_hdr_mode
+from app.media_analysis import hdr_to_sdr_filter, probe_media, video_probe_hdr_mode, still_image_input_arguments
 
 
 def rhythmic_zoom(frames_per_second: int) -> str:
@@ -33,7 +33,7 @@ def broll_input_arguments(sources: list[dict[str, Any]]) -> list[str]:
     for source in sources:
         cue = source["cue"]
         if cue.media_kind == "image":
-            arguments += ["-loop", "1", "-t", f"{cue.duration_seconds:.3f}", "-i", str(source["path"])]
+            arguments += still_image_input_arguments(source["path"], duration=cue.duration_seconds)
         else:
             arguments += ["-ss", f"{cue.source_in:.3f}", "-t", f"{cue.duration_seconds:.3f}", "-i", str(source["path"])]
     return arguments

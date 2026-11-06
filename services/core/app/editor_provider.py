@@ -495,7 +495,10 @@ def _base_public_context(context: dict[str, Any], max_characters: int) -> dict[s
 
 
 def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str, Any]]:
+    from app.editing_contract import editing_contract, contract_instructions
+
     public = _public_context(context, settings.editor_max_context_characters)
+    contract = editing_contract(context)
     from app.duration_policy import resolve_duration
     duration = resolve_duration(public.get("job", {}))
     duration_instruction = (
@@ -628,21 +631,16 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
             "A selected concept's cited source order takes precedence over generic hook ranking.\n\n"
         )
     take_instruction = (
-        "Story quality takes precedence over humour, music, and effects. A funny tone or meme_heavy "
-        "effect level is not a request for a blooper reel. Read every source's take_quality report and "
-        "compare repeated takes before selecting footage. Prefer a complete clean take over false starts, "
-        "readiness checks, retake directions, and discussions about changing the script. These local flags "
-        "are evidence to verify against the full transcript, not certainty about the speaker's intent. "
-        "For a promotional video, identify the actual product or subject, give the supported benefit or "
-        "demonstration and proof, and finish the thought. Do not omit the product introduction just to "
-        "make room for a joke. If humour fits, use a short reaction after the main point; never make "
-        "an entire failed take the development/payoff unless the brief explicitly requests outtakes. "
-        "Do not confuse source order with story order: compare takes across all sources and use the "
-        "cleanest complete version, preserving cause and effect. Source speech gaps are not verified "
-        "silence; keep only a brief supported reaction and trim unused stretches. New promotional "
-        "dialogue cuts receive local pause tightening by default; explicit instructions to preserve "
-        "pauses or make a blooper reel take precedence.\n\n"
+        "Read take_quality as fallible evidence and compare repeated takes against the full transcript. "
+        "Prefer complete clean takes over discarded starts and retake directions unless outtakes are requested. "
+        "A funny tone or meme_heavy effect level is not a request for a blooper reel. "
+        "Speech gaps are not verified silence: they may contain laughter, reactions or natural sound.\n\n"
     )
+    if contract["purpose"] == "promotion":
+        take_instruction += (
+            "For this promotional video, identify the actual product, preserve its supported explanation "
+            "and conclusion, and do not replace these with a failed take or joke.\n\n"
+        )
     if bloopers:
         take_instruction = (
             "The user explicitly requested a bloopers reel. The outtakes are the subject: preserve each gag's "
@@ -728,29 +726,23 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
             "Create one JSON edit plan from this trusted job context. The validator will reject invented "
             "asset IDs, out-of-range timecodes, overlapping ranges, unsupported effects, and edits exceeding "
             "the supplied duration policy. Use story_spine and the locally retrieved story_index moments to build a coherent "
-            "short transcript-led story. Read the supplied transcript in source order; moment cards "
+            "story grounded in recorded passages. Read the supplied transcript in source order; moment cards "
             "are retrieval hints. Preserve connecting dialogue, cause and effect, pronoun references, "
             "necessary setup, and the speaker's conclusion. Use story_spine.engagement_assessment to compare hook/payoff/ending "
             "candidates, avoid repeated-idea groups, and prefer complete thoughts with clean edit points. Start with "
-            "the strongest supported hook instead of routine setup, "
-            "then give only the context needed to understand the point, develop it, deliver a payoff, and follow "
-            "the requested ending. Assign every clip a story_role and a concise editorial_intent. Preserve the speaker's "
+            "an opening that makes the chosen story understandable and interesting. Keep enough context "
+            "for the exchanges to make sense and follow the requested ending. Assign every clip a story_role "
+            "and a concise editorial_intent. Preserve the speaker's "
             "meaning, remove obvious dead air, and preserve meaningful chronology and cause and effect "
             "within each account. File upload order is not a required story order. "
-            "Only in aim mode, treat job.target_duration_seconds as an approximate aim, never a minimum. "
-            "A shorter complete story is better than dead air, repeated information, or a blooper added "
-            "to fill time. Use the explicit speech_gaps to cut excessive hesitation; a typical retained "
-            "pause is 0.3–0.6s and a short comedy beat about 0.8s. Speech gaps can contain laughter or "
-            "meaningful visual reactions: preserve those when supported by the brief or source evidence. "
+            "Do not fill time with repeated information. Keep meaningful laughter, reactions and natural sound; "
+            "speech_gaps and word timings are fallible evidence, not instructions to shorten every pause. "
             "Treat job.must_include as "
             "required subject matter when supported by the transcript, and job.edit_style as the visual pacing "
             "direction. Use only the named visual and transition presets. "
             "Keep source_audio_gain_db at 0 unless the user explicitly requests a source-volume change. "
-            "For energetic edits, split around "
-            "genuine emphasis beats identified in the source evidence, alternate standard framing with restrained "
-            "punch-ins, keep complete phrases intact, and include a "
-            "transition beat at an existing boundary when the multi-clip edit is at least 20 seconds. Prefer a short "
-            "cross_dissolve when a soft picture transition helps; do not force a dip to black or split speech for decoration. "
+            "For energetic edits, use picture changes around genuine emphasis beats while keeping complete "
+            "phrases intact. A cross_dissolve may soften a boundary; neither a transition nor a zoom is required. "
             "For clean edits, favor stable framing. For "
             "calm edits, favor longer clips and slow moves. Select music only from music_library and only when "
             "job.music_mode requests it; otherwise return no music. Use creative_effect_library only when "
@@ -842,6 +834,7 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
             "text": (
                 task_instruction
                 + "\n\n"
+                + contract_instructions(context)
                 + duration_instruction
                 + source_instruction
                 + concept_instruction

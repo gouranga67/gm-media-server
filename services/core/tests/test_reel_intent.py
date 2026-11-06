@@ -79,8 +79,8 @@ class ReelIntentTests(unittest.TestCase):
         self.assertFalse(repairs)
         plan = validate_edit_plan(document, assets, creative_direction=direction, enforce_story_quality=True)
         self.assertEqual(plan.clips[-1].source_out, 22)
-        with self.assertRaisesRegex(ValueError, "visual emphasis"):
-            validate_edit_plan(document, assets, creative_direction={"edit_style": "high_impact"})
+        ordinary = validate_edit_plan(document, assets, creative_direction={"edit_style": "high_impact"})
+        self.assertEqual(ordinary.clips[0].visual_preset, "standard")
 
     def test_clean_take_learning_is_not_transferred_to_bloopers(self):
         database = Mock()

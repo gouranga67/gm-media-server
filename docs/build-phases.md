@@ -69,6 +69,8 @@ Phase 17A provides the existing report-only quality layer. The active follow-up 
 
 ## Continuous sprint status
 
+The current follow-up is **stabilisation and editing-rule simplification**, not another tool expansion. The [editing rules and quality guide](editing-rules-and-quality.md) describes the image-triggered audio reset, the common audio output contract, optional creative guidance and recorded editing decisions. Source tests are complete; deployment and affected-reel playback acceptance remain separate from the Phase 31 release checklist.
+
 The [brief-first editing increment](brief-led-editing-plan.md) is implemented in source (migration 033), with an Advanced assembly override and the existing render engines retained. The [hands-on acceptance checklist](user-acceptance-checklist.md) covers real-footage acceptance. Follow-up phases are being built separately with focused regression checks; the broad deployment, playback and pilot testing pass follows the build sequence.
 
 | Phase | Outcome | Status |

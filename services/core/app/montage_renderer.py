@@ -1,3 +1,4 @@
+from app.editing_contract import editing_receipt
 from app.duration_policy import duration_review
 from app.visual_finishing import source_crop_filter
 from app.stabilization import stabilization_filter
@@ -50,9 +51,10 @@ from app.media_analysis import (
     resolve_source,
     run_command,
     video_probe_hdr_mode,
+    still_image_input_arguments,
 )
 from app.quality_review import review_rendered_video
-from app.render_integrity import RENDER_TIMING_VERSION, render_timing_error as _timing_error
+from app.render_integrity import RENDER_TIMING_VERSION, render_timing_error as _timing_error, rendered_audio_packet_error, normalize_render_audio
 from app.finishing_renderer import (
     append_broll_filters, broll_input_arguments, finishing_manifest,
     public_broll_manifest, rhythmic_zoom, selected_broll,
@@ -323,7 +325,7 @@ def _render(
         )
         render_sources.append(source)
         if clip.media_kind == "image":
-            common.extend(["-i", str(source)])
+            common.extend(still_image_input_arguments(source, loop=False))
         else:
             common.extend(
                 [
@@ -366,7 +368,7 @@ def _render(
     common.extend(
         [
             "-filter_complex",
-            append_picture_layers(append_effect_filters(append_broll_filters(_filter_graph(
+            normalize_render_audio(append_picture_layers(append_effect_filters(append_broll_filters(_filter_graph(
                 plan,
                 inventory,
                 width=width,
@@ -376,7 +378,7 @@ def _render(
                 captions_path=captions_path,
                 hdr_modes=hdr_modes, join_sources=joins, safe_speech_joins=bool(context.get("speech_precision")),
             ), broll_sources, width=width, height=height, fps=30), effect_sources, width=width, height=height,
-                total_duration=sum(float(clip.duration) for clip in plan.clips)), picture_layers, width=width, height=height, fps=30),
+                total_duration=sum(float(clip.duration) for clip in plan.clips)), picture_layers, width=width, height=height, fps=30)),
             "-map",
             "[vout]",
             "-map",
@@ -432,7 +434,7 @@ def _render(
                 timing_error = _timing_error(
                     probe_media(temporary, settings.analysis_command_timeout_seconds),
                     expected_duration,
-                )
+                ) or rendered_audio_packet_error(temporary, settings.analysis_command_timeout_seconds)
                 if timing_error is not None:
                     failures.append(f"{encoder}: {timing_error}")
                     continue
@@ -472,6 +474,7 @@ def _manifest(
         "duration_review": duration_review(context, document),
         "revision_report": context.get("revision_report"),
         "story_contract_review": context.get("story_contract_review"),
+        "editing_receipt": context.get("editing_receipt") or editing_receipt(context, plan, provider),
         "story_finishing": context.get("story_finishing"),
         "story_sequence_review": context.get("story_sequence_review"),
         "speech_precision": context.get("speech_precision"),
@@ -507,6 +510,7 @@ def _manifest(
             "color_pipeline": "transfer_aware_hdr_to_bt709_sdr_v2",
             "timing_pipeline": RENDER_TIMING_VERSION,
             "stream_timing_verified": True,
+            "audio_packet_timing_verified": True,
         },
         "sources": [
             {

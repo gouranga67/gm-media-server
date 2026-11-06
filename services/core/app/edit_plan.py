@@ -748,33 +748,9 @@ def repair_predictable_plan_defaults(
 
     repaired = deepcopy(document)
     repairs: list[str] = []
-    outtakes = bool((creative_direction or {}).get("editorial_policy", {}).get("bloopers_requested"))
-    if complete_creative_defaults and not outtakes and (creative_direction or {}).get("edit_style") in {"energetic", "high_impact"}:
-        # Only complete newly generated plans. Exact re-renders and local
-        # revisions keep their saved transitions. Never split or retime a cut.
-        if repaired.get("recipe") == "talking_head":
-            parsed = TalkingHeadEditPlan.model_validate(repaired)
-            if (creative_direction or {}).get("edit_style") == "high_impact":
-                anchored = {motion.clip_index for motion in parsed.finishing.motions} if parsed.finishing else set()
-                for index, clip in enumerate(parsed.clips):
-                    intentional_hold = clip.story_role == "reaction" or re.search(
-                        r"\b(hold|steady|stable|breathe|no zoom|stay wide)\b", clip.editorial_intent, re.IGNORECASE)
-                    if index not in anchored and clip.visual_preset == "standard" and clip.source_out - clip.source_in >= 5 and not intentional_hold:
-                        repaired["clips"][index]["visual_preset"] = "rhythmic_punch"
-                        repairs.append("added_rhythmic_punch_without_changing_dialogue")
-            if edit_plan_duration(parsed) >= 20 and len(parsed.clips) > 1 and all(
-                clip.transition == "cut" for clip in parsed.clips
-            ):
-                boundaries = list(range(1, len(parsed.clips)))
-                role_changes = [index for index in boundaries
-                                if parsed.clips[index].story_role != parsed.clips[index - 1].story_role]
-                candidates = role_changes or boundaries
-                midpoint = edit_plan_duration(parsed) / 2
-                boundary_times = [sum(clip.source_out - clip.source_in for clip in parsed.clips[:index])
-                                  for index in candidates]
-                chosen = min(zip(candidates, boundary_times), key=lambda item: abs(item[1] - midpoint))[0]
-                repaired["clips"][chosen]["transition"] = "cross_dissolve"
-                repairs.append("added_required_transition_at_existing_story_boundary")
+    # Creative choices belong to the plan, not technical repair. Keep the
+    # legacy argument for callers, but never inject a zoom or transition to
+    # satisfy a style quota, including on first-pass high-impact edits.
     requested_music = (creative_direction or {}).get("music_mode") or "none"
     if (creative_direction or {}).get("broll_enabled") is False and repaired.get("broll"):
         repaired["broll"] = []
@@ -1075,19 +1051,12 @@ def validate_edit_plan(
 
     style = direction.get("edit_style")
     strong_punches = sum(clip.visual_preset == "strong_punch_in" for clip in plan.clips)
-    visual_emphasis_count = sum(clip.visual_preset != "standard" for clip in plan.clips) + len(plan.finishing.motions if plan.finishing else [])
-    transition_count = sum(clip.transition != "cut" for clip in plan.clips)
     if style == "clean" and strong_punches > 1:
         raise ValueError("the clean style permits at most one strong punch-in")
     if style == "calm" and strong_punches:
         raise ValueError("the calm style does not permit strong punch-ins")
     if strong_punches > 5:
         raise ValueError("an edit may contain at most five strong punch-ins")
-    outtakes = bool(direction.get("editorial_policy", {}).get("bloopers_requested"))
-    if not outtakes and style in {"energetic", "high_impact"} and total_duration >= 8 and visual_emphasis_count == 0:
-        raise ValueError("the energetic style requires at least one bounded visual emphasis")
-    if not outtakes and style in {"energetic", "high_impact"} and len(plan.clips) > 1 and total_duration >= 20 and transition_count == 0:
-        raise ValueError("an energetic edit of 20 seconds or longer requires a transition beat")
 
     tracks = {str(track["track_id"]): track for track in music_tracks or []}
     requested_music = direction.get("music_mode") or "none"

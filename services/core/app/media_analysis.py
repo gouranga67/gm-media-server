@@ -21,6 +21,37 @@ EDGE_ENERGY_PATTERN = re.compile(r"lavfi\.signalstats\.YAVG=([0-9]+(?:\.[0-9]+)?
 ANALYSIS_VERSION = "1.2"
 
 
+def still_image_input_arguments(source: Path, *, loop: bool = True, duration: float | None = None) -> list[str]:
+    """Treat extensionless originals as one image, never a concatenated pipe.
+
+    JPEG pipe probing can mistake embedded image data for another frame with
+    different properties. Reinitializing a shared graph then resets its audio.
+    image2 also preserves PNG alpha; originals need no renaming or conversion.
+    """
+    source = Path(source)
+    try:
+        with source.open("rb") as image:
+            header = image.read(12)
+    except OSError:
+        header = b""
+    codec = (
+        "mjpeg" if header.startswith(b"\xff\xd8\xff") else
+        "png" if header.startswith(b"\x89PNG\r\n\x1a\n") else
+        "webp" if header.startswith(b"RIFF") and header[8:12] == b"WEBP" else
+        "bmp" if header.startswith(b"BM") else
+        "tiff" if header.startswith((b"II*\x00", b"MM\x00*")) else None
+    )
+    arguments = []
+    if codec:
+        # image2 cannot infer the codec from an extensionless file name alone.
+        arguments += ["-f", "image2", "-pattern_type", "none", "-vcodec", codec]
+    if loop:
+        arguments += ["-loop", "1"]
+    if duration is not None:
+        arguments += ["-t", f"{duration:.3f}"]
+    return [*arguments, "-i", str(source)]
+
+
 def analysis_profile(settings: "Settings") -> str:
     """Cache identity excludes device: CPU fallback uses the same recognition model."""
     return f"{ANALYSIS_VERSION}:{settings.transcription_model_path.name}:beam5:vad:words"

@@ -646,12 +646,13 @@ def selected_picture_layers(
 
 
 def picture_layer_inputs(sources: list[dict]) -> list[str]:
+    from app.media_analysis import still_image_input_arguments
     args = []
     for source in sources:
         cue = source["cue"]
         duration = cue.end - cue.start
         if cue.media_kind == "image":
-            args += ["-loop", "1", "-t", f"{duration:.3f}", "-i", str(source["path"])]
+            args += still_image_input_arguments(source["path"], duration=duration)
         else:
             args += [
                 "-ss",

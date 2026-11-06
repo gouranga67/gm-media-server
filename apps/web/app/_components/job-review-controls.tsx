@@ -21,6 +21,7 @@ import { FinishingWorkspace } from "./finishing-workspace";
 import { AudioCleanupControls } from "./audio-cleanup-controls";
 import { VisualFinishingControls } from "./visual-finishing-controls";
 import { TreatmentTimeline } from "./treatment-timeline";
+import { EditingReceipt } from "./editing-receipt";
 import { PreciseClipEditor } from "./precise-clip-editor";
 import { EditFeedbackCard } from "@/app/_components/edit-feedback-card";
 import { RenderQualityCard } from "@/app/_components/render-quality-card";
@@ -307,6 +308,7 @@ export function JobReviewControls({
     return (
       <div className="space-y-4">
       <PublishingPanel key={currentFinal.id} exportId={currentFinal.id} version={currentFinal.version} />
+      <EditingReceipt receipt={currentFinal.manifest.editing_receipt} />
       <RenderQualityCard review={currentFinal.manifest.quality_review} storyContract={currentFinal.manifest.story_contract_review} storyFinishing={currentFinal.manifest.story_finishing} storySequence={currentFinal.manifest.story_sequence_review} />
       <TreatmentTimeline report={(currentFinal.manifest.finishing as { treatment_timeline?: unknown } | undefined)?.treatment_timeline} onSeek={onSeek} />
       <section className="space-y-4 rounded-md border border-[#BFE3FF] bg-white p-5">
@@ -437,6 +439,7 @@ export function JobReviewControls({
       ) : null}
 
       <RenderQualityCard review={run.manifest.quality_review} storyContract={run.manifest.story_contract_review} storyFinishing={run.manifest.story_finishing} storySequence={run.manifest.story_sequence_review} />
+      <EditingReceipt receipt={run.manifest.editing_receipt} />
       <AudioCleanupControls key={`audio-${run.version}`} jobId={jobId} version={run.version} report={finishing?.audio_cleanup} onUpdated={onUpdated} />
       <VisualFinishingControls key={`visual-${run.version}`} jobId={jobId} version={run.version} report={finishing?.visual_finishing} onUpdated={onUpdated} />
       <TreatmentTimeline report={finishing?.treatment_timeline} onSeek={onSeek} />

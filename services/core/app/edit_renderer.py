@@ -1,3 +1,4 @@
+from app.editing_contract import editing_receipt
 from app.duration_policy import duration_review
 from app.visual_finishing import source_crop_filter
 from app.stabilization import stabilization_filter
@@ -43,7 +44,7 @@ from app.media_analysis import (
     video_probe_hdr_mode,
 )
 from app.quality_review import review_rendered_video
-from app.render_integrity import RENDER_TIMING_VERSION, render_timing_error
+from app.render_integrity import RENDER_TIMING_VERSION, render_timing_error, rendered_audio_packet_error, normalize_render_audio
 from app.finishing_renderer import (
     append_broll_filters, broll_input_arguments, finishing_manifest,
     public_broll_manifest, rhythmic_zoom, selected_broll,
@@ -542,7 +543,7 @@ def _render_video(
     common.extend(
         [
             "-filter_complex",
-            append_picture_layers(append_effect_filters(append_broll_filters(_ffmpeg_filter(
+            normalize_render_audio(append_picture_layers(append_effect_filters(append_broll_filters(_ffmpeg_filter(
                 plan,
                 captions_path,
                 width=width,
@@ -551,7 +552,7 @@ def _render_video(
                 music_input_index=len(sources) if music_source is not None else None,
                 hdr_modes=hdr_modes, join_sources=joins, safe_speech_joins=safe_speech_joins,
             ), overlays, width=width, height=height, fps=frames_per_second), effects, width=width, height=height,
-                total_duration=sum(float(clip.source_out - clip.source_in) for clip in plan.clips)), layers, width=width, height=height, fps=frames_per_second),
+                total_duration=sum(float(clip.source_out - clip.source_in) for clip in plan.clips)), layers, width=width, height=height, fps=frames_per_second)),
             "-map",
             "[vout]",
             "-map",
@@ -619,7 +620,7 @@ def _render_video(
                 timing_error = render_timing_error(
                     probe_media(temporary, timeout),
                     sum(float(clip.source_out - clip.source_in) for clip in plan.clips),
-                )
+                ) or rendered_audio_packet_error(temporary, timeout)
                 if timing_error is not None:
                     failures.append(f"{encoder}: {timing_error}")
                     continue
@@ -737,6 +738,7 @@ def render_edit_preview(
         "duration_review": duration_review(context, document),
         "revision_report": context.get("revision_report"),
         "story_contract_review": context.get("story_contract_review"),
+        "editing_receipt": context.get("editing_receipt") or editing_receipt(context, plan, provider),
         "story_finishing": context.get("story_finishing"),
         "story_sequence_review": context.get("story_sequence_review"),
         "speech_precision": context.get("speech_precision"),
@@ -784,6 +786,7 @@ def render_edit_preview(
             "color_pipeline": "transfer_aware_hdr_to_bt709_sdr_v2",
             "timing_pipeline": RENDER_TIMING_VERSION,
             "stream_timing_verified": True,
+            "audio_packet_timing_verified": True,
         },
         "sources": [
             {
@@ -1017,6 +1020,7 @@ def render_final_delivery(
         "duration_review": duration_review(context, document),
         "revision_report": context.get("revision_report"),
         "story_contract_review": context.get("story_contract_review"),
+        "editing_receipt": context.get("editing_receipt") or editing_receipt(context, plan, provider),
         "story_finishing": context.get("story_finishing"),
         "story_sequence_review": context.get("story_sequence_review"),
         "speech_precision": context.get("speech_precision"),
@@ -1058,6 +1062,7 @@ def render_final_delivery(
             "color_pipeline": "transfer_aware_hdr_to_bt709_sdr_v2",
             "timing_pipeline": RENDER_TIMING_VERSION,
             "stream_timing_verified": True,
+            "audio_packet_timing_verified": True,
         },
         "caption_corrections": caption_corrections,
         "subtitle_document_sha256": document_fingerprint(context, plan),

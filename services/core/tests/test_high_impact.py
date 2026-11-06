@@ -105,13 +105,13 @@ class HighImpactTests(unittest.TestCase):
         self.assertAlmostEqual(tightened.broll[0].start_seconds, 2.6)
         self.assertEqual(tightened.broll[0].duration_seconds, 2)
 
-    def test_finishing_fills_flat_shots_without_moving_words(self):
+    def test_finishing_preserves_model_treatment_choices_without_quotas(self):
         self.doc["clips"][0]["visual_preset"] = "standard"
         repaired, changes = repair_predictable_plan_defaults(self.doc, creative_direction=self.direction,
                                                               complete_creative_defaults=True)
-        self.assertEqual(repaired["clips"][0]["visual_preset"], "rhythmic_punch")
+        self.assertEqual(repaired["clips"][0]["visual_preset"], "standard")
         self.assertEqual((repaired["clips"][0]["source_in"], repaired["clips"][0]["source_out"]), (0, 10))
-        self.assertIn("added_rhythmic_punch_without_changing_dialogue", changes)
+        self.assertNotIn("added_rhythmic_punch_without_changing_dialogue", changes)
         legacy, _ = repair_predictable_plan_defaults(self.doc, creative_direction=self.direction)
         self.assertEqual(legacy["clips"][0]["visual_preset"], "standard")
         self.doc["clips"][0]["editorial_intent"] = "Hold this reaction and let the line breathe."
@@ -148,7 +148,7 @@ class HighImpactTests(unittest.TestCase):
         self.assertEqual(provenance["provider"], "local_fixed_recipe")
         self.assertEqual(provenance["usage"], {})
 
-    def test_high_impact_finishes_long_flat_shots_with_one_planner_call(self):
+    def test_high_impact_keeps_model_choices_with_one_planner_call(self):
         from unittest.mock import MagicMock, Mock, patch
         from app import worker
 
@@ -168,7 +168,7 @@ class HighImpactTests(unittest.TestCase):
             self.assertTrue(worker.process_one_edit(worker.WorkerState()))
         planner.assert_called_once()
         finished = renderer.call_args.args[1]
-        self.assertEqual(finished.clips[0].visual_preset, "rhythmic_punch")
+        self.assertEqual(finished.clips[0].visual_preset, "standard")
         self.assertEqual([(c.source_in, c.source_out) for c in finished.clips], [(0, 6), (6, 10)])
 
     def test_local_broll_removal_preserves_speech_and_never_calls_a_model(self):

@@ -16,11 +16,24 @@ from app.edit_plan import TalkingHeadEditPlan, MontageEditPlan
 from app.edit_renderer import _render_video, render_ass
 from app.montage_renderer import _render
 from app.media_analysis import probe_media
-from app.render_integrity import render_timing_error
+from app.render_integrity import render_timing_error, aac_packet_error, rendered_audio_packet_error
 from test_camera_timing import COLOURS, WIDTH, HEIGHT, decode_video, make_source
 
 
 class RenderIntegrityTests(unittest.TestCase):
+    def test_aac_packet_clock_catches_squeezed_frames_even_when_total_duration_matches(self):
+        payload = {"streams": [{"codec_name": "aac", "sample_rate": "48000"}], "packets": [
+            {"pts_time": str(i * 1024 / 48000), "duration_time": str(1024 / 48000)}
+            for i in range(-1, 6)]}
+        payload["packets"][-1]["duration_time"] = "0.005"
+        self.assertIsNone(aac_packet_error(payload))
+        payload["packets"][4]["duration_time"] = str(1 / 48000)
+        self.assertIn("compressed", aac_packet_error(payload))
+        payload["packets"][4]["duration_time"] = str(1024 / 48000)
+        payload["packets"][5]["pts_time"] = "0.064021"
+        self.assertIn("timestamps", aac_packet_error(payload))
+        for incomplete in ({}, {"streams": [], "packets": []}, {"streams": [{"sample_rate": "nan"}]}):
+            self.assertIsNotNone(aac_packet_error(incomplete))
     def test_each_track_must_cover_the_edit_even_if_the_container_does(self):
         good = {"format": {"duration_seconds": 32.68}, "streams": [
             {"type": "video", "duration_seconds": 32.666667, "start_seconds": 0},
@@ -81,6 +94,28 @@ class RenderIntegrityTests(unittest.TestCase):
                                 settings=SimpleNamespace(analysis_command_timeout_seconds=10))
                 self.assertEqual(output.read_bytes(), b"previous usable render")
                 self.assertFalse((root / ".existing.part.mp4").exists())
+
+    def test_correct_duration_cannot_hide_bad_audio_packets_or_replace_a_good_render(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            output = root / "existing.mp4"
+            output.write_bytes(b"previous usable render")
+            plan = TalkingHeadEditPlan(schema_version="1.4", recipe="talking_head",
+                clips=[dict(asset_id=uuid4(), source_in=0, source_out=4, crop="center_fill")],
+                caption_style="clean_blue_v1", audio_preset="spoken_voice_v1", end_card="none",
+                editorial_summary="Saved cut")
+
+            def encode(command, **kwargs):
+                Path(command[-1]).write_bytes(b"full duration, corrupt audio clock")
+                return SimpleNamespace(returncode=0, stderr="")
+
+            with patch("app.edit_renderer.run_command", side_effect=encode), \
+                 patch("app.edit_renderer.probe_media", return_value={"streams": [
+                     {"type": "video", "duration_seconds": 4}, {"type": "audio", "duration_seconds": 4}]}), \
+                 patch("app.edit_renderer.rendered_audio_packet_error", return_value="audio packets contain compressed sample timing"):
+                with self.assertRaisesRegex(RuntimeError, "compressed sample timing"):
+                    _render_video([(root / "source.mp4", 0, 4)], plan, root / "captions.ass", output, 10)
+            self.assertEqual(output.read_bytes(), b"previous usable render")
 
 
 class SavedCutRecoveryTests(unittest.TestCase):
@@ -168,6 +203,7 @@ class MixedJoinTimingTests(unittest.TestCase):
                                     settings=SimpleNamespace(analysis_command_timeout_seconds=30), captions_path=captions)
                         self.assertEqual(before, plan.model_dump(mode="json"))
                         probe = probe_media(output, 10)
+                        self.assertIsNone(rendered_audio_packet_error(output, 10))
                         for stream in probe["streams"]:
                             self.assertAlmostEqual(stream["duration_seconds"], sum(durations), delta=0.055)
                         pixels = decode_video(output)

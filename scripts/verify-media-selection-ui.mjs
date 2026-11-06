@@ -72,6 +72,7 @@ const { JobPreview } = require(path.join(repo, "apps/web/app/_components/job-pre
 const { JobReviewControls } = require(path.join(repo, "apps/web/app/_components/job-review-controls.tsx"));
 const { EditProgress } = require(path.join(repo, "apps/web/app/_components/edit-progress.tsx"));
 const { RenderQualityCard } = require(path.join(repo, "apps/web/app/_components/render-quality-card.tsx"));
+const { EditingReceipt } = require(path.join(repo, "apps/web/app/_components/editing-receipt.tsx"));
 const { TreatmentTimeline } = require(path.join(repo, "apps/web/app/_components/treatment-timeline.tsx"));
 const { AssemblyReadiness } = require(path.join(repo, "apps/web/app/_components/assembly-readiness.tsx"));
 const { NewJobForm } = require(path.join(repo, "apps/web/app/_components/new-job-form.tsx"));
@@ -2156,4 +2157,22 @@ test('selection lookup failures retain the basket and more than 100 sources requ
   await click(button('Clear server selection'));await waitFor(()=>!document.querySelector('[aria-label="Selected server media"]'));
   assert.equal(JSON.parse(window.sessionStorage.getItem('gm-studio:media-basket:v1')).length,0);
   assert.equal(posts('/jobs').length,0);
+});
+
+
+test("Editing receipt distinguishes model planning, local processing and saved-plan replay", async () => {
+  const receipt = {version:1,plan_source:"model_plan",planning_contract:{audio_pacing:"connected_passages",creative_quotas:false},local_repairs:["removed_unrequested_music"],local_story_changes:["Shortened measured waiting."],audio_processing:{balanced_sources:1,compressed_sources:2,denoised_sources:0}};
+  await act(async()=>root.render(React.createElement(EditingReceipt,{receipt})));
+  assert.match(document.body.textContent,/AI planned this edit/);
+  assert.match(document.body.textContent,/Complete conversations/);
+  assert.match(document.body.textContent,/effects were optional/);
+  assert.match(document.body.textContent,/removed unrequested music/);
+  assert.match(document.body.textContent,/1 sources balanced/);
+  assert.equal(document.querySelector("details").open,false);
+  await act(async()=>root.render(React.createElement(EditingReceipt,{receipt:{...receipt,plan_source:"saved_plan",planning_contract:null,local_repairs:[],local_story_changes:[]}})));
+  assert.match(document.body.textContent,/reused a saved edit plan/);
+  assert.doesNotMatch(document.body.textContent,/AI planned this edit|Audio direction/);
+  await act(async()=>root.render(React.createElement(EditingReceipt,{receipt:undefined})));
+  assert.equal(document.body.textContent,"");
+  assert.equal(calls.length,0);
 });

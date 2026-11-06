@@ -148,14 +148,11 @@ class EditPlanValidationTests(unittest.TestCase):
                 creative_direction={"edit_style": "calm"},
             )
 
-    def test_energetic_style_requires_visual_emphasis(self) -> None:
+    def test_energetic_style_allows_an_unembellished_complete_passage(self) -> None:
         self.document["clips"][0].update(source_in=0, source_out=10)
-        with self.assertRaisesRegex(ValueError, "requires at least one"):
-            validate_edit_plan(
-                self.document,
-                self.assets,
-                creative_direction={"edit_style": "energetic"},
-            )
+        plan = validate_edit_plan(self.document, self.assets,
+            creative_direction={"edit_style": "energetic"})
+        self.assertEqual(plan.clips[0].visual_preset, "standard")
 
     def test_music_must_come_from_approved_library(self) -> None:
         track_id = uuid4()
@@ -179,7 +176,7 @@ class EditPlanValidationTests(unittest.TestCase):
                 music_tracks=[],
             )
 
-    def test_new_ai_plan_missing_transition_is_completed_without_recutting(self) -> None:
+    def test_new_ai_plan_has_no_automatic_decoration_quota(self) -> None:
         from copy import deepcopy
 
         self.document["clips"] = [
@@ -188,13 +185,15 @@ class EditPlanValidationTests(unittest.TestCase):
             {**self.document["clips"][0], "source_in": 10, "source_out": 16, "story_role": "payoff"},
             {**self.document["clips"][0], "source_in": 16, "source_out": 23, "story_role": "payoff"},
         ]
+        self.document.update(music_mix="none", music_track_id=None, effects=[])
         original = deepcopy(self.document)
         direction = {"edit_style": "energetic"}
         repaired, repairs = repair_predictable_plan_defaults(self.document,
             creative_direction=direction, complete_creative_defaults=True)
         plan = validate_edit_plan(repaired, self.assets, creative_direction=direction)
-        self.assertIn("added_required_transition_at_existing_story_boundary", repairs)
-        self.assertEqual(plan.clips[1].transition, "cross_dissolve")
+        self.assertEqual(repairs, [])
+        self.assertEqual(repaired, original)
+        self.assertEqual(plan.clips[1].transition, "cut")
         self.assertEqual(plan.clips[0].transition, "cut")
         for before, after in zip(original["clips"], repaired["clips"]):
             self.assertEqual({k: v for k, v in before.items() if k != "transition"},

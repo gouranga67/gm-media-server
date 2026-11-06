@@ -4,7 +4,7 @@ from typing import Any
 
 from app.config import Settings
 from app.edit_plan import EditPlan
-from app.media_analysis import resolve_source
+from app.media_analysis import resolve_source, still_image_input_arguments
 
 
 AUDIO_KINDS = {"sound_effect", "meme_sound"}
@@ -44,7 +44,7 @@ def effect_input_arguments(effects: list[dict[str, Any]]) -> list[str]:
             # Keep stream_loop as a fallback for GIFs without loop metadata.
             arguments.extend(["-ignore_loop", "0", "-stream_loop", "-1", "-i", str(path)])
         elif kind in {"sticker", "meme_image"}:
-            arguments.extend(["-loop", "1", "-i", str(path)])
+            arguments.extend(still_image_input_arguments(path))
         else:
             arguments.extend(["-i", str(path)])
     return arguments

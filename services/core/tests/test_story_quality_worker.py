@@ -55,7 +55,7 @@ class StoryQualityWorkerTests(unittest.TestCase):
         renderer.assert_called_once()
         plan = renderer.call_args.args[1]
         self.assertEqual([(c.source_in, c.source_out) for c in plan.clips], [(0, 10), (12, 24)])
-        self.assertEqual(plan.clips[1].transition, "cross_dissolve")
+        self.assertEqual(plan.clips[1].transition, "cut")
         queries = [call.args[0] for call in connection.return_value.__enter__.return_value.execute.call_args_list]
         self.assertFalse(any("status = 'failed'" in query for query in queries))
 

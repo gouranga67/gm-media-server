@@ -393,6 +393,15 @@ class StoryFinishingTests(unittest.TestCase):
             preserved, _ = finish_new_story(self.context, plan)
         self.assertEqual(preserved.model_dump(), plan.model_dump())
 
+    def test_preserving_conversations_keeps_openings_and_measured_natural_pauses(self):
+        self.context["project"]["brief"] = "Keep the conversation and natural sound from our day out."
+        plan = plan_for(self.identity, [(0, 6.2), (7.8, 9.2)])
+        with patch("app.story_finishing._measure", return_value={
+            "silence_intervals": [{"start": 1.1, "end": 4.9}], "loudness": {}}):
+            preserved, report = finish_new_story(self.context, plan)
+        self.assertEqual(preserved.model_dump(), plan.model_dump())
+        self.assertEqual(report["changes"], [])
+
     def test_creative_callouts_do_not_disable_existing_story_cleanup(self):
         from app.finishing_tools import FinishingTools
 
