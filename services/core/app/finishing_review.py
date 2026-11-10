@@ -65,6 +65,9 @@ def treatment_timeline(context, plan):
             add("captions", "Timed caption placement", region.start, region.end, region.position.replace("_", " "))
         for cue in tools.callouts:
             add("callout", "Text: " + cue.text, cue.start, cue.end, f"{cue.style}; {cue.animation}")
+        for cue in tools.visual_beats:
+            add("graphic", cue.preset.replace("_", " ").capitalize(), cue.start, cue.end,
+                "Native picture treatment; recorded dialogue timing is unchanged.")
         for cue in tools.pointers:
             add("graphic", "Fixed " + cue.shape, cue.start, cue.end, "Fixed coordinates; no object tracking.")
         for cue in tools.music_regions:

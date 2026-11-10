@@ -100,7 +100,7 @@ def bound_generated_treatments(context, plan):
         context.get("job", {}).get("effect_level", "off"), 0
     )
     available = max(0, maximum - len(plan.effects))
-    names = ("callouts", "pointers", "music_regions")
+    names = ("callouts", "pointers", "music_regions", "visual_beats")
     cues = sorted(
         [
             (cue.start, name, index)
@@ -141,7 +141,7 @@ def only_creative_treatments(tools):
     if tools is None:
         return False
     data = tools.model_dump(mode="json")
-    names = {"callouts", "pointers", "music_regions", "motions", "caption_regions"}
+    names = {"callouts", "pointers", "music_regions", "visual_beats", "motions", "caption_regions"}
     return any(data.get(name) for name in names) and not any(
         value for name, value in data.items() if name not in names
     )
@@ -149,7 +149,7 @@ def only_creative_treatments(tools):
 
 def remove_graphic_effects(plan):
     """Remove library cues and generated graphics, keeping local mix/layout."""
-    tools = plan.finishing.model_copy(update={"callouts": [], "pointers": []}, deep=True) if plan.finishing else None
+    tools = plan.finishing.model_copy(update={"callouts": [], "pointers": [], "visual_beats": []}, deep=True) if plan.finishing else None
     if tools and not any(tools.model_dump(mode="json").values()):
         tools = None
     return plan.model_copy(update={"effects": [], "finishing": tools}, deep=True)

@@ -1,0 +1,111 @@
+import array
+from copy import deepcopy
+import json
+from pathlib import Path
+import shutil
+import subprocess
+import tempfile
+import unittest
+from uuid import uuid4
+from pydantic import ValidationError
+
+from app.config import Settings
+from app.creative_selection import bound_generated_treatments, remove_graphic_effects
+from app.edit_plan import TalkingHeadEditPlan, MontageEditPlan, apply_timeline_adjustments, schema_for_recipe
+from app.edit_renderer import render_ass, _render_video
+from app.finishing_tools import FinishingTools, validate_finishing
+from app.montage_renderer import _render as montage_render
+from app.render_integrity import rendered_audio_packet_error
+from app.revision_intent import local_revision, assert_revision_locks
+from app.visual_beats import VisualBeat
+
+
+def fixture():
+    return TalkingHeadEditPlan(schema_version='1.5',recipe='talking_head',
+        clips=[dict(asset_id=uuid4(),source_in=0,source_out=3,crop='center_fill')],
+        caption_style='clean_blue_v1',audio_preset='spoken_voice_v1',end_card='none',editorial_summary='Recorded speech stays intact.',
+        finishing=FinishingTools(visual_beats=[dict(start=.8,end=1.6,preset='clone_row'),dict(start=2,end=2.2,preset='impact_frame')]))
+
+
+class VisualBeatTests(unittest.TestCase):
+    def test_strict_bounded_schema_and_no_empty_legacy_hash_change(self):
+        for value in (dict(start=0,end=.5,preset='impact_frame'),dict(start=0,end=3,preset='clone_row'),dict(start=0,end=1,preset='arbitrary_js')):
+            with self.assertRaises(ValidationError): VisualBeat(**value)
+        self.assertNotIn('visual_beats',FinishingTools().model_dump(mode='json'))
+        for recipe in ('talking_head','montage'):
+            schema=schema_for_recipe(recipe)['properties']['finishing']['anyOf'][1]
+            beat=schema['properties']['visual_beats']['items']
+            self.assertEqual(set(beat['required']),set(beat['properties']))
+            self.assertFalse(beat['additionalProperties'])
+
+    def test_duration_overlap_budget_removal_and_retiming(self):
+        plan=fixture()
+        validate_finishing(plan,[])
+        bad=plan.model_copy(deep=True)
+        bad.finishing.visual_beats[0].end=4
+        with self.assertRaisesRegex(ValueError,'beyond'): validate_finishing(bad,[])
+        off=bound_generated_treatments(dict(job=dict(effect_level='off')),plan)
+        self.assertFalse(off.finishing and off.finishing.visual_beats)
+        self.assertFalse(remove_graphic_effects(plan).finishing)
+        changed=apply_timeline_adjustments(plan,[dict(clip_index=0,source_in=.4)])
+        self.assertAlmostEqual(changed.finishing.visual_beats[0].start,.4)
+        self.assertEqual(plan.finishing.visual_beats[0].start,.8)
+
+    def test_remove_effects_and_effect_lock_include_native_beats(self):
+        plan=fixture().model_dump(mode='json')
+        changed=local_revision(plan,'Remove effects')
+        self.assertIsNotNone(changed)
+        document=changed[0] if isinstance(changed,tuple) else changed
+        self.assertFalse((document.get('finishing') or {}).get('visual_beats'))
+        with self.assertRaisesRegex(ValueError,'protected effects'):
+            assert_revision_locks(document,plan,['effects'],[])
+
+
+@unittest.skipUnless(shutil.which('ffmpeg'),'ffmpeg required for actual effect and sound verification')
+class VisualBeatRenderTests(unittest.TestCase):
+    def ff(self,*args):
+        return subprocess.run(['ffmpeg','-hide_banner','-loglevel','error','-nostdin','-y',*args],capture_output=True,check=True,timeout=60).stdout
+
+    def test_effect_windows_captions_and_continuous_audio_in_both_engines(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);source=root/'source.mp4';captions=root/'captions.ass'
+            self.ff('-f','lavfi','-i',"color=c=0x254050:s=180x320:r=30:d=3,drawbox=x=60:y=80:w=60:h=120:c=red:t=fill,drawbox=x=60:y=80:w=60:h=120:c=lime:t=fill:enable='gte(t,1.2)'",
+                '-f','lavfi','-i','sine=frequency=440:sample_rate=48000:duration=3','-c:v','libx264','-pix_fmt','yuv420p','-c:a','aac',str(source))
+            p=fixture()
+            captions.write_text(render_ass([dict(start=0,end=3,text='Keep speech intact.')],width=180,height=320))
+            settings=Settings(database_url='postgresql://unused',upload_hook_secret='x'*32,media_root=root)
+            for recipe in ('talking_head','montage'):
+                output=root/f'{recipe}.mp4'
+                if recipe=='talking_head':
+                    _render_video([(source,0,3)],p,captions,output,60,width=180,height=320)
+                else:
+                    values=p.model_dump(mode='json');values['recipe']='montage';values.pop('caption_style')
+                    values['audio_preset']='montage_mix_v1'
+                    values['clips'][0].update(source_out=1.5,duration=1.5,media_kind='video',include_source_audio=True)
+                    values['clips'].append({**values['clips'][0],'source_in':1.5,'source_out':3})
+                    montage=MontageEditPlan.model_validate(values)
+                    context=dict(assets=[dict(asset_id=str(p.clips[0].asset_id),_storage_key=source.name,has_audio=True)],music_library=[],creative_effect_library=[])
+                    montage_render(context,montage,output,width=180,height=320,final=False,settings=settings,captions_path=captions)
+                def frame(t):
+                    return self.ff('-ss',str(t),'-i',str(output),'-frames:v','1','-f','rawvideo','-pix_fmt','rgb24','pipe:1')
+                def pixel(buf,x,y):return tuple(buf[(y*180+x)*3:(y*180+x)*3+3])
+                before,during,after=frame(.5),frame(1.1),frame(1.8)
+                # Three full-shot panels each retain the red subject at x=30,90,150.
+                for x in (30,90,150):
+                    self.assertGreater(pixel(during,x,160)[0],130)
+                later=frame(1.4)
+                for x in (30,90,150):
+                    self.assertGreater(pixel(later,x,160)[1],170,'all three copies must advance with the source')
+                    self.assertLess(pixel(later,x,160)[0],90)
+                self.assertLess(pixel(before,30,160)[0],80)
+                self.assertLess(pixel(after,30,160)[0],80)
+                impact=frame(2.1)
+                self.assertGreater(pixel(impact,1,1)[0],140)
+                self.assertLess(pixel(after,1,1)[0],80)
+                # White subtitle pixels remain in the lower safe band during the clone row.
+                self.assertGreater(sum(min(pixel(during,x,y))>170 for y in range(220,250) for x in range(180)),20)
+                pcm=array.array('h',self.ff('-i',str(output),'-vn','-ac','1','-ar','8000','-f','s16le','pipe:1'))
+                for t in (.2,1,1.8,2.1,2.6):
+                    samples=pcm[round(t*8000):round((t+.1)*8000)]
+                    self.assertGreater(sum(abs(v) for v in samples)/len(samples),500,'speech tone must stay continuous')
+                self.assertIsNone(rendered_audio_packet_error(output,60))

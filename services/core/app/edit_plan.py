@@ -719,7 +719,8 @@ def schema_for_recipe(recipe: str) -> dict[str, Any]:
         if "items" in result:
             result["items"] = strict(result["items"], definitions)
         return result
-    for name, model, maximum in (("callouts", Callout, 8), ("pointers", Pointer, 8), ("music_regions", MusicRegion, 8),
+    from app.visual_beats import VisualBeat
+    for name, model, maximum in (("callouts", Callout, 8), ("pointers", Pointer, 8), ("music_regions", MusicRegion, 8), ("visual_beats", VisualBeat, 4),
                                  ("motions", ClipMotion, 24), ("caption_regions", CaptionRegion, 40)):
         raw = model.model_json_schema()
         item = strict(raw, raw.get("$defs", {}))

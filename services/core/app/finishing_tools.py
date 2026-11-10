@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator, model_serial
 
 
 from app.creative_treatments import Callout, Pointer, MusicRegion, music_region_filters
+from app.visual_beats import VisualBeat
 
 
 class ToolModel(BaseModel):
@@ -187,6 +188,7 @@ class ProductProfile(ProductTrack):
 
 
 class FinishingTools(ToolModel):
+    visual_beats: list[VisualBeat] = Field(default_factory=list, max_length=4)
     callouts: list[Callout] = Field(default_factory=list, max_length=8)
     pointers: list[Pointer] = Field(default_factory=list, max_length=8)
     music_regions: list[MusicRegion] = Field(default_factory=list, max_length=8)
@@ -194,7 +196,7 @@ class FinishingTools(ToolModel):
     @model_serializer(mode="wrap")
     def preserve_saved_tools(self, handler):
         data = handler(self)
-        for name in ("callouts", "pointers", "music_regions"):
+        for name in ("callouts", "pointers", "music_regions", "visual_beats"):
             if not data.get(name):
                 data.pop(name, None)
         # Keep hashes and playback of previously saved plans unchanged.
@@ -290,7 +292,7 @@ def validate_finishing(
         clip = plan.clips[profile.clip_index]
         if profile.asset_id != clip.asset_id or abs(profile.source_in - clip.source_in) > .001 or abs(profile.source_out - clip.source_out) > .001:
             raise ValueError("visual profile belongs to a different source range")
-    for name in ("audio_regions", "caption_regions", "callouts", "pointers", "music_regions"):
+    for name in ("audio_regions", "caption_regions", "callouts", "pointers", "music_regions", "visual_beats"):
         previous = 0.0
         for region in sorted(getattr(tools, name), key=lambda item: item.start):
             if region.start < previous - 0.001 or region.end > total + 0.01:
@@ -607,7 +609,8 @@ def apply_graph_finishing(
             for part in parts
         ]
         appended.append(f"[{input_label}]{voice}[toolvoice]")
-    return ";".join(parts + appended)
+    from app.visual_beats import append_visual_beats
+    return append_visual_beats(";".join(parts + appended), plan, width=width, height=height)
 
 
 def selected_picture_layers(
@@ -747,7 +750,7 @@ def retime_finishing(
     data.pop("stabilize_clips", None)
     data.pop("product_tracks", None)
     data.pop("product_profiles", None)
-    for name in ("audio_regions", "caption_regions", "layers", "callouts", "pointers", "music_regions"):
+    for name in ("audio_regions", "caption_regions", "layers", "callouts", "pointers", "music_regions", "visual_beats"):
         result = []
         for region in data.get(name, []):
             for old_start, old_end, new_start in mapping:
@@ -755,7 +758,7 @@ def retime_finishing(
                     max(region["start"], old_start),
                     min(region["end"], old_end),
                 )
-                if end - start < (0.1 if name in {"callouts", "pointers", "music_regions"} else 0.02):
+                if end - start < (0.1 if name in {"callouts", "pointers", "music_regions", "visual_beats"} else 0.02):
                     continue
                 item = {
                     **region,

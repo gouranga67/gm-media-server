@@ -83,7 +83,7 @@ def assert_revision_locks(document, previous, locks, assets):
         if lock in locks and any(document.get(k, default) != previous.get(k, default) for k, default in keys):
             problems.append(lock)
     tool_fields = {"captions": ("caption_regions",), "music": ("music_start_seconds", "music_regions"),
-                   "effects": ("callouts", "pointers")}
+                   "effects": ("callouts", "pointers", "visual_beats")}
     for lock, keys in tool_fields.items():
         if lock in locks and any(before_tools.get(k, 0 if k == "music_start_seconds" else []) !=
                                  after_tools.get(k, 0 if k == "music_start_seconds" else []) for k in keys):
@@ -114,7 +114,7 @@ def local_revision(document, instruction, locks=()):
         domain = "effects"
         candidate["effects"] = []
         tools = candidate.get("finishing") or {}
-        for key in ("callouts", "pointers"):
+        for key in ("callouts", "pointers", "visual_beats"):
             tools.pop(key, None)
     else:
         match = re.fullmatch(r"(?:make )?clip ([1-9][0-9]?) (louder|quieter) by ([0-9]+(?:\.[0-9]+)?)\s*db", text)

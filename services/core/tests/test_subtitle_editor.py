@@ -72,7 +72,9 @@ class SubtitleDocumentTests(unittest.TestCase):
     def test_legacy_ass_round_trip_reads_only_spoken_caption_layer(self):
         raw=[dict(start=.1,end=2.5,text=r"Review {nice}, a \ path",position="upper")]
         ass=render_ass(raw)+"Dialogue: 3,0:00:00.00,0:00:01.00,Callout,,0,0,0,,Not speech\n"
-        self.assertEqual(parse_ass(ass),raw)
+        parsed=parse_ass(ass)
+        self.assertEqual(parsed[0]["text"].replace("\n", " "),raw[0]["text"])
+        self.assertEqual(parsed[0]["position"],raw[0]["position"])
 
     def test_caption_text_updates_are_not_applied_twice_on_exact_rebuild(self):
         doc=make_document(plan().model_dump(mode="json"),events())

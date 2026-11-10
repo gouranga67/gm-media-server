@@ -21,6 +21,7 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
+from app.caption_layout import (aligned_caption_words, phrase_groups, sentence_case_events, single_caption_lane, caption_lines, CAPTION_PRESENTATION_VERSION)
 from app.caption_text import replace_caption_phrase
 from app.asset_credits import delivery_asset_credits
 from app.config import Settings, get_settings
@@ -57,9 +58,6 @@ PREVIEW_FPS = 30
 FINAL_WIDTH = 1080
 FINAL_HEIGHT = 1920
 FINAL_FPS = 30
-CAPTION_MAX_WORDS = 7
-CAPTION_MAX_CHARACTERS = 44
-CAPTION_MAX_SECONDS = 2.6
 
 
 def _delivery_dimensions(aspect: str) -> tuple[int, int]:
@@ -117,7 +115,7 @@ def clip_caption_events(
 ) -> list[dict[str, Any]]:
     """Create short, source-timed caption cards for one assembled clip."""
 
-    events: list[dict[str, Any]] = []
+    words: list[dict[str, Any]] = []
     for segment in asset.get("transcript_segments", []):
         try:
             segment_start = float(segment["start"])
@@ -128,85 +126,40 @@ def clip_caption_events(
         visible_end = min(segment_end, source_out)
         if visible_end - visible_start < 0.08:
             continue
-
-        words: list[dict[str, Any]] = []
-        for raw_word in segment.get("words", []):
+        aligned = []
+        for raw_word in aligned_caption_words(segment):
             if not isinstance(raw_word, dict):
                 continue
             try:
-                word_start = float(raw_word["start"])
-                word_end = float(raw_word["end"])
+                start, end = float(raw_word["start"]), float(raw_word["end"])
             except (KeyError, TypeError, ValueError):
                 continue
             text = " ".join(str(raw_word.get("text") or "").split())
-            if text and word_end > source_in and word_start < source_out:
-                words.append({"start": max(word_start, source_in), "end": min(word_end, source_out), "text": text})
+            if text and end > start and end > source_in and start < source_out:
+                aligned.append({"start": max(start, source_in), "end": min(end, source_out), "text": text})
+        if aligned:
+            words.extend(aligned)
+            continue
+        # Legacy imports have only segment timing. Preserve the existing
+        # approximate fallback; never pass these estimates to speech trimming.
+        tokens = str(segment.get("text") or "").split()
+        if not tokens or segment_end <= segment_start:
+            continue
+        first = max(0, min(len(tokens)-1, int((visible_start-segment_start)/(segment_end-segment_start)*len(tokens))))
+        last = max(first+1, min(len(tokens), int((visible_end-segment_start)/(segment_end-segment_start)*len(tokens)+.999)))
+        tokens = tokens[first:last]
+        step = (visible_end-visible_start)/len(tokens)
+        words.extend({"start":visible_start+i*step,"end":visible_start+(i+1)*step,"text":token} for i,token in enumerate(tokens))
 
-        groups: list[list[dict[str, Any]]] = []
-        current: list[dict[str, Any]] = []
-        for word in words:
-            candidate_text = " ".join([*(item["text"] for item in current), word["text"]])
-            pause = float(word["start"]) - float(current[-1]["end"]) if current else 0.0
-            span = float(word["end"]) - float(current[0]["start"]) if current else 0.0
-            if current and (
-                len(current) >= CAPTION_MAX_WORDS
-                or len(candidate_text) > CAPTION_MAX_CHARACTERS
-                or span > CAPTION_MAX_SECONDS
-                or pause >= 0.38
-            ):
-                groups.append(current)
-                current = []
-            current.append(word)
-        if current:
-            groups.append(current)
-
-        if not groups:
-            # Older imported transcripts may not have word timestamps. Divide the
-            # segment into readable cards and distribute them across its duration.
-            tokens = str(segment.get("text") or "").split()
-            if tokens and segment_end > segment_start:
-                first = max(
-                    0,
-                    min(
-                        len(tokens) - 1,
-                        int((visible_start - segment_start) / (segment_end - segment_start) * len(tokens)),
-                    ),
-                )
-                last = max(
-                    first + 1,
-                    min(
-                        len(tokens),
-                        int((visible_end - segment_start) / (segment_end - segment_start) * len(tokens) + 0.999),
-                    ),
-                )
-                tokens = tokens[first:last]
-            cards = [tokens[index:index + CAPTION_MAX_WORDS] for index in range(0, len(tokens), CAPTION_MAX_WORDS)]
-            if not cards:
-                continue
-            card_duration = (visible_end - visible_start) / len(cards)
-            groups = [
-                [{
-                    "start": visible_start + index * card_duration,
-                    "end": visible_start + (index + 1) * card_duration,
-                    "text": " ".join(card),
-                }]
-                for index, card in enumerate(cards)
-            ]
-
-        for group in groups:
-            text = _correct_caption_text(
-                " ".join(str(word["text"]) for word in group), corrections
-            )
-            start = max(source_in, float(group[0]["start"]))
-            end = min(source_out, float(group[-1]["end"]))
-            if text and end - start >= 0.08:
-                events.append(
-                    {
-                        "start": timeline_start + start - source_in,
-                        "end": timeline_start + end - source_in,
-                        "text": text,
-                    }
-                )
+    events = []
+    # Work across neighbouring ASR segments so a segment boundary cannot leave
+    # a single word or the unit of a number hanging on a separate caption.
+    for group in phrase_groups(words, [str(c.get("original_text") or "") for c in corrections or []]):
+        text = _correct_caption_text(" ".join(word["text"] for word in group), corrections)
+        start = max(source_in, min(word["start"] for word in group))
+        end = min(source_out, max(word["end"] for word in group))
+        if text and end-start >= .08:
+            events.append({"start":timeline_start+start-source_in,"end":timeline_start+end-source_in,"text":text})
     return events
 
 
@@ -228,7 +181,7 @@ def caption_events(
             clip_caption_events(asset, *clip_audio_window(plan,index,timeline_start), corrections)
         )
         timeline_start += source_out - source_in
-    return events
+    return sentence_case_events(single_caption_lane(events), corrections)
 
 
 def adjust_caption_timing(
@@ -283,16 +236,16 @@ def render_ass(
             else 0.25
         )
         vertical_margin = max(32, round(height * safe_ratio)) if is_vertical else max(32, round(86 * scale))
-    font = {"sans": "DejaVu Sans", "serif": "DejaVu Serif", "mono": "DejaVu Sans Mono"}.get(str((brand_kit or {}).get("font_family")), "Arial")
+    font = {"sans": "DejaVu Sans", "serif": "DejaVu Serif", "mono": "DejaVu Sans Mono"}.get(str((brand_kit or {}).get("font_family")), "DejaVu Sans")
     accent = str((brand_kit or {}).get("accent_color") or "#195BB4")
     red, green, blue = int(accent[1:3], 16), int(accent[3:5], 16), int(accent[5:7], 16)
-    ass_accent = f"&H00{blue:02X}{green:02X}{red:02X}"
+    ass_accent = f"&H00{blue:02X}{green:02X}{red:02X}" if brand_kit else "&H00201A16"
     bold = 0 if style == "minimal" else -1
     header = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {width}
 PlayResY: {height}
-WrapStyle: 0
+WrapStyle: 2
 ScaledBorderAndShadow: yes
 
 [V4+ Styles]
@@ -303,19 +256,22 @@ Style: GMBlue,{font},{font_size},&H00FFFFFF,&H00FFFFFF,{ass_accent},&H78000000,{
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
     lines = [header]
-    for event in events:
-        override = ""
+    for event in single_caption_lane(events):
+        text, fitted_size = caption_lines(str(event["text"]), font, font_size, width-2*horizontal_margin-2*outline, bold=bool(bold))
+        override = f"{{\\fs{fitted_size}}}" if fitted_size != font_size else ""
         if event.get("position"):
-            positions = {"lower_safe": (2, round(height*.72)), "middle": (5, round(height*.48)), "upper": (8, round(height*.14))}
+            safe_ratio = .28 if target_platform == "tiktok" else .24 if target_platform == "instagram" else .25
+            lower_y = height-round(height*safe_ratio) if is_vertical else height-max(32, round(86*scale))
+            positions = {"lower_safe": (2, lower_y), "middle": (5, round(height*.5)), "upper": (8, round(height*(.14 if is_vertical else .1)))}
             align,y = positions.get(event["position"], (alignment, height-vertical_margin))
-            override = f"{{\\an{align}\\pos({width//2},{y})}}"
+            override += f"{{\\an{align}\\pos({width//2},{y})}}"
         lines.append(
             "Dialogue: 0,"
             f"{_ass_timestamp(float(event['start']))},{_ass_timestamp(float(event['end']))},"
-            f"GMBlue,,0,0,0,,{override}{_ass_text(str(event['text']))}\n"
+            f"GMBlue,,0,0,0,,{override}{_ass_text(text)}\n"
         )
     from app.creative_treatments import treatment_events
-    return "".join(lines) + treatment_events(treatments, width, height, events, position)
+    return "".join(lines) + treatment_events(treatments, width, height, events, position, brand_kit=brand_kit)
 
 
 def _atomic_text(path: Path, content: str) -> None:
@@ -783,6 +739,7 @@ def render_edit_preview(
             "video_encoder": encoder,
             "audio_preset": "spoken_voice_v1",
             "caption_style": "clean_blue_v1",
+            "caption_presentation": CAPTION_PRESENTATION_VERSION,
             "color_pipeline": "transfer_aware_hdr_to_bt709_sdr_v2",
             "timing_pipeline": RENDER_TIMING_VERSION,
             "stream_timing_verified": True,
@@ -1059,6 +1016,7 @@ def render_final_delivery(
             "video_encoder": encoder,
             "audio_preset": "spoken_voice_v1",
             "caption_style": "clean_blue_v1",
+            "caption_presentation": CAPTION_PRESENTATION_VERSION,
             "color_pipeline": "transfer_aware_hdr_to_bt709_sdr_v2",
             "timing_pipeline": RENDER_TIMING_VERSION,
             "stream_timing_verified": True,

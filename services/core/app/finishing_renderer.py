@@ -188,4 +188,6 @@ def finishing_manifest(context: dict[str, Any], plan: EditPlan) -> dict[str, Any
             "audio_cleanup": cleanup_manifest(plan),
             "visual_finishing": visual_manifest(plan, context["job"].get("output_aspect") or "vertical"),
             "treatment_timeline": treatment_timeline(context, plan),
+            "text_treatment_version": "headline_cards_v2",
+            "visual_beats": [cue.model_dump(mode="json") for cue in plan.finishing.visual_beats] if plan.finishing else [],
             "additional_model_calls": 0}

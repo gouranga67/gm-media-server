@@ -1545,7 +1545,8 @@ export const saveSourceRange = (id: string, range: SourceRange) => apiRequest<So
 export const removeSourceRange = (assetId: string, id: string) => apiRequest(`library/assets/${assetId}/ranges/${id}`, { method: "DELETE" });
 
 export type FinishingTools = {
-  readonly callouts?: readonly { readonly start: number; readonly end: number; readonly text: string; readonly position: "upper" | "middle" | "lower_safe"; readonly style: "label" | "thought" | "counter"; readonly animation: "fade" | "pop" | "slide_up" }[];
+  readonly callouts?: readonly { readonly start: number; readonly end: number; readonly text: string; readonly position: "upper" | "middle" | "lower_safe"; readonly style: "label" | "thought" | "counter" | "headline" | "comment"; readonly animation: "fade" | "pop" | "slide_up" }[];
+  readonly visual_beats?: readonly { readonly start: number; readonly end: number; readonly preset: "impact_frame" | "clone_row" }[];
   readonly pointers?: readonly { readonly start: number; readonly end: number; readonly x: number; readonly y: number; readonly size: number; readonly shape: "arrow" | "circle"; readonly direction: "right" | "left" | "up" | "down" }[];
   readonly music_regions?: readonly { readonly start: number; readonly end: number; readonly gain_db: number }[];
   readonly audio_joins?: readonly { readonly clip_index: number; readonly lead_seconds: number; readonly tail_seconds: number }[];

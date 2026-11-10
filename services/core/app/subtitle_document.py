@@ -22,7 +22,11 @@ class SubtitleCue(BaseModel):
     @classmethod
     def clean_text(cls, value):
         # Plain text only: renderer escapes ASS control syntax.
-        return " ".join(value.split())
+        rows = [" ".join(row.split()) for row in value.replace("\r\n", "\n").replace("\r", "\n").split("\n")]
+        rows = [row for row in rows if row]
+        if len(rows) > 2:
+            raise ValueError("use at most two lines per caption; split longer text into another caption")
+        return "\n".join(rows)
 
     @model_validator(mode="after")
     def valid_interval(self):
@@ -74,15 +78,20 @@ def make_document(plan, events):
             }).model_dump() for index, event in enumerate(visible)]}
 
 
-def validate_cues(cues, total):
+def validate_cues(cues, total, *, allow_legacy_overlap=False):
     result = [SubtitleCue.model_validate(c).model_dump() for c in cues]
     previous = 0.0
     identities = set()
+    visible_end = 0.0
     for cue in result:
         if cue["id"] in identities or cue["start"] < previous - .001 or cue["end"] > total + .025:
             raise ValueError("caption times must stay in order, inside the edit, without duplicate IDs")
         identities.add(cue["id"])
         previous = cue["start"]
+        if not cue["hidden"]:
+            if not allow_legacy_overlap and cue["start"] < visible_end - .001:
+                raise ValueError("spoken captions cannot overlap; adjust the end/start times or merge these captions")
+            visible_end = max(visible_end, cue["end"])
     return result
 
 
@@ -108,22 +117,23 @@ def matches(document, plan, *, prefix=False):
 
 
 def resolve_events(context, plan, events):
+    from app.caption_layout import single_caption_lane
     document = context.get("_subtitle_document")
     if not document:
-        return events
+        return single_caption_lane(events)
     if not matches(document, plan, prefix=bool(context.get("_subtitle_prefix_variant"))):
         context["subtitle_notice"] = "The cut changed; timed subtitle edits were reset to match the new speech."
-        return events
+        return single_caption_lane(events)
     document = retime_document(document, plan)
     total = duration(plan)
     result = []
-    for cue in validate_cues(document["cues"], document["duration"]):
+    for cue in validate_cues(document["cues"], document["duration"], allow_legacy_overlap=True):
         if cue["hidden"] or cue["start"] >= total:
             continue
         end = min(cue["end"], total)
         if end - cue["start"] >= (.08 if context.get("_subtitle_prefix_variant") else .0009):
             result.append({k: v for k, v in {**cue, "end": end}.items() if k not in {"id", "hidden"} and v is not None})
-    return result
+    return single_caption_lane(result)
 
 
 def retime_document(document, plan):
@@ -204,7 +214,7 @@ def parse_ass(text):
         alignment = re.search(r"\{\\an([258])\\pos\(", caption)
         position = {"2": "lower_safe", "5": "middle", "8": "upper"}.get(alignment[1]) if alignment else None
         caption = re.sub(r"(?<!\\)\{\\[^}]*\}", "", caption)
-        caption = re.sub(r"\\([\\{}Nn])", lambda m: " " if m[1] in "Nn" else m[1], caption)
+        caption = re.sub(r"\\([\\{}Nn])", lambda m: "\n" if m[1] in "Nn" else m[1], caption)
         events.append({"start": seconds(values[1]), "end": seconds(values[2]), "text": caption,
                        **({"position": position} if position else {})})
     return events

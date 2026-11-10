@@ -19,6 +19,7 @@ import os
 from pathlib import Path
 from typing import Any
 
+from app.caption_layout import sentence_case_events, single_caption_lane, CAPTION_PRESENTATION_VERSION
 from app.config import Settings, get_settings
 from app.edit_plan import MontageEditPlan, document_sha256
 from app.edit_renderer import (
@@ -84,7 +85,7 @@ def montage_caption_events(
                 )
             )
         timeline_start += float(clip.duration)
-    return events
+    return sentence_case_events(single_caption_lane(events), corrections)
 
 
 def _subtitle_filter_path(path: Path) -> str:
@@ -611,6 +612,7 @@ def render_montage_preview(
     manifest["manifest_path"] = manifest_path.relative_to(settings.media_root).as_posix()
     manifest["subtitle_document_sha256"] = document_fingerprint(context, plan)
     manifest["subtitle_events"] = events
+    manifest["caption_presentation"] = CAPTION_PRESENTATION_VERSION
     manifest["subtitle_notice"] = context.get("subtitle_notice")
     manifest["captions"] = {
         "style": "clean_blue_v1",
@@ -744,6 +746,7 @@ def render_montage_delivery(
             "approved_at": approved_at,
             "subtitle_document_sha256": document_fingerprint(context, plan),
             "subtitle_events": events,
+            "caption_presentation": CAPTION_PRESENTATION_VERSION,
             "subtitle_notice": context.get("subtitle_notice"),
             "captions": {
                 "style": "clean_blue_v1",

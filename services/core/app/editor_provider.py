@@ -788,15 +788,21 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
         "A callout is up to 64 plain-text characters: use a short source-backed "
         "phrase, a faithful thought label, or a list counter only when its number is supported. Never invent facts, "
         "quotes, attempt counts or product claims. Place callouts above dialogue captions and away from faces/products. "
+        "Callout style headline gives a bold accent headline (numeric claims get a large figure and smaller supporting line); "
+        "comment gives a compact comment card, thought an italic aside. These may reinforce spoken subtitles; never hide the speech captions. "
+        "Optional finishing.visual_beats presets: impact_frame is a single 0.1–0.25s accent border (no strobing); "
+        "clone_row is a 0.1–2.5s live triptych of the entire recorded shot, not a person cutout. Use clone_row only for an "
+        "explicit request or clearly playful repetition; never fake another person, action or reaction. Leave unused arrays empty. "
         "Pointers are fixed arrows/circles at normalized frame coordinates: use only if the shown object location is clear; "
         "they do not track moving objects. Music regions briefly reduce/mute only the selected music, then restore it, "
         "for a real reaction; never mute or stretch dialogue. Use sparingly around evidence-backed moments, not to meet a quota. "
         "An audio and visual effect may share a beat within 50ms; both count towards the effect limit. "
-        "Library effects, callouts, pointers and music regions share that limit; camera moves and caption placement are separate. "
+        "Library effects, callouts, pointers, visual_beats and music regions share that limit; camera moves and caption placement are separate. "
         "Respect use_when/avoid_when and energy. Keep effects shorter than important speech; do not reuse one gag throughout a reel. "
         "Do not fabricate laughter or reactions. Use existing silent picture-layer freeze/reaction tools only when a user requests them. "
         if public.get("job", {}).get("effect_level", "off") != "off" else
         "Sounds and decorative graphics are disabled: leave finishing.callouts, finishing.pointers and finishing.music_regions empty. "
+        "Leave finishing.visual_beats empty too. "
         "Camera and caption placement remain available without adding decorative effects. "
     )
     finishing_instruction = narrative_instruction + music_timing_instruction + creative_tools_instruction + rhythmic_instruction + (

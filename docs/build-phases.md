@@ -1,8 +1,10 @@
 # Build phases and live status
 
-Updated: 2026-11-04 (UTC)
+Updated: 2026-11-10 (UTC)
 
 This is the working plan for turning the Lenovo into a private media-editing appliance. A phase is complete only when its exit checks pass. Discussion, generated files, and installed packages do not count as a completed phase by themselves.
+
+Current follow-up: [Caption and effects quality sprint](phase-reports/caption-and-effects-quality.md). The first implementation covers phrase-aware subtitles, measured two-line typography, prominent headlines, conservative preparation-word cleanup, bounded native impact/clone-row effects, and agent/local-tool integration. Deployment and real-footage playback acceptance remain pending; this does not mark the wider private-pilot or publishing acceptance phases complete.
 
 ## Active large build phases — 26–31
 

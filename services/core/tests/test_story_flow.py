@@ -402,6 +402,37 @@ class StoryFinishingTests(unittest.TestCase):
         self.assertEqual(preserved.model_dump(), plan.model_dump())
         self.assertEqual(report["changes"], [])
 
+    def test_standalone_well_requires_a_preparation_gap_and_respects_the_brief(self):
+        self.asset["transcript_segments"][0]["words"] = [
+            dict(start=0,end=.3,text="Well,"), dict(start=1.2,end=2,text="Hello, welcome.")]
+        plan = plan_for(self.identity, [(0,.5),(1.1,2.1)])
+        with patch("app.story_finishing._measure", side_effect=TimeoutError):
+            finished,_=finish_new_story(self.context,plan)
+        self.assertEqual(len(finished.clips),1)
+        for brief in ("Keep the well opening.", "Preserve the conversation and natural audio."):
+            self.context['project']['brief']=brief
+            with patch("app.story_finishing._measure", side_effect=TimeoutError):
+                kept,_=finish_new_story(self.context,plan)
+            self.assertEqual(kept.model_dump(),plan.model_dump())
+        self.context['project']['brief']='Make a useful story.'
+        self.asset['transcript_segments'][0]['words'][1]['start']=.4
+        plan=plan_for(self.identity,[(0,.35),(.35,2.1)])
+        with patch("app.story_finishing._measure", side_effect=TimeoutError):
+            kept,_=finish_new_story(self.context,plan)
+        self.assertEqual(kept.model_dump(),plan.model_dump())
+        self.asset['transcript_segments'][0]['words'][1].update(start=1.2,text='that depends.')
+        plan=plan_for(self.identity,[(0,.5),(1.1,2.1)])
+        with patch("app.story_finishing._measure", side_effect=TimeoutError):
+            kept,_=finish_new_story(self.context,plan)
+        self.assertEqual(kept.model_dump(),plan.model_dump())
+
+    def test_bloopers_keep_a_well_fragment_even_with_a_long_gap(self):
+        self.context['job']['editorial_policy']={'intent':'bloopers','bloopers_requested':True}
+        self.asset['transcript_segments'][0]['words']=[dict(start=0,end=.3,text='Well,'),dict(start=1.5,end=2,text='Oops.')]
+        plan=plan_for(self.identity,[(0,.5),(1.3,2.1)])
+        kept,_=finish_new_story(self.context,plan)
+        self.assertEqual(kept.model_dump(),plan.model_dump())
+
     def test_creative_callouts_do_not_disable_existing_story_cleanup(self):
         from app.finishing_tools import FinishingTools
 

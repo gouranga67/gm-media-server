@@ -78,10 +78,24 @@ def _disposable_opening(plan, inventory: dict) -> bool:
     clip = plan.clips[0]
     words = _clip_words(inventory.get(str(clip.asset_id), {}), clip)
     text = " ".join(str(w.get("text", w.get("word", ""))).strip() for w in words)
-    return bool(
+    disposable = bool(
         words
         and clip.source_out - clip.source_in <= 1.2
-        and re.fullmatch(r"(?:all right|alright|okay|ok|um|uh)[,.!? ]*", text, re.I)
+        and re.fullmatch(r"(?:all right|alright|okay|ok|um|uh|well)[,.!? ]*", text, re.I)
+    )
+    if not disposable or not re.fullmatch(r"well[,.!? ]*", text, re.I):
+        return disposable
+    # 'Well, that depends' is meaningful dialogue. Only remove a standalone
+    # opening 'well' when the *same recording* then has a long preparation gap.
+    following = plan.clips[1]
+    next_words = _clip_words(inventory.get(str(following.asset_id), {}), following)
+    next_text = " ".join(str(w.get("text") or "") for w in next_words)
+    independent_start = bool(re.match(r"(?:hi|hello|welcome|my name|today|in this video|let['’]s)\b", next_text, re.I))
+    marked_preparation = bool(re.search(r"\b(?:preparation|getting ready|false start|readiness)\b", str(clip.editorial_intent), re.I))
+    return bool(
+        following.asset_id == clip.asset_id and next_words
+        and float(next_words[0]["start"]) - float(words[-1]["end"]) >= .65
+        and (independent_start or marked_preparation)
     )
 
 
@@ -99,7 +113,7 @@ def finish_new_story(context: dict, plan) -> tuple:
     policy = job.get("editorial_policy") or {}
     if (
         not isinstance(plan, TalkingHeadEditPlan)
-        or policy.get("intent") != "story"
+        or policy.get("intent") not in {"story", "promotion"}
         or policy.get("bloopers_requested")
         or policy.get("preserve_pauses_requested")
         or job.get("edit_style") == "calm"
@@ -120,7 +134,7 @@ def finish_new_story(context: dict, plan) -> tuple:
     )
     preserve_opening = bool(
         re.search(
-            r"\b(?:keep|preserve|start with|open with)\b.{0,45}\b(?:all right|alright|okay|um|uh)\b",
+            r"\b(?:keep|preserve|start with|open with)\b.{0,45}\b(?:all right|alright|okay|um|uh|well)\b",
             instructions,
         )
     )
@@ -254,7 +268,7 @@ def finish_new_story(context: dict, plan) -> tuple:
                 [adjustments[i] for i in sorted(adjustments, reverse=True)],
                 context["assets"],
             )
-            if not preserve_opening and _disposable_opening(result, inventory):
+            if not preserve_passages and not preserve_opening and _disposable_opening(result, inventory):
                 result = apply_timeline_adjustments(
                     result, [{"clip_index": 0, "action": "remove"}], context["assets"]
                 )

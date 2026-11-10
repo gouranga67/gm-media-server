@@ -147,10 +147,11 @@ export function JobReviewControls({
     audio_cleanup?: Parameters<typeof AudioCleanupControls>[0]["report"];
     visual_finishing?: Parameters<typeof VisualFinishingControls>[0]["report"];
     mode?: string; rhythmic_punch_beats?: readonly number[]; treatment_timeline?: unknown;
-    local_tools?: { callouts?: readonly unknown[]; pointers?: readonly unknown[] };
+    local_tools?: { callouts?: readonly unknown[]; pointers?: readonly unknown[]; visual_beats?: readonly unknown[] };
   } | undefined;
   const localGraphics = (Array.isArray(finishing?.local_tools?.callouts) ? finishing.local_tools.callouts.length : 0)
-    + (Array.isArray(finishing?.local_tools?.pointers) ? finishing.local_tools.pointers.length : 0);
+    + (Array.isArray(finishing?.local_tools?.pointers) ? finishing.local_tools.pointers.length : 0)
+    + (Array.isArray(finishing?.local_tools?.visual_beats) ? finishing.local_tools.visual_beats.length : 0);
   const effectMode = creativeDirection?.effect_level;
   const punchInCount = editorialTimeline.filter((clip) =>
     clip.visual_preset === "punch_in" || clip.visual_preset === "strong_punch_in").length;

@@ -1361,6 +1361,7 @@ def inspect_finishing_tools(job_id: UUID):
             "cue_captions": True,
             "picture_layers": True,
             "animated_callouts": True, "fixed_pointers": True, "music_only_pauses": True,
+            "native_visual_beats": ["impact_frame", "clone_row"],
             "green_screen": True,
             "visual_retiming": True,
             "independent_audio_joins": True,

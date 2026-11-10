@@ -1474,8 +1474,26 @@ test("a local callout queues only after submit and preserves the inspected setti
   assert.equal(request.base_version, 2);
   assert.equal(request.note, "");
   assert.equal(request.finishing_settings.callouts[0].text, "A real reaction");
+  assert.equal(request.finishing_settings.callouts[0].style, "headline");
   assert.deepEqual(request.finishing_settings.layers, []);
   assert.deepEqual(request.finishing_settings.motions, []);
+});
+
+test("native visual effects are explicit local tools and never render on selection", async () => {
+  await act(async () => root.render(React.createElement(FinishingWorkspace, { jobId, version: 2, clips: [{ duration: 3, source_in: 0, source_out: 3 }], onUpdated: () => {} })));
+  await click(document.querySelector("summary"));
+  await waitFor(() => document.querySelector("select"));
+  await chooseOption("select", "visual_beat");
+  assert.match(document.body.textContent,/One accent border for 0.1–0.25 seconds/);
+  const preset=document.querySelectorAll("select")[1];
+  await act(async()=>{preset.value="clone_row";preset.dispatchEvent(new Event("change",{bubbles:true}));});
+  assert.match(document.body.textContent,/does not cut the person out/);
+  assert.equal(posts(`jobs/${jobId}/revisions`).length,0);
+  await act(async()=>document.querySelector("form").dispatchEvent(new Event("submit",{bubbles:true,cancelable:true})));
+  const request=posts(`jobs/${jobId}/revisions`).at(-1).body;
+  assert.deepEqual(request.finishing_settings.visual_beats,[{start:0,end:2,preset:"clone_row"}]);
+  assert.equal(request.base_version,2);
+  assert.deepEqual(request.finishing_settings.audio_regions,[]);
 });
 
 

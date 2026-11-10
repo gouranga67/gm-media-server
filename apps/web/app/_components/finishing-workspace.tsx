@@ -19,6 +19,7 @@ type Tool =
   | "music"
   | "join"
   | "callout"
+  | "visual_beat"
   | "pointer"
   | "music_pause";
 export function FinishingWorkspace({
@@ -71,8 +72,9 @@ function FinishingForm({
 }) {
   const [callout, setCallout] = useState("");
   const [calloutStyle, setCalloutStyle] = useState<
-    "label" | "thought" | "counter"
-  >("label");
+    "label" | "thought" | "counter" | "headline" | "comment"
+  >("headline");
+  const [visualBeat, setVisualBeat] = useState<"impact_frame" | "clone_row">("impact_frame");
   const [pointerShape, setPointerShape] = useState<"arrow" | "circle">(
     "circle",
   );
@@ -277,6 +279,14 @@ function FinishingForm({
           },
         ],
       };
+    if (tool === "visual_beat")
+      next = {
+        ...next,
+        visual_beats: [
+          ...(next.visual_beats ?? []).filter(outside),
+          { ...window, preset: visualBeat },
+        ],
+      };
     if (tool === "music_pause")
       next = {
         ...next,
@@ -334,7 +344,11 @@ function FinishingForm({
               <select
                 className={control}
                 value={tool}
-                onChange={(e) => setTool(e.currentTarget.value as Tool)}
+                onChange={(e) => {
+                  const selected = e.currentTarget.value as Tool;
+                  setTool(selected);
+                  if (selected === "visual_beat") setEnd(String(Number(start) + (visualBeat === "impact_frame" ? 0.2 : 2)));
+                }}
               >
                 <option value="motion">Targeted camera move</option>
                 <option value="audio">Phrase audio level</option>
@@ -343,6 +357,7 @@ function FinishingForm({
                 <option value="layer">Picture layer / green screen</option>
                 <option value="music">Music excerpt</option>
                 <option value="callout">Text callout / list counter</option>
+                <option value="visual_beat">Impact frame / clone row</option>
                 <option value="pointer">Arrow / circle pointer</option>
                 <option value="music_pause">Pause music, keep speech</option>
                 <option value="join">Independent audio / picture join</option>
@@ -371,6 +386,7 @@ function FinishingForm({
               "callout",
               "pointer",
               "music_pause",
+              "visual_beat",
             ].includes(tool) ? (
               <div className="grid grid-cols-2 gap-3">
                 <label className="text-xs">
@@ -538,6 +554,8 @@ function FinishingForm({
                     }
                   >
                     <option value="label">Label</option>
+                    <option value="headline">Bold headline</option>
+                    <option value="comment">Comment card</option>
                     <option value="thought">Thought</option>
                     <option value="counter">Counter</option>
                   </select>
@@ -547,6 +565,25 @@ function FinishingForm({
                   to the footage; no subtitle commands. Maximum eight seconds.
                 </p>
               </div>
+            ) : null}
+            {tool === "visual_beat" ? (
+              <label className="block text-xs">
+                Picture treatment
+                <select className={control} value={visualBeat} onChange={(e) => {
+                  const preset = e.currentTarget.value as typeof visualBeat;
+                  setVisualBeat(preset);
+                  setEnd(String(Number(start) + (preset === "impact_frame" ? 0.2 : 2)));
+                }}>
+                  <option value="impact_frame">Impact frame · brief accent border</option>
+                  <option value="clone_row">Clone row · three copies of the full shot</option>
+                </select>
+                <span className="mt-2 block leading-5 text-[#666862]">
+                  {visualBeat === "impact_frame"
+                    ? "One accent border for 0.1–0.25 seconds."
+                    : "A live triptych for up to 2.5 seconds. Repeats the entire shot; it does not cut the person out."}
+                  {" "}Speech keeps its original timing. Existing subtitles remain visible.
+                </span>
+              </label>
             ) : null}
             {tool === "pointer" ? (
               <div className="grid grid-cols-2 gap-3">
@@ -767,7 +804,7 @@ function FinishingForm({
                 ((tool === "audio" ||
                   tool === "captions" ||
                   tool === "layer" ||
-                  ["callout", "pointer", "music_pause"].includes(tool)) &&
+                  ["callout", "pointer", "music_pause", "visual_beat"].includes(tool)) &&
                   Number(end) <= Number(start))
               }
             >
@@ -816,7 +853,7 @@ function FinishingForm({
             </summary>
             <p className="my-3 text-xs text-[#666862]">
               {(regions?.callouts?.length ?? 0) +
-                (regions?.pointers?.length ?? 0)}{" "}
+                (regions?.pointers?.length ?? 0) + (regions?.visual_beats?.length ?? 0)}{" "}
               visual accents · {regions?.music_regions?.length ?? 0} music
               pauses · {regions?.motions.length ?? 0} camera moves ·{" "}
               {regions?.audio_regions.length ?? 0} audio ranges ·{" "}

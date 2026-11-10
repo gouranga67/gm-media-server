@@ -197,7 +197,7 @@ class CaptionMappingTests(unittest.TestCase):
 
         self.assertIn("PlayResX: 1080", ass)
         self.assertIn("PlayResY: 1920", ass)
-        self.assertIn("GMBlue,Arial,68", ass)
+        self.assertIn("GMBlue,DejaVu Sans,68", ass)
 
     def test_vertical_captions_use_tiktok_safe_zone(self) -> None:
         ass = render_ass(
@@ -229,7 +229,7 @@ class CaptionMappingTests(unittest.TestCase):
 
         self.assertIn("PlayResX: 960", ass)
         self.assertIn("PlayResY: 540", ass)
-        self.assertIn("GMBlue,Arial,19", ass)
+        self.assertIn("GMBlue,DejaVu Sans,19", ass)
 
     def test_brand_kit_changes_caption_type_and_accent(self) -> None:
         ass = render_ass(

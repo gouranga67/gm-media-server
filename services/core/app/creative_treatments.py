@@ -1,6 +1,9 @@
 """Small local visual/audio treatments; never change recorded speech timing."""
 
 from typing import Literal
+import re
+
+from app.caption_layout import caption_lines, text_width
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -20,7 +23,7 @@ class TreatmentWindow(BaseModel):
 class Callout(TreatmentWindow):
     text: str = Field(min_length=1, max_length=64)
     position: Literal["upper", "middle", "lower_safe"] = "upper"
-    style: Literal["label", "thought", "counter"] = "label"
+    style: Literal["label", "thought", "counter", "headline", "comment"] = "label"
     animation: Literal["fade", "pop", "slide_up"] = "pop"
 
     @field_validator("text")
@@ -72,15 +75,15 @@ def _timestamp(seconds):
     return f"{centiseconds // 360000}:{centiseconds // 6000 % 60:02}:{centiseconds // 100 % 60:02}.{centiseconds % 100:02}"
 
 
-def treatment_events(tools, width, height, captions=(), caption_position="lower_safe"):
+def treatment_events(tools, width, height, captions=(), caption_position="lower_safe", *, brand_kit=None):
     """ASS events share the caption pass, below dialogue captions (layer 0)."""
     if tools is None:
         return ""
     lines = []
 
-    def event(cue, tags, text):
+    def event(cue, tags, text, layer=-1):
         lines.append(
-            f"Dialogue: -1,{_timestamp(cue.start)},{_timestamp(cue.end)},GMBlue,,0,0,0,,{{{tags}}}{text}"
+            f"Dialogue: {layer},{_timestamp(cue.start)},{_timestamp(cue.end)},GMBlue,,0,0,0,,{{{tags}}}{text}"
         )
 
     for cue in tools.callouts:
@@ -97,44 +100,61 @@ def treatment_events(tools, width, height, captions=(), caption_position="lower_
                     for band in ("upper", "middle", "lower_safe")
                     if band not in active_bands
                 ),
-                None if getattr(tools, "safe_overlays", False) else "upper",
+                None,
             )
         if position is None:
             continue  # Dialogue captions take priority when every band is busy.
         y = round(
             height * {"upper": 0.20, "middle": 0.42, "lower_safe": 0.60}[position]
         )
-        # Bound line width for 64-character labels without arbitrary ASS input.
-        words, rows, row = cue.text.split(), [], ""
-        for word in words:
-            if len(row) + len(word) > 25 and row:
-                rows.append(row)
-                row = ""
-            row = (row + " " + word).strip()
-        rows.append(row)
-        longest = max(map(len, rows))
-        size = max(
-            10,
-            min(
-                round(min(width, height) * 0.055),
-                round(width * 0.78 / max(1, longest) / 0.62),
-            ),
-        )
-        tags = f"\\an5\\fnDejaVu Sans\\fs{size}\\b1\\bord2\\shad1\\1c&HFFFFFF&\\3c&H263A32&"
-        if cue.style == "thought":
-            tags += "\\i1"
-        if cue.style == "counter":
-            tags += "\\1c&H60DAFF&"
-        tags += f"\\pos({width // 2},{y})"
-        if cue.animation == "pop":
-            tags += "\\fscx85\\fscy85\\t(0,140,\\fscx100\\fscy100)"
-        if cue.animation == "slide_up":
-            tags = tags.replace(
-                f"\\pos({width // 2},{y})",
-                f"\\move({width // 2},{y + height * 0.025:.0f},{width // 2},{y},0,180)",
-            )
-        tags += "\\fad(60,80)"
-        event(cue, tags, r"\N".join(rows))
+        accent = str((brand_kit or {}).get("accent_color") or "#F4C95D")
+        red, green, blue = (int(accent[i:i+2], 16) for i in (1, 3, 5))
+        colour = f"&H{blue:02X}{green:02X}{red:02X}&"
+        unit = min(width, height) / 540
+        max_width = width * .76
+        headline = cue.style in {"label", "headline", "counter"}
+        number = re.match(r"^([$£€]?\d[\d,.]*(?:\s+(?:million|billion|thousand)|\s*[%KMB])?)(?:\s+(.+))?$", cue.text, re.I) if headline else None
+        rows = []
+        if number and number[2]:
+            lead = number[1].upper()
+            size = max(10, round(48 * unit))
+            while text_width(lead, "DejaVu Sans", size) > max_width and size > 10:
+                size -= 1
+            rows.append((lead, size, colour))
+            tail, small = caption_lines(number[2].upper(), "DejaVu Sans", max(10, round(23*unit)), max_width)
+            rows.extend((row, small, "&HFFFFFF&") for row in tail.splitlines())
+        else:
+            copy = cue.text.upper() if headline else cue.text
+            copy, size = caption_lines(copy, "DejaVu Sans", max(10, round((35 if headline else 28)*unit)), max_width, minimum_scale=.3)
+            rows.extend((row, size, colour if cue.style == "counter" else "&HFFFFFF&") for row in copy.splitlines())
+        pad = max(4, round(15*unit))
+        panel_width = round(max(text_width(t, "DejaVu Sans", s) for t,s,_ in rows)) + 2*pad
+        panel_height = round(sum(s*1.24 for _,s,_ in rows)) + 2*pad
+        x, top = (width-panel_width)//2, round(y-panel_height/2)
+
+        def placement(cx, cy):
+            tags = f"\\pos({cx},{cy})"
+            if cue.animation == "slide_up":
+                tags = f"\\move({cx},{cy+round(height*.02)},{cx},{cy},0,180)"
+            # Alpha entrance leaves the panel and glyph metrics steady. The
+            # pop emphasis belongs to the text, never a continuously bouncing card.
+            return tags + "\\fad(90,100)"
+
+        # Native ASS vector panel: no browser process, bitmap or extra input.
+        panel = f"m 0 0 l {panel_width} 0 {panel_width} {panel_height} 0 {panel_height}"
+        event(cue, "\\an7\\p1\\bord0\\shad0\\1c&H201A16&\\1a&H28&" + placement(x, top), panel, -3)
+        stripe = f"m 0 0 l {max(2,round(4*unit))} 0 {max(2,round(4*unit))} {panel_height} 0 {panel_height}"
+        event(cue, f"\\an7\\p1\\bord0\\shad0\\1c{colour}" + placement(x, top), stripe, -2)
+        cursor = top + pad
+        for copy, size, fill in rows:
+            tags = f"\\an8\\fnDejaVu Sans\\fs{size}\\b1\\bord0.8\\shad0\\1c{fill}\\3c&H201A16&"
+            if cue.style == "thought":
+                tags += "\\i1"
+            tags += placement(width//2, round(cursor))
+            if cue.animation == "pop":
+                tags += "\\fscx94\\fscy94\\t(0,130,\\fscx100\\fscy100)"
+            event(cue, tags, copy)
+            cursor += size*1.24
     for cue in tools.pointers:
         radius = max(4, round(width * cue.size / 2))
         tags = f"\\an7\\pos({width * cue.x - radius:.0f},{height * cue.y - radius:.0f})\\fad(80,80)\\shad0\\1c&H60DAFF&\\3c&H263A32&"

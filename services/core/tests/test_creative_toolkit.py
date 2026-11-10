@@ -99,7 +99,8 @@ class CreativeToolkitTests(unittest.TestCase):
         )
         self.assertIn("Dialogue: 0,", text)
         self.assertEqual(text.count("Dialogue: -1,"), 3)
-        self.assertIn("\\pos(270,403)", text)  # Callout moves clear of upper captions.
+        self.assertIn("\\pos(270,381)", text)  # Card text moves to the middle, clear of upper captions.
+        self.assertIn("Dialogue: -3,", text)  # Backing panel below text.
         self.assertIn("\\frz180", text)
         self.assertIn("\\p1", text)
 
@@ -133,7 +134,7 @@ class CreativeToolkitTests(unittest.TestCase):
             self.assertIn("finishing", schema["required"])
             finishing = schema["properties"]["finishing"]["anyOf"][1]
             self.assertEqual(
-                set(finishing["properties"]), {"callouts", "pointers", "music_regions", "motions", "caption_regions"}
+                set(finishing["properties"]), {"callouts", "pointers", "music_regions", "visual_beats", "motions", "caption_regions"}
             )
             for prop in finishing["properties"].values():
                 self.assertEqual(
