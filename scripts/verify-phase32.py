@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read-only Phase 32K effect-registry check; no render or model request."""
+"""Read-only Phase 32L effect-registry check; no render or model request."""
 
 import json
 from pathlib import Path
@@ -11,8 +11,8 @@ def main():
     request = runpy.run_path(str(Path(__file__).with_name("verify-phase14.py")))["request"]
     registry = request("effects/registry")
     effects = {effect.get("preset"): effect for effect in registry.get("effects", [])}
-    if registry.get("version") != 10 or set(effects) != {"impact_frame", "clone_row", "live_cursor", "letter_dive", "comment_drop", "voice_note", "post_wall", "sketch_words", "rack_focus", "paper_tear", "dolly_zoom"}:
-        raise RuntimeError("deploy the Phase 32K native effects registry")
+    if registry.get("version") != 11 or set(effects) != {"impact_frame", "clone_row", "live_cursor", "letter_dive", "comment_drop", "voice_note", "post_wall", "sketch_words", "rack_focus", "paper_tear", "dolly_zoom"}:
+        raise RuntimeError("deploy the Phase 32L native effects registry")
     expected = {
         "impact_frame": (0.1, 0.25, {"intensity"}),
         "clone_row": (0.1, 2.5, {"intensity", "position"}),
@@ -37,6 +37,8 @@ def main():
             or not effect.get("preserves_dialogue")
             or not effect.get("captions_above_effect")
             or effect.get("requires_segmentation")
+            or not effect.get("best_for")
+            or not effect.get("avoid_when")
         ):
             raise RuntimeError(f"the {preset} registry contract is incomplete")
         intensity = parameters["intensity"]

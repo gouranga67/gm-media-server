@@ -116,7 +116,7 @@ class VisualBeatTests(unittest.TestCase):
     def test_registry_is_versioned_complete_and_matches_the_schema(self):
         registry=public_effect_registry()
         self.assertEqual(registry['version'],EFFECT_REGISTRY_VERSION)
-        self.assertEqual(registry['version'],10)
+        self.assertEqual(registry['version'],11)
         expected={'impact_frame','clone_row','live_cursor','letter_dive','comment_drop','voice_note','post_wall','sketch_words','rack_focus','paper_tear','dolly_zoom'}
         self.assertEqual({item['preset'] for item in registry['effects']},expected)
         self.assertEqual({item.preset for item in EFFECT_DEFINITIONS},expected)
@@ -126,6 +126,8 @@ class VisualBeatTests(unittest.TestCase):
             self.assertTrue(item['preserves_dialogue'])
             self.assertTrue(item['captions_above_effect'])
             self.assertFalse(item['requires_segmentation'])
+            self.assertTrue(item['best_for'])
+            self.assertTrue(item['avoid_when'])
         live=next(item for item in registry['effects'] if item['preset']=='live_cursor')
         parameters={item['key']:item for item in live['parameters']}
         self.assertEqual(set(parameters),{'intensity','cursor_start_x','cursor_start_y','cursor_end_x','cursor_end_y','click'})

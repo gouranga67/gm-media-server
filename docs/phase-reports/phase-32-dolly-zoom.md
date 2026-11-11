@@ -49,4 +49,4 @@ Worker-container execution and real playback remain deployment acceptance checks
 
 ## Next slice
 
-Build an **Effects Gallery and eligibility guide** in GM Studio so the eleven native effects are easier to understand, preview and test, and so shot/boundary exclusions are explained before submission.
+Completed in [Phase 32L — Effects Gallery](phase-32-effects-gallery.md): GM Studio now groups all eleven effects, exposes registry-backed usage guidance and explains cut-specific eligibility before submission.

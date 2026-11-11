@@ -25,6 +25,51 @@ type Tool =
   | "visual_beat"
   | "pointer"
   | "music_pause";
+type EffectEligibility = {
+  readonly status: "ready" | "review" | "blocked";
+  readonly label: string;
+  readonly reason: string;
+};
+const effectGalleryGroups = [
+  { label: "Accent", categories: ["accent", "layout", "pointer"] },
+  { label: "Social", categories: ["social"] },
+  { label: "Text", categories: ["typography"] },
+  { label: "Camera", categories: ["camera"] },
+  { label: "Transition", categories: ["transition"] },
+] as const;
+const sourceBackedTextEffects: readonly VisualEffectPreset[] = [
+  "letter_dive",
+  "comment_drop",
+  "post_wall",
+  "sketch_words",
+];
+function effectChecklist(preset: VisualEffectPreset): readonly string[] {
+  if (preset === "paper_tear") return [
+    "The cut still reads clearly.",
+    "Story audio stays continuous across the tear.",
+    "The playful treatment suits the moment.",
+  ];
+  if (preset === "rack_focus" || preset === "dolly_zoom") return [
+    "The intended subject stays visible.",
+    "No crop edge, blur or movement distracts from the story.",
+    "The camera treatment supports the beat rather than overpowering it.",
+  ];
+  if (preset === "live_cursor") return [
+    "The pointer lands on the real target.",
+    "The click pulse does not imply an action that did not happen.",
+    "Captions and important picture details remain clear.",
+  ];
+  if (sourceBackedTextEffects.includes(preset) || preset === "voice_note") return [
+    "Every word or implication is supported by the source.",
+    "Dialogue captions remain easy to read.",
+    "The treatment does not invent a sender, audience or reaction.",
+  ];
+  return [
+    "The effect marks a genuinely important beat.",
+    "The complete frame and main subject remain readable.",
+    "Dialogue captions stay clear above the treatment.",
+  ];
+}
 export function FinishingWorkspace({
   jobId,
   version,
@@ -174,6 +219,27 @@ function FinishingForm({
       ? [{ clipIndex: index, at, endAt, name: clip.source_name, duration: clip.duration }]
       : [];
   });
+  function effectEligibility(preset: VisualEffectPreset): EffectEligibility {
+    if (preset === "paper_tear") return clipBoundaries.length
+      ? { status: "ready", label: "Ready", reason: `${clipBoundaries.length} ordinary cut${clipBoundaries.length === 1 ? "" : "s"} available.` }
+      : { status: "blocked", label: "Unavailable", reason: "Needs two clips joined by an ordinary cut and at least 0.4 seconds in the incoming clip." };
+    if (preset === "dolly_zoom") return dollyClips.length
+      ? { status: "ready", label: "Ready", reason: `${dollyClips.length} stable video clip${dollyClips.length === 1 ? "" : "s"} available.` }
+      : { status: "blocked", label: "Unavailable", reason: "Needs a complete 1–8 second video clip without another camera move, tracked crop or picture layer." };
+    if (preset === "rack_focus") return {
+      status: "review", label: "Check shot", reason: "You must confirm the shot is stable and choose two clear focus targets.",
+    };
+    if (preset === "live_cursor") return {
+      status: "review", label: "Place target", reason: "You must place the start and end points; the server does not track the target.",
+    };
+    if (sourceBackedTextEffects.includes(preset)) return {
+      status: "review", label: "Check wording", reason: "You must supply wording that is genuinely supported by the footage.",
+    };
+    if (preset === "voice_note") return {
+      status: "review", label: "Check speech", reason: "Confirm the chosen range contains the recorded speech this card represents.",
+    };
+    return { status: "ready", label: "Ready", reason: "This effect can be configured for the current cut." };
+  }
   function selectEffect(preset: VisualEffectPreset) {
     const definition = inspection?.effect_registry.effects.find(
       (effect) => effect.preset === preset,
@@ -727,8 +793,67 @@ function FinishingForm({
             ) : null}
             {tool === "visual_beat" ? (
               <div className="space-y-3">
+                <section
+                  aria-labelledby="effect-gallery-heading"
+                  className="space-y-4 rounded-md border border-[#D7D9D3] bg-[#F7F7F5] p-3"
+                >
+                  <div>
+                    <h3 id="effect-gallery-heading" className="text-sm font-bold text-[#173F5F]">
+                      Effect gallery
+                    </h3>
+                    <p className="mt-1 text-xs leading-5 text-[#666862]">
+                      Browse freely. Choosing a card only changes these controls; no preview is created until you submit.
+                    </p>
+                  </div>
+                  {effectGalleryGroups.map((group) => {
+                    const effects = inspection.effect_registry.effects.filter((effect) =>
+                      group.categories.some((category) => category === effect.category),
+                    );
+                    return effects.length ? (
+                      <div className="space-y-2" key={group.label}>
+                        <h4 className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#666862]">
+                          {group.label}
+                        </h4>
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                          {effects.map((effect) => {
+                            const eligibility = effectEligibility(effect.preset);
+                            const selected = effect.preset === visualBeat;
+                            const statusClass = eligibility.status === "ready"
+                              ? "bg-[#E8F4ED] text-[#286A49]"
+                              : eligibility.status === "review"
+                                ? "bg-[#FFF6D8] text-[#6F5710]"
+                                : "bg-[#FFF0EC] text-[#A23B2A]";
+                            return (
+                              <button
+                                aria-pressed={selected}
+                                className={`min-h-11 rounded-md border p-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#173F5F] ${selected ? "border-[#173F5F] bg-[#BFE3FF]" : "border-[#D7D9D3] bg-white"}`}
+                                data-effect-card={effect.preset}
+                                key={effect.preset}
+                                onClick={() => selectEffect(effect.preset)}
+                                type="button"
+                              >
+                                <span className="flex items-start justify-between gap-2">
+                                  <span className="text-sm font-bold text-[#20211F]">{effect.label}</span>
+                                  <span className={`shrink-0 rounded px-2 py-1 text-[10px] font-bold ${statusClass}`}>
+                                    {eligibility.label}
+                                  </span>
+                                </span>
+                                <span className="mt-2 block text-xs leading-5 text-[#666862]">
+                                  {effect.summary}
+                                </span>
+                                <span className="mt-2 block text-[11px] leading-4 text-[#20211F]">
+                                  {eligibility.reason}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : null;
+                  })}
+                </section>
                 <label className="block text-xs">
-                  Picture treatment
+                  Quick selector
                   <select
                     className={control}
                     value={visualBeat}
@@ -742,10 +867,38 @@ function FinishingForm({
                   </select>
                 </label>
                 {effectDefinition ? (
-                  <p className="rounded-md bg-[#F7F7F5] p-3 text-xs leading-5 text-[#666862]">
-                    {effectDefinition.summary} Use for {effectDefinition.minimum_duration_seconds}–{effectDefinition.maximum_duration_seconds} seconds.
-                    {" "}Speech keeps its original timing and subtitles stay above the effect. Registry v{inspection.effect_registry.version}.
-                  </p>
+                  <section className="space-y-3 rounded-md border border-[#D7D9D3] bg-white p-3" aria-label={`${effectDefinition.label} guidance`}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <h3 className="text-sm font-bold text-[#173F5F]">{effectDefinition.label}</h3>
+                        <p className="mt-1 text-xs leading-5 text-[#666862]">
+                          {effectDefinition.summary} Use for {effectDefinition.minimum_duration_seconds}–{effectDefinition.maximum_duration_seconds} seconds.
+                        </p>
+                      </div>
+                      <span className="shrink-0 rounded bg-[#F7F7F5] px-2 py-1 text-[10px] font-bold text-[#666862]">
+                        Registry v{inspection.effect_registry.version}
+                      </span>
+                    </div>
+                    <dl className="grid gap-2 text-xs sm:grid-cols-2">
+                      <div className="rounded-md bg-[#E8F4ED] p-2">
+                        <dt className="font-bold text-[#286A49]">Best for</dt>
+                        <dd className="mt-1 leading-5 text-[#20211F]">{effectDefinition.best_for}</dd>
+                      </div>
+                      <div className="rounded-md bg-[#FFF6D8] p-2">
+                        <dt className="font-bold text-[#6F5710]">Avoid when</dt>
+                        <dd className="mt-1 leading-5 text-[#20211F]">{effectDefinition.avoid_when}</dd>
+                      </div>
+                    </dl>
+                    <div className="rounded-md bg-[#F7F7F5] p-2 text-xs">
+                      <p className="font-bold text-[#20211F]">After preview, check</p>
+                      <ul className="mt-1 list-disc space-y-1 pl-4 leading-5 text-[#666862]">
+                        {effectChecklist(visualBeat).map((item) => <li key={item}>{item}</li>)}
+                      </ul>
+                    </div>
+                    <p className="text-xs leading-5 text-[#666862]">
+                      Recorded speech keeps its timing and dialogue captions stay above the effect.
+                    </p>
+                  </section>
                 ) : null}
                 <div className="grid grid-cols-2 gap-3">
                   {intensityParameter ? (

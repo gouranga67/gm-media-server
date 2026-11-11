@@ -1598,6 +1598,8 @@ export type VisualEffectDefinition = {
   readonly maximum_duration_seconds: number;
   readonly default_duration_seconds: number;
   readonly parameters: readonly VisualEffectParameter[];
+  readonly best_for: string;
+  readonly avoid_when: string;
   readonly preserves_dialogue: boolean;
   readonly captions_above_effect: boolean;
   readonly requires_segmentation: boolean;
