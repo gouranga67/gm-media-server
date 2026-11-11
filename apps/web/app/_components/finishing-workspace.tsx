@@ -423,7 +423,7 @@ function FinishingForm({
                 <option value="layer">Picture layer / green screen</option>
                 <option value="music">Music excerpt</option>
                 <option value="callout">Text callout / list counter</option>
-                <option value="visual_beat">Impact frame / clone row</option>
+                <option value="visual_beat">Visual effect / animation</option>
                 <option value="pointer">Arrow / circle pointer</option>
                 <option value="music_pause">Pause music, keep speech</option>
                 <option value="join">Independent audio / picture join</option>

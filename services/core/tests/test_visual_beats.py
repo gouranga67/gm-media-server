@@ -97,7 +97,7 @@ class VisualBeatTests(unittest.TestCase):
         self.assertIn(r'\p1}m 0 0 l 0 30',ass)
         self.assertIn(r'\pos(138,154)',ass)
         cursor_line=next(line for line in ass.splitlines() if r'\move(36,80,144,160' in line)
-        caption_line=next(line for line in ass.splitlines() if 'Caption wins.' in line)
+        caption_line=next(line for line in ass.splitlines() if line.startswith('Dialogue: 0,'))
         self.assertTrue(cursor_line.startswith('Dialogue: -1,'))
         self.assertTrue(caption_line.startswith('Dialogue: 0,'))
 

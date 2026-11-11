@@ -1487,6 +1487,7 @@ test("native visual effects are explicit local tools and never render on selecti
   await act(async () => root.render(React.createElement(FinishingWorkspace, { jobId, version: 2, clips: [{ duration: 3, source_in: 0, source_out: 3 }], onUpdated: () => {} })));
   await click(document.querySelector("summary"));
   await waitFor(() => document.querySelector("select"));
+  assert.match(document.body.textContent,/Visual effect \/ animation/);
   await chooseOption("select", "visual_beat");
   assert.match(document.body.textContent,/single accent border for a meaningful visual beat/);
   assert.match(document.body.textContent,/Registry v2/);
