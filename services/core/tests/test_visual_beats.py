@@ -13,11 +13,12 @@ from app.config import Settings
 from app.creative_selection import bound_generated_treatments, remove_graphic_effects
 from app.edit_plan import TalkingHeadEditPlan, MontageEditPlan, apply_timeline_adjustments, schema_for_recipe
 from app.edit_renderer import render_ass, _render_video
+from app.effect_registry import EFFECT_DEFINITIONS, EFFECT_REGISTRY_VERSION, public_effect_registry
 from app.finishing_tools import FinishingTools, validate_finishing
 from app.montage_renderer import _render as montage_render
 from app.render_integrity import rendered_audio_packet_error
 from app.revision_intent import local_revision, assert_revision_locks
-from app.visual_beats import VisualBeat
+from app.visual_beats import VisualBeat, append_visual_beats
 
 
 def fixture():
@@ -32,11 +33,43 @@ class VisualBeatTests(unittest.TestCase):
         for value in (dict(start=0,end=.5,preset='impact_frame'),dict(start=0,end=3,preset='clone_row'),dict(start=0,end=1,preset='arbitrary_js')):
             with self.assertRaises(ValidationError): VisualBeat(**value)
         self.assertNotIn('visual_beats',FinishingTools().model_dump(mode='json'))
+        legacy=VisualBeat(start=0,end=.2,preset='impact_frame')
+        self.assertEqual(legacy.model_dump(mode='json'),dict(start=0,end=.2,preset='impact_frame'))
+        configured=VisualBeat(start=0,end=2,preset='clone_row',intensity='strong',position='upper')
+        self.assertEqual(configured.model_dump(mode='json')['intensity'],'strong')
+        self.assertEqual(configured.model_dump(mode='json')['position'],'upper')
+        with self.assertRaisesRegex(ValidationError,'fixed frame position'):
+            VisualBeat(start=0,end=.2,preset='impact_frame',position='upper')
         for recipe in ('talking_head','montage'):
             schema=schema_for_recipe(recipe)['properties']['finishing']['anyOf'][1]
             beat=schema['properties']['visual_beats']['items']
             self.assertEqual(set(beat['required']),set(beat['properties']))
             self.assertFalse(beat['additionalProperties'])
+
+    def test_registry_is_versioned_complete_and_matches_the_schema(self):
+        registry=public_effect_registry()
+        self.assertEqual(registry['version'],EFFECT_REGISTRY_VERSION)
+        self.assertEqual({item['preset'] for item in registry['effects']},{'impact_frame','clone_row'})
+        self.assertEqual({item.preset for item in EFFECT_DEFINITIONS},{'impact_frame','clone_row'})
+        for item in registry['effects']:
+            self.assertLessEqual(item['minimum_duration_seconds'],item['default_duration_seconds'])
+            self.assertLessEqual(item['default_duration_seconds'],item['maximum_duration_seconds'])
+            self.assertTrue(item['preserves_dialogue'])
+            self.assertTrue(item['captions_above_effect'])
+            self.assertFalse(item['requires_segmentation'])
+
+    def test_registered_parameters_reach_only_the_bounded_filter_values(self):
+        plan=fixture()
+        plan.finishing.visual_beats=[
+            VisualBeat(start=.5,end=.7,preset='impact_frame',intensity='strong'),
+            VisualBeat(start=1,end=2,preset='clone_row',intensity='subtle',position='lower'),
+        ]
+        graph=append_visual_beats('[picture]null[vout]',plan,width=180,height=320)
+        self.assertIn('color=0xF4C95D@1:t=5',graph)
+        self.assertIn('color=black@0.5',graph)
+        self.assertIn('overlay=x=(W-w)/2:y=H-h-38',graph)
+        self.assertNotIn('subtle',graph)
+        self.assertNotIn('lower',graph)
 
     def test_duration_overlap_budget_removal_and_retiming(self):
         plan=fixture()

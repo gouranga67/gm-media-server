@@ -163,7 +163,10 @@ globalThis.fetch = async (url, options = {}) => {
     if (alternativeFailure) return {ok:false,status:409,json:async()=>({detail:"This alternative could not be queued. Your original is unchanged."})};
     payload={id:"alternative",version:3,status:"pending"};
   }
-  else if (route === `jobs/${jobId}/finishing-tools`) payload = { version: 2, settings: { motions:[],colours:[],audio_regions:[],caption_regions:[],layers:[],music_start_seconds:0,voice_denoise:false,audio_joins:[] }, sources:[{ asset_id:serverId,name:"Review image",media_kind:"image",duration_seconds:0 }], product_tracking_candidates:Array.from({length:3},(_,clip_index)=>({clip_index,asset_id:serverId,duration_seconds:3,source_in:2,source_out:5,eligible:true,note:""})), stabilization_candidates:Array.from({length:6},(_,clip_index)=>({clip_index,asset_id:serverId,duration_seconds:clip_index===5?14:3,source_in:0,source_out:clip_index===5?14:3,eligible:clip_index!==5,note:clip_index===5?"Choose a 1–8 second shot":""})) };
+  else if (route === `jobs/${jobId}/finishing-tools`) payload = { version: 2, settings: { motions:[],colours:[],audio_regions:[],caption_regions:[],layers:[],music_start_seconds:0,voice_denoise:false,audio_joins:[] }, effect_registry:{version:1,effects:[
+    {preset:"impact_frame",label:"Impact frame",summary:"A single accent border for a meaningful visual beat.",category:"accent",version:1,minimum_duration_seconds:.1,maximum_duration_seconds:.25,default_duration_seconds:.2,parameters:[{key:"intensity",label:"Strength",type:"enum",values:["subtle","standard","strong"],default:"standard"}],preserves_dialogue:true,captions_above_effect:true,requires_segmentation:false},
+    {preset:"clone_row",label:"Clone row",summary:"Three live copies of the complete recorded shot; no person cutout.",category:"layout",version:1,minimum_duration_seconds:.1,maximum_duration_seconds:2.5,default_duration_seconds:2,parameters:[{key:"intensity",label:"Strength",type:"enum",values:["subtle","standard","strong"],default:"standard"},{key:"position",label:"Position",type:"enum",values:["upper","center","lower"],default:"center"}],preserves_dialogue:true,captions_above_effect:true,requires_segmentation:false}
+  ]}, sources:[{ asset_id:serverId,name:"Review image",media_kind:"image",duration_seconds:0 }], product_tracking_candidates:Array.from({length:3},(_,clip_index)=>({clip_index,asset_id:serverId,duration_seconds:3,source_in:2,source_out:5,eligible:true,note:""})), stabilization_candidates:Array.from({length:6},(_,clip_index)=>({clip_index,asset_id:serverId,duration_seconds:clip_index===5?14:3,source_in:0,source_out:clip_index===5?14:3,eligible:clip_index!==5,note:clip_index===5?"Choose a 1–8 second shot":""})) };
   else if (route === "concepts/library-status") payload = { unique_sources: 3, catalogued_sources: 3, spoken_sources: 2, visually_indexed_sources: 3, still_processing: 0 };
   else if (route === "concepts" && (options.method ?? "GET") === "GET") payload = conceptHistory;
   else if (route === "concepts") {
@@ -1484,14 +1487,17 @@ test("native visual effects are explicit local tools and never render on selecti
   await click(document.querySelector("summary"));
   await waitFor(() => document.querySelector("select"));
   await chooseOption("select", "visual_beat");
-  assert.match(document.body.textContent,/One accent border for 0.1–0.25 seconds/);
+  assert.match(document.body.textContent,/single accent border for a meaningful visual beat/);
+  assert.match(document.body.textContent,/Registry v1/);
   const preset=document.querySelectorAll("select")[1];
   await act(async()=>{preset.value="clone_row";preset.dispatchEvent(new Event("change",{bubbles:true}));});
-  assert.match(document.body.textContent,/does not cut the person out/);
+  assert.match(document.body.textContent,/no person cutout/);
+  const strength=document.querySelectorAll("select")[2],position=document.querySelectorAll("select")[3];
+  await act(async()=>{strength.value="strong";strength.dispatchEvent(new Event("change",{bubbles:true}));position.value="upper";position.dispatchEvent(new Event("change",{bubbles:true}));});
   assert.equal(posts(`jobs/${jobId}/revisions`).length,0);
   await act(async()=>document.querySelector("form").dispatchEvent(new Event("submit",{bubbles:true,cancelable:true})));
   const request=posts(`jobs/${jobId}/revisions`).at(-1).body;
-  assert.deepEqual(request.finishing_settings.visual_beats,[{start:0,end:2,preset:"clone_row"}]);
+  assert.deepEqual(request.finishing_settings.visual_beats,[{start:0,end:2,preset:"clone_row",intensity:"strong",position:"upper"}]);
   assert.equal(request.base_version,2);
   assert.deepEqual(request.finishing_settings.audio_regions,[]);
 });

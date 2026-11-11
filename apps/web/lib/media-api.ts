@@ -1546,7 +1546,7 @@ export const removeSourceRange = (assetId: string, id: string) => apiRequest(`li
 
 export type FinishingTools = {
   readonly callouts?: readonly { readonly start: number; readonly end: number; readonly text: string; readonly position: "upper" | "middle" | "lower_safe"; readonly style: "label" | "thought" | "counter" | "headline" | "comment"; readonly animation: "fade" | "pop" | "slide_up" }[];
-  readonly visual_beats?: readonly { readonly start: number; readonly end: number; readonly preset: "impact_frame" | "clone_row" }[];
+  readonly visual_beats?: readonly { readonly start: number; readonly end: number; readonly preset: VisualEffectPreset; readonly intensity?: VisualEffectIntensity; readonly position?: VisualEffectPosition }[];
   readonly pointers?: readonly { readonly start: number; readonly end: number; readonly x: number; readonly y: number; readonly size: number; readonly shape: "arrow" | "circle"; readonly direction: "right" | "left" | "up" | "down" }[];
   readonly music_regions?: readonly { readonly start: number; readonly end: number; readonly gain_db: number }[];
   readonly audio_joins?: readonly { readonly clip_index: number; readonly lead_seconds: number; readonly tail_seconds: number }[];
@@ -1571,11 +1571,37 @@ export type FinishingTools = {
     readonly framing_applied?: boolean;
     readonly points: readonly { readonly time: number; readonly x: number; readonly y: number; readonly width: number; readonly height: number }[] }[];
 };
+export type VisualEffectPreset = "impact_frame" | "clone_row";
+export type VisualEffectIntensity = "subtle" | "standard" | "strong";
+export type VisualEffectPosition = "upper" | "center" | "lower";
+export type VisualEffectParameter = {
+  readonly key: "intensity" | "position";
+  readonly label: string;
+  readonly type: "enum";
+  readonly values: readonly string[];
+  readonly default: string;
+};
+export type VisualEffectDefinition = {
+  readonly preset: VisualEffectPreset;
+  readonly label: string;
+  readonly summary: string;
+  readonly category: "accent" | "layout" | string;
+  readonly version: number;
+  readonly minimum_duration_seconds: number;
+  readonly maximum_duration_seconds: number;
+  readonly default_duration_seconds: number;
+  readonly parameters: readonly VisualEffectParameter[];
+  readonly preserves_dialogue: boolean;
+  readonly captions_above_effect: boolean;
+  readonly requires_segmentation: boolean;
+};
+export type VisualEffectRegistry = { readonly version: number; readonly effects: readonly VisualEffectDefinition[] };
+export const getVisualEffectRegistry = () => apiRequest<VisualEffectRegistry>("effects/registry", { cache: "no-store" });
 export type StabilizationChoice = { readonly clip_index: number; readonly asset_id: string; readonly duration_seconds: number; readonly eligible: boolean; readonly note: string; readonly source_in: number; readonly source_out: number };
 export type ProductTrack = { readonly clip_index: number; readonly x: number; readonly y: number; readonly width: number; readonly height: number };
 export type ProductProfile = ProductTrack & { readonly asset_id: string; readonly source_in: number; readonly source_out: number; readonly status: "measured" | "unavailable"; readonly note: string; readonly framing_applied?: boolean };
 export type ProductTrackingReport = { readonly selections?: readonly ProductTrack[]; readonly profiles?: readonly ProductProfile[] };
-export type FinishingInspection = { readonly version: number; readonly settings: FinishingTools; readonly stabilization_candidates?: readonly StabilizationChoice[]; readonly product_tracking_candidates?: readonly StabilizationChoice[]; readonly sources: readonly { readonly asset_id: string; readonly name: string; readonly media_kind: "image" | "video"; readonly duration_seconds: number }[] };
+export type FinishingInspection = { readonly version: number; readonly settings: FinishingTools; readonly effect_registry: VisualEffectRegistry; readonly stabilization_candidates?: readonly StabilizationChoice[]; readonly product_tracking_candidates?: readonly StabilizationChoice[]; readonly sources: readonly { readonly asset_id: string; readonly name: string; readonly media_kind: "image" | "video"; readonly duration_seconds: number }[] };
 export const getFinishingTools = (id: string) => apiRequest<FinishingInspection>(`jobs/${id}/finishing-tools`);
 export const productSourceFrameUrl = (id: string, version: number, clipIndex: number) => `/api/media/jobs/${encodeURIComponent(id)}/finishing-tools/source-frame?base_version=${version}&clip_index=${clipIndex}`;
 

@@ -7,6 +7,9 @@ import {
   type FinishingInspection,
   type FinishingTools,
   type EditorialClip,
+  type VisualEffectIntensity,
+  type VisualEffectPosition,
+  type VisualEffectPreset,
 } from "@/lib/media-api";
 const control =
   "mt-1 min-h-11 w-full rounded-md border border-[#C7CBD0] bg-white px-3 text-sm text-[#20211F]";
@@ -74,7 +77,9 @@ function FinishingForm({
   const [calloutStyle, setCalloutStyle] = useState<
     "label" | "thought" | "counter" | "headline" | "comment"
   >("headline");
-  const [visualBeat, setVisualBeat] = useState<"impact_frame" | "clone_row">("impact_frame");
+  const [visualBeat, setVisualBeat] = useState<VisualEffectPreset>("impact_frame");
+  const [visualBeatIntensity, setVisualBeatIntensity] = useState<VisualEffectIntensity>("standard");
+  const [visualBeatPosition, setVisualBeatPosition] = useState<VisualEffectPosition>("center");
   const [pointerShape, setPointerShape] = useState<"arrow" | "circle">(
     "circle",
   );
@@ -112,6 +117,36 @@ function FinishingForm({
   const [restore, setRestore] = useState(String(Math.max(1, version - 1)));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const effectDefinition = inspection?.effect_registry.effects.find(
+    (effect) => effect.preset === visualBeat,
+  );
+  const intensityParameter = effectDefinition?.parameters.find(
+    (parameter) => parameter.key === "intensity",
+  );
+  const positionParameter = effectDefinition?.parameters.find(
+    (parameter) => parameter.key === "position",
+  );
+  function selectEffect(preset: VisualEffectPreset) {
+    const definition = inspection?.effect_registry.effects.find(
+      (effect) => effect.preset === preset,
+    );
+    setVisualBeat(preset);
+    setVisualBeatIntensity(
+      (definition?.parameters.find((parameter) => parameter.key === "intensity")
+        ?.default ?? "standard") as VisualEffectIntensity,
+    );
+    setVisualBeatPosition(
+      (definition?.parameters.find((parameter) => parameter.key === "position")
+        ?.default ?? "center") as VisualEffectPosition,
+    );
+    setEnd(
+      String(
+        Number(start) +
+          (definition?.default_duration_seconds ??
+            (preset === "impact_frame" ? 0.2 : 2)),
+      ),
+    );
+  }
   useEffect(() => {
     let active = true;
     getFinishingTools(jobId)
@@ -284,7 +319,12 @@ function FinishingForm({
         ...next,
         visual_beats: [
           ...(next.visual_beats ?? []).filter(outside),
-          { ...window, preset: visualBeat },
+          {
+            ...window,
+            preset: visualBeat,
+            intensity: visualBeatIntensity,
+            position: visualBeatPosition,
+          },
         ],
       };
     if (tool === "music_pause")
@@ -347,7 +387,7 @@ function FinishingForm({
                 onChange={(e) => {
                   const selected = e.currentTarget.value as Tool;
                   setTool(selected);
-                  if (selected === "visual_beat") setEnd(String(Number(start) + (visualBeat === "impact_frame" ? 0.2 : 2)));
+                  if (selected === "visual_beat") selectEffect(visualBeat);
                 }}
               >
                 <option value="motion">Targeted camera move</option>
@@ -567,23 +607,46 @@ function FinishingForm({
               </div>
             ) : null}
             {tool === "visual_beat" ? (
-              <label className="block text-xs">
-                Picture treatment
-                <select className={control} value={visualBeat} onChange={(e) => {
-                  const preset = e.currentTarget.value as typeof visualBeat;
-                  setVisualBeat(preset);
-                  setEnd(String(Number(start) + (preset === "impact_frame" ? 0.2 : 2)));
-                }}>
-                  <option value="impact_frame">Impact frame · brief accent border</option>
-                  <option value="clone_row">Clone row · three copies of the full shot</option>
-                </select>
-                <span className="mt-2 block leading-5 text-[#666862]">
-                  {visualBeat === "impact_frame"
-                    ? "One accent border for 0.1–0.25 seconds."
-                    : "A live triptych for up to 2.5 seconds. Repeats the entire shot; it does not cut the person out."}
-                  {" "}Speech keeps its original timing. Existing subtitles remain visible.
-                </span>
-              </label>
+              <div className="space-y-3">
+                <label className="block text-xs">
+                  Picture treatment
+                  <select
+                    className={control}
+                    value={visualBeat}
+                    onChange={(e) => selectEffect(e.currentTarget.value as VisualEffectPreset)}
+                  >
+                    {inspection.effect_registry.effects.map((effect) => (
+                      <option value={effect.preset} key={effect.preset}>
+                        {effect.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {effectDefinition ? (
+                  <p className="rounded-md bg-[#F7F7F5] p-3 text-xs leading-5 text-[#666862]">
+                    {effectDefinition.summary} Use for {effectDefinition.minimum_duration_seconds}–{effectDefinition.maximum_duration_seconds} seconds.
+                    {" "}Speech keeps its original timing and subtitles stay above the effect. Registry v{inspection.effect_registry.version}.
+                  </p>
+                ) : null}
+                <div className="grid grid-cols-2 gap-3">
+                  {intensityParameter ? (
+                    <label className="text-xs">
+                      {intensityParameter.label}
+                      <select className={control} value={visualBeatIntensity} onChange={(e) => setVisualBeatIntensity(e.currentTarget.value as VisualEffectIntensity)}>
+                        {intensityParameter.values.map((value) => <option value={value} key={value}>{value}</option>)}
+                      </select>
+                    </label>
+                  ) : null}
+                  {positionParameter ? (
+                    <label className="text-xs">
+                      {positionParameter.label}
+                      <select className={control} value={visualBeatPosition} onChange={(e) => setVisualBeatPosition(e.currentTarget.value as VisualEffectPosition)}>
+                        {positionParameter.values.map((value) => <option value={value} key={value}>{value}</option>)}
+                      </select>
+                    </label>
+                  ) : null}
+                </div>
+              </div>
             ) : null}
             {tool === "pointer" ? (
               <div className="grid grid-cols-2 gap-3">

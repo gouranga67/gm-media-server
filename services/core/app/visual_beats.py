@@ -2,19 +2,40 @@
 
 import re
 from typing import Literal
-from pydantic import model_validator
+from pydantic import model_serializer, model_validator
 from app.creative_treatments import TreatmentWindow
+from app.effect_registry import effect_definition
 
 
 class VisualBeat(TreatmentWindow):
     preset: Literal["impact_frame", "clone_row"]
+    intensity: Literal["subtle", "standard", "strong"] = "standard"
+    position: Literal["upper", "center", "lower"] = "center"
 
     @model_validator(mode="after")
     def short_beat(self):
-        maximum = .25 if self.preset == "impact_frame" else 2.5
-        if self.end - self.start > maximum + .0001:
-            raise ValueError(f"{self.preset} must last at most {maximum:g} seconds")
+        definition = effect_definition(self.preset)
+        duration = self.end - self.start
+        if not definition.minimum_duration_seconds - .0001 <= duration <= definition.maximum_duration_seconds + .0001:
+            raise ValueError(
+                f"{self.preset} must last {definition.minimum_duration_seconds:g}–"
+                f"{definition.maximum_duration_seconds:g} seconds"
+            )
+        position = definition.parameter("position")
+        if position is None and self.position != "center":
+            raise ValueError(f"{self.preset} has a fixed frame position")
+        if position is not None and self.position not in position.values:
+            raise ValueError(f"{self.preset} does not support position {self.position}")
         return self
+
+    @model_serializer(mode="wrap")
+    def preserve_legacy_defaults(self, handler):
+        data = handler(self)
+        if data.get("intensity") == "standard":
+            data.pop("intensity", None)
+        if data.get("position") == "center":
+            data.pop("position", None)
+        return data
 
 
 def append_visual_beats(graph, plan, *, width, height):
@@ -34,19 +55,27 @@ def append_visual_beats(graph, plan, *, width, height):
         active = f"gte(t,{cue.start:.3f})*lt(t,{cue.end:.3f})"
         base, target = f"beatbase{i}", f"beatbase{i+1}"
         if cue.preset == "impact_frame":
-            edge = max(2, round(min(width, height)*.018))
-            parts.append(f"[{base}]drawbox=x=0:y=0:w=iw:h=ih:color=0xF4C95D@0.9:t={edge}:enable='{active}'[{target}]")
+            edge_ratio, opacity = {
+                "subtle": (.012, .72), "standard": (.018, .9), "strong": (.026, 1),
+            }[cue.intensity]
+            edge = max(2, round(min(width, height)*edge_ratio))
+            parts.append(f"[{base}]drawbox=x=0:y=0:w=iw:h=ih:color=0xF4C95D@{opacity:g}:t={edge}:enable='{active}'[{target}]")
         else:
             # A triptych of the full recorded shot, not person segmentation.
             # Trim work to the requested window. PTS is restored before overlay.
             tile_w = max(2, width//6*2)
-            tile_h = max(2, round(height*.42)//2*2)
+            height_ratio, shade = {
+                "subtle": (.36, .5), "standard": (.42, .6), "strong": (.48, .68),
+            }[cue.intensity]
+            tile_h = max(2, round(height*height_ratio)//2*2)
+            inset = max(0, round(height*.12))
+            y = {"upper": str(inset), "center": "(H-h)/2", "lower": f"H-h-{inset}"}[cue.position]
             parts.append(f"[{base}]split=2[beatbed{i}][beatexcerpt{i}]")
             parts.append(f"[beatexcerpt{i}]trim=start={cue.start:.3f}:end={cue.end:.3f},setpts=PTS-STARTPTS,"
                          f"scale={tile_w}:{tile_h}:force_original_aspect_ratio=decrease,"
                          f"pad={tile_w}:{tile_h}:(ow-iw)/2:(oh-ih)/2:color=0x201A16,setsar=1,split=3[clone{i}a][clone{i}b][clone{i}c]")
             parts.append(f"[clone{i}a][clone{i}b][clone{i}c]hstack=inputs=3,setpts=PTS+{cue.start:.3f}/TB[clonerow{i}]")
-            parts.append(f"[beatbed{i}]drawbox=x=0:y=0:w=iw:h=ih:color=black@0.6:t=fill:enable='{active}'[clonebed{i}]")
-            parts.append(f"[clonebed{i}][clonerow{i}]overlay=x=(W-w)/2:y=(H-h)/2:eof_action=pass:repeatlast=0:enable='{active}'[{target}]")
+            parts.append(f"[beatbed{i}]drawbox=x=0:y=0:w=iw:h=ih:color=black@{shade:g}:t=fill:enable='{active}'[clonebed{i}]")
+            parts.append(f"[clonebed{i}][clonerow{i}]overlay=x=(W-w)/2:y={y}:eof_action=pass:repeatlast=0:enable='{active}'[{target}]")
     parts.append(f"[beatbase{len(cues)}]{captions or 'null'}[vout]")
     return ";".join(parts)

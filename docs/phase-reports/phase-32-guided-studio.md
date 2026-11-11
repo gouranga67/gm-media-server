@@ -49,7 +49,7 @@ After deployment:
 
 ## Next build slices
 
-- **Phase 32B — Effects foundation:** establish the reusable effects registry, parameter contract, preview samples and render-test pattern around the existing Clone Row and Impact Frame effects.
+- **Phase 32B — Effects foundation:** establish the reusable effects registry, parameter contract, preview samples and render-test pattern around the existing Clone Row and Impact Frame effects. [Source checkpoint implemented](phase-32-effects-foundation.md); container and playback acceptance remain pending.
 - **Phase 32C — Social animation pack:** add one effect at a time, beginning with low-risk overlay effects such as Live Cursor, Letter Dive, Comment Drop and Voice Note.
 - **Phase 32D — Camera and transition pack:** add and evaluate Rack Focus, Dolly Zoom, Paper Tear and other shot-aware transitions, with masking or segmentation kept behind explicit quality gates where required.
 

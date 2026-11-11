@@ -11,6 +11,7 @@ from uuid import uuid4
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "services/core"))
 from app.edit_renderer import _render_video, render_ass
+from app.effect_registry import EFFECT_REGISTRY_VERSION
 from app.edit_plan import TalkingHeadEditPlan
 from app.finishing_tools import FinishingTools
 from app.render_integrity import rendered_audio_packet_error
@@ -29,7 +30,8 @@ def main():
        '-f','lavfi','-i','sine=frequency=220:sample_rate=48000:duration=7','-c:v','libx264','-pix_fmt','yuv420p','-c:a','aac',str(source))
     tools=FinishingTools(callouts=[dict(start=.2,end=1.5,text='A stronger first impression',style='headline'),
         dict(start=2,end=4.6,text='$40 million in client revenue',style='headline')],
-        visual_beats=[dict(start=1.6,end=1.8,preset='impact_frame'),dict(start=5,end=6.7,preset='clone_row')])
+        visual_beats=[dict(start=1.6,end=1.8,preset='impact_frame',intensity='strong'),
+                      dict(start=5,end=6.7,preset='clone_row',intensity='subtle',position='upper')])
     plan=TalkingHeadEditPlan(schema_version='1.5',recipe='talking_head',clips=[dict(asset_id=uuid4(),source_in=0,source_out=7,crop='center_fill')],
         caption_style='clean_blue_v1',audio_preset='spoken_voice_v1',end_card='none',editorial_summary='Synthetic graphics and timing demonstration.',finishing=tools)
     events=[dict(start=0,end=1.5,text="Here’s what we’ve built."),dict(start=2,end=3.2,text='Generated 40 million dollars'),dict(start=3.2,end=4.6,text='in revenue for clients.'),dict(start=5,end=6.7,text='Three shots. One audio track.')]
@@ -41,7 +43,8 @@ def main():
     for t,name in ((2.6,'headline-frame.png'),(5.8,'clone-row-frame.png')):
         ff('-ss',str(t),'-i',str(output),'-frames:v','1',str(root/name))
     report=dict(status='passed',synthetic_demo=True,encoder=encoder,render_seconds=round(time.monotonic()-started,2),
-        duration_seconds=7,width=540,height=960,hosted_model_calls=0,audio_packet_timing_verified=True)
+        duration_seconds=7,width=540,height=960,hosted_model_calls=0,audio_packet_timing_verified=True,
+        native_effect_registry_version=EFFECT_REGISTRY_VERSION,effects=['impact_frame','clone_row'])
     (root/'report.json').write_text(json.dumps(report,indent=2)+'\n')
     source.unlink()
     print(json.dumps(report,indent=2))

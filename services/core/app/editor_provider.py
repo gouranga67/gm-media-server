@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from app.config import Settings, get_settings
+from app.effect_registry import editor_effect_instruction
 from app.edit_plan import (
     EditPlan,
     MontageEditPlan,
@@ -790,8 +791,8 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
         "quotes, attempt counts or product claims. Place callouts above dialogue captions and away from faces/products. "
         "Callout style headline gives a bold accent headline (numeric claims get a large figure and smaller supporting line); "
         "comment gives a compact comment card, thought an italic aside. These may reinforce spoken subtitles; never hide the speech captions. "
-        "Optional finishing.visual_beats presets: impact_frame is a single 0.1–0.25s accent border (no strobing); "
-        "clone_row is a 0.1–2.5s live triptych of the entire recorded shot, not a person cutout. Use clone_row only for an "
+        + editor_effect_instruction()
+        + "Use impact_frame as one accent, never a strobe. Use clone_row only for an "
         "explicit request or clearly playful repetition; never fake another person, action or reaction. Leave unused arrays empty. "
         "Pointers are fixed arrows/circles at normalized frame coordinates: use only if the shown object location is clear; "
         "they do not track moving objects. Music regions briefly reduce/mute only the selected music, then restore it, "

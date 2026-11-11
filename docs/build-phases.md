@@ -4,7 +4,9 @@ Updated: 2026-11-11 (UTC)
 
 This is the working plan for turning the Lenovo into a private media-editing appliance. A phase is complete only when its exit checks pass. Discussion, generated files, and installed packages do not count as a completed phase by themselves.
 
-Current product-clarity checkpoint: [Phase 32A — Guided Studio home](phase-reports/phase-32-guided-studio.md). The Home screen now begins with an action-led launcher for the six main owner tasks and includes a compact six-step guide to the whole workflow. Existing live overview, onboarding, recent-job, budget and operations information remains available. Source verification is complete; deployment and phone/owner acceptance remain pending.
+Current effects checkpoint: [Phase 32B — Effects Engine foundation](phase-reports/phase-32-effects-foundation.md). Clone Row and Impact Frame now share a versioned registry used by validation, agent guidance, the finishing API, GM Studio controls and render manifests. Strength and supported position are bounded parameters; the default contract preserves earlier saved plan documents. Source web verification is complete; container render tests, deployment and real-footage playback acceptance remain pending.
+
+Product-clarity checkpoint: [Phase 32A — Guided Studio home](phase-reports/phase-32-guided-studio.md). The Home screen now begins with an action-led launcher for the six main owner tasks and includes a compact six-step guide to the whole workflow. Existing live overview, onboarding, recent-job, budget and operations information remains available. Source verification is complete; deployment and phone/owner acceptance remain pending.
 
 Current creative follow-up: [Caption and effects quality sprint](phase-reports/caption-and-effects-quality.md). The first implementation covers phrase-aware subtitles, measured two-line typography, prominent headlines, conservative preparation-word cleanup, bounded native impact/clone-row effects, and agent/local-tool integration. Deployment and real-footage playback acceptance remain pending; this does not mark the wider private-pilot or publishing acceptance phases complete.
 

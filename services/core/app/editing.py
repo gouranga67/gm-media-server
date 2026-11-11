@@ -1318,6 +1318,13 @@ def final_file(job_id: UUID, file_kind: str) -> FileResponse:
     )
 
 
+@router.get("/effects/registry")
+def native_effect_registry():
+    """Read-only renderer contract. Listing effects never starts editing work."""
+    from app.effect_registry import public_effect_registry
+    return public_effect_registry()
+
+
 @router.get("/jobs/{job_id}/finishing-tools")
 def inspect_finishing_tools(job_id: UUID):
     context = _context_or_http(job_id)
@@ -1329,9 +1336,11 @@ def inspect_finishing_tools(job_id: UUID):
         ).fetchone()
     if not row:
         raise HTTPException(status_code=409, detail="a ready preview is required")
+    from app.effect_registry import public_effect_registry
     from app.finishing_tools import FinishingTools
     from app.stabilization import clip_choices
     from app.product_tracking import clip_choices as product_choices
+    effect_registry = public_effect_registry()
     return {
         "version": row["version"],
         "stabilization_candidates": clip_choices(row["document"]),
@@ -1354,6 +1363,7 @@ def inspect_finishing_tools(job_id: UUID):
             for a in context["assets"]
             if a.get("has_video") or str(a.get("mime_type", "")).startswith("image/")
         ],
+        "effect_registry": effect_registry,
         "capabilities": {
             "keyframes": True,
             "phrase_audio": True,
@@ -1361,7 +1371,9 @@ def inspect_finishing_tools(job_id: UUID):
             "cue_captions": True,
             "picture_layers": True,
             "animated_callouts": True, "fixed_pointers": True, "music_only_pauses": True,
-            "native_visual_beats": ["impact_frame", "clone_row"],
+            "native_visual_beats": [
+                effect["preset"] for effect in effect_registry["effects"]
+            ],
             "green_screen": True,
             "visual_retiming": True,
             "independent_audio_joins": True,

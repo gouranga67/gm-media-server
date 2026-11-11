@@ -154,6 +154,7 @@ def public_broll_manifest(context: dict[str, Any], plan: EditPlan) -> list[dict[
 
 def finishing_manifest(context: dict[str, Any], plan: EditPlan) -> dict[str, Any]:
     from app.audio_cleanup import cleanup_manifest
+    from app.effect_registry import EFFECT_REGISTRY_VERSION
     from app.visual_finishing import visual_manifest
     from app.edit_plan import MontageEditPlan
     from app.finishing_review import treatment_timeline
@@ -189,5 +190,6 @@ def finishing_manifest(context: dict[str, Any], plan: EditPlan) -> dict[str, Any
             "visual_finishing": visual_manifest(plan, context["job"].get("output_aspect") or "vertical"),
             "treatment_timeline": treatment_timeline(context, plan),
             "text_treatment_version": "headline_cards_v2",
+            "native_effect_registry_version": EFFECT_REGISTRY_VERSION,
             "visual_beats": [cue.model_dump(mode="json") for cue in plan.finishing.visual_beats] if plan.finishing else [],
             "additional_model_calls": 0}
