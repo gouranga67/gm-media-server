@@ -1,10 +1,12 @@
 # Build phases and live status
 
-Updated: 2026-11-10 (UTC)
+Updated: 2026-11-11 (UTC)
 
 This is the working plan for turning the Lenovo into a private media-editing appliance. A phase is complete only when its exit checks pass. Discussion, generated files, and installed packages do not count as a completed phase by themselves.
 
-Current follow-up: [Caption and effects quality sprint](phase-reports/caption-and-effects-quality.md). The first implementation covers phrase-aware subtitles, measured two-line typography, prominent headlines, conservative preparation-word cleanup, bounded native impact/clone-row effects, and agent/local-tool integration. Deployment and real-footage playback acceptance remain pending; this does not mark the wider private-pilot or publishing acceptance phases complete.
+Current product-clarity checkpoint: [Phase 32A — Guided Studio home](phase-reports/phase-32-guided-studio.md). The Home screen now begins with an action-led launcher for the six main owner tasks and includes a compact six-step guide to the whole workflow. Existing live overview, onboarding, recent-job, budget and operations information remains available. Source verification is complete; deployment and phone/owner acceptance remain pending.
+
+Current creative follow-up: [Caption and effects quality sprint](phase-reports/caption-and-effects-quality.md). The first implementation covers phrase-aware subtitles, measured two-line typography, prominent headlines, conservative preparation-word cleanup, bounded native impact/clone-row effects, and agent/local-tool integration. Deployment and real-footage playback acceptance remain pending; this does not mark the wider private-pilot or publishing acceptance phases complete.
 
 ## Active large build phases — 26–31
 
