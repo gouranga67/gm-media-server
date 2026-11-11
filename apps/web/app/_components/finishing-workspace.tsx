@@ -748,6 +748,11 @@ function FinishingForm({
                     </span>
                   </label>
                 ) : null}
+                {visualBeat === "voice_note" ? (
+                  <p className="rounded-md border border-[#D7D9D3] p-3 text-xs leading-5 text-[#666862]">
+                    Draws a voice-message card with a play icon, animated waveform, progress marker and the real window duration. It uses the existing recorded speech, does not generate audio or identify a sender, and moves away from active dialogue captions.
+                  </p>
+                ) : null}
               </div>
             ) : null}
             {tool === "pointer" ? (

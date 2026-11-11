@@ -1571,7 +1571,7 @@ export type FinishingTools = {
     readonly framing_applied?: boolean;
     readonly points: readonly { readonly time: number; readonly x: number; readonly y: number; readonly width: number; readonly height: number }[] }[];
 };
-export type VisualEffectPreset = "impact_frame" | "clone_row" | "live_cursor" | "letter_dive" | "comment_drop";
+export type VisualEffectPreset = "impact_frame" | "clone_row" | "live_cursor" | "letter_dive" | "comment_drop" | "voice_note";
 export type VisualEffectIntensity = "subtle" | "standard" | "strong";
 export type VisualEffectPosition = "upper" | "center" | "lower";
 export type VisualEffectParameter = {

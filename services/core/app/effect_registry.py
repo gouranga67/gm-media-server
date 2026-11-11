@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 
-EFFECT_REGISTRY_VERSION = 4
+EFFECT_REGISTRY_VERSION = 5
 
 
 @dataclass(frozen=True)
@@ -154,6 +154,17 @@ EFFECT_DEFINITIONS = (
         maximum_duration_seconds=4.0,
         default_duration_seconds=2.2,
         parameters=(INTENSITY, POSITION, COMMENT_TEXT),
+    ),
+    EffectDefinition(
+        preset="voice_note",
+        label="Voice note",
+        summary="A voice-message card animates over the real recorded speech without changing its audio.",
+        category="social",
+        version=1,
+        minimum_duration_seconds=1.0,
+        maximum_duration_seconds=5.0,
+        default_duration_seconds=2.6,
+        parameters=(INTENSITY, POSITION),
     ),
 )
 

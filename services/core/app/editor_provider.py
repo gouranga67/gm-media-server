@@ -798,6 +798,7 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
         "coordinates and use the click pulse only for a real selection or emphasis; never imply an interface action that did not occur. "
         "Use letter_dive for one short source-backed word or phrase of at most 18 plain-text characters; never invent a quote, claim or label. "
         "Use comment_drop for one short source-backed comment of at most 48 plain-text characters. It may paraphrase only when faithful; never fabricate audience feedback or attribution. "
+        "Use voice_note only when presenting a real recorded-speech moment as a voice message is editorially useful. Its waveform is decorative and does not measure amplitude; never imply another speaker, sender or message source. "
         "Pointers are fixed arrows/circles at normalized frame coordinates: use only if the shown object location is clear; "
         "they do not track moving objects. Music regions briefly reduce/mute only the selected music, then restore it, "
         "for a real reaction; never mute or stretch dialogue. Use sparingly around evidence-backed moments, not to meet a quota. "

@@ -86,6 +86,19 @@ def treatment_events(tools, width, height, captions=(), caption_position="lower_
             f"Dialogue: {layer},{_timestamp(cue.start)},{_timestamp(cue.end)},GMBlue,,0,0,0,,{{{tags}}}{text}"
         )
 
+    def free_caption_band(start, end, requested):
+        active_bands = {
+            item.get("position") or caption_position
+            for item in captions
+            if item["start"] < end and item["end"] > start
+        }
+        if requested not in active_bands:
+            return requested
+        return next(
+            (band for band in ("upper", "middle", "lower_safe") if band not in active_bands),
+            None,
+        )
+
     callouts = list(tools.callouts)
     for cue in tools.visual_beats:
         if cue.preset == "comment_drop":
@@ -98,21 +111,7 @@ def treatment_events(tools, width, height, captions=(), caption_position="lower_
                 animation={"subtle": "fade", "standard": "slide_up", "strong": "pop"}[cue.intensity],
             ))
     for cue in callouts:
-        active_bands = {
-            event.get("position") or caption_position
-            for event in captions
-            if event["start"] < cue.end and event["end"] > cue.start
-        }
-        position = cue.position
-        if position in active_bands:
-            position = next(
-                (
-                    band
-                    for band in ("upper", "middle", "lower_safe")
-                    if band not in active_bands
-                ),
-                None,
-            )
+        position = free_caption_band(cue.start, cue.end, cue.position)
         if position is None:
             continue  # Dialogue captions take priority when every band is busy.
         y = round(
@@ -190,6 +189,71 @@ def treatment_events(tools, width, height, captions=(), caption_position="lower_
             path = f"m {-2 * radius} {-radius * 0.25:.1f} l {-radius} {-radius * 0.25:.1f} {-radius} {-radius * 0.6:.1f} 0 0 {-radius} {radius * 0.6:.1f} {-radius} {radius * 0.25:.1f} {-2 * radius} {radius * 0.25:.1f}"
         event(cue, tags + "\\p1", path)
     for cue in tools.visual_beats:
+        if cue.preset == "voice_note":
+            requested = {"upper": "upper", "center": "middle", "lower": "lower_safe"}[cue.position]
+            position = free_caption_band(cue.start, cue.end, requested)
+            if position is None:
+                continue
+            unit = min(width, height) / 540
+            card_width = round(width * .70)
+            card_height = max(38, round(92 * unit))
+            left = (width - card_width) // 2
+            centre_y = round(height * {"upper": .20, "middle": .43, "lower_safe": .68}[position])
+            top = centre_y - card_height // 2
+            accent = str((brand_kit or {}).get("accent_color") or "#F4C95D")
+            red, green, blue = (int(accent[i:i+2], 16) for i in (1, 3, 5))
+            colour = f"&H{blue:02X}{green:02X}{red:02X}&"
+            enter_ms = {"subtle": 110, "standard": 180, "strong": 240}[cue.intensity]
+
+            def placement(x, y):
+                if cue.intensity == "subtle":
+                    return f"\\pos({x},{y})\\fad({enter_ms},100)"
+                travel = round(height * ({"standard": .018, "strong": .035}[cue.intensity]))
+                tags = f"\\move({x},{y + travel},{x},{y},0,{enter_ms})\\fad(60,100)"
+                if cue.intensity == "strong":
+                    tags += f"\\fscx94\\fscy94\\t(0,{enter_ms},\\fscx100\\fscy100)"
+                return tags
+
+            panel = f"m 0 0 l {card_width} 0 {card_width} {card_height} 0 {card_height}"
+            event(cue, "\\an7\\p1\\bord1\\shad0\\1c&H201A16&\\1a&H18&\\3c&H4A4D48&" + placement(left, top), panel, -3)
+
+            play_radius = max(7, round(card_height * .22))
+            play_x = left + max(13, round(card_height * .40))
+            play_y = centre_y
+            k = play_radius * .55228475
+            circle = (
+                f"m {play_radius} 0 b {play_radius + k:.1f} 0 {2 * play_radius} {play_radius - k:.1f} {2 * play_radius} {play_radius} "
+                f"{2 * play_radius} {play_radius + k:.1f} {play_radius + k:.1f} {2 * play_radius} {play_radius} {2 * play_radius} "
+                f"{play_radius - k:.1f} {2 * play_radius} 0 {play_radius + k:.1f} 0 {play_radius} 0 {play_radius - k:.1f} "
+                f"{play_radius - k:.1f} 0 {play_radius} 0"
+            )
+            event(cue, f"\\an7\\p1\\bord0\\shad0\\1c{colour}" + placement(play_x-play_radius, play_y-play_radius), circle, -2)
+            triangle = f"m 0 0 l 0 {play_radius} {round(play_radius*.82)} {round(play_radius*.5)}"
+            event(cue, "\\an7\\p1\\bord0\\shad0\\1c&H201A16&" + placement(play_x-round(play_radius*.28), play_y-round(play_radius*.5)), triangle, -1)
+
+            bar_left = play_x + play_radius + max(5, round(8 * unit))
+            bar_right = left + card_width - max(24, round(52 * unit))
+            bar_count = {"subtle": 8, "standard": 10, "strong": 12}[cue.intensity]
+            gap = max(2, (bar_right - bar_left) // max(1, bar_count))
+            bar_width = max(1, round(gap * .42))
+            heights = (.30, .58, .82, .46, 1, .66, .38, .74, .92, .52, .80, .42)
+            stagger = min(.32, (cue.end - cue.start) * .18) / max(1, bar_count - 1)
+            for index in range(bar_count):
+                bar_height = max(4, round(card_height * .44 * heights[index]))
+                bar = f"m 0 0 l {bar_width} 0 {bar_width} {bar_height} 0 {bar_height}"
+                bar_cue = cue.model_copy(update={"start": cue.start + index * stagger})
+                bar_x = bar_left + index * gap
+                bar_y = centre_y - bar_height // 2
+                event(bar_cue, f"\\an7\\p1\\bord0\\shad0\\1c&HFFFFFF&\\fad(35,100)\\fscy55\\t(0,150,\\fscy100)\\pos({bar_x},{bar_y})", bar, -1)
+
+            duration = max(1, round(cue.end - cue.start))
+            duration_text = f"0:{duration:02d}"
+            event(cue, f"\\an5\\fnDejaVu Sans\\fs{max(9,round(20*unit))}\\b0\\bord0\\shad0\\1c&HFFFFFF&" + placement(left + card_width - max(14, round(28*unit)), centre_y), duration_text, -1)
+            dot_radius = max(2, round(4 * unit))
+            dot = f"m {dot_radius} 0 b {dot_radius*2} 0 {dot_radius*2} {dot_radius*2} {dot_radius} {dot_radius*2} 0 {dot_radius*2} 0 0 {dot_radius} 0"
+            progress_y = top + card_height - max(4, round(9 * unit))
+            event(cue, f"\\an7\\p1\\bord0\\shad0\\1c{colour}\\move({bar_left},{progress_y},{bar_right},{progress_y},0,{round((cue.end-cue.start)*1000)})", dot, -1)
+            continue
         if cue.preset == "letter_dive":
             text = cue.letter_text.upper()
             unit = min(width, height) / 540

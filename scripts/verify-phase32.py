@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read-only Phase 32E effect-registry check; no render or model request."""
+"""Read-only Phase 32F effect-registry check; no render or model request."""
 
 import json
 from pathlib import Path
@@ -11,14 +11,15 @@ def main():
     request = runpy.run_path(str(Path(__file__).with_name("verify-phase14.py")))["request"]
     registry = request("effects/registry")
     effects = {effect.get("preset"): effect for effect in registry.get("effects", [])}
-    if registry.get("version") != 4 or set(effects) != {"impact_frame", "clone_row", "live_cursor", "letter_dive", "comment_drop"}:
-        raise RuntimeError("deploy the Phase 32E native effects registry")
+    if registry.get("version") != 5 or set(effects) != {"impact_frame", "clone_row", "live_cursor", "letter_dive", "comment_drop", "voice_note"}:
+        raise RuntimeError("deploy the Phase 32F native effects registry")
     expected = {
         "impact_frame": (0.1, 0.25, {"intensity"}),
         "clone_row": (0.1, 2.5, {"intensity", "position"}),
         "live_cursor": (0.4, 4.0, {"intensity", "cursor_start_x", "cursor_start_y", "cursor_end_x", "cursor_end_y", "click"}),
         "letter_dive": (0.6, 2.5, {"intensity", "position", "letter_text"}),
         "comment_drop": (1.0, 4.0, {"intensity", "position", "comment_text"}),
+        "voice_note": (1.0, 5.0, {"intensity", "position"}),
     }
     for preset, (minimum, maximum, parameter_keys) in expected.items():
         effect = effects[preset]
@@ -63,12 +64,12 @@ def main():
         "model_calls": 0,
         "note": "Synthetic and real-footage playback remain separate acceptance checks.",
     }, indent=2))
-    print("PASS  Comment Drop registry contract is deployed; no editing work started.")
+    print("PASS  Voice Note registry contract is deployed; no editing work started.")
 
 
 if __name__ == "__main__":
     try:
         main()
     except Exception as error:
-        print(f"Phase 32E verification failed: {error}", file=sys.stderr)
+        print(f"Phase 32F verification failed: {error}", file=sys.stderr)
         raise SystemExit(1)

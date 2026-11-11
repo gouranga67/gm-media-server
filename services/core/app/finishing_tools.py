@@ -299,10 +299,10 @@ def validate_finishing(
                 raise ValueError(f"{name} cannot overlap or extend beyond this edit")
             previous = region.end
     for beat in tools.visual_beats:
-        if beat.preset == "comment_drop" and any(
+        if beat.preset in {"comment_drop", "voice_note"} and any(
             callout.start < beat.end and callout.end > beat.start for callout in tools.callouts
         ):
-            raise ValueError("comment_drop cannot overlap another text callout")
+            raise ValueError(f"{beat.preset} cannot overlap another text callout")
     if tools.music_regions and (not plan.music_track_id or plan.music_mix == "none"):
         raise ValueError("music pauses require a selected music track")
     inventory = {str(asset["asset_id"]): asset for asset in assets}

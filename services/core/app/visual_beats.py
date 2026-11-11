@@ -8,7 +8,7 @@ from app.effect_registry import effect_definition
 
 
 class VisualBeat(TreatmentWindow):
-    preset: Literal["impact_frame", "clone_row", "live_cursor", "letter_dive", "comment_drop"]
+    preset: Literal["impact_frame", "clone_row", "live_cursor", "letter_dive", "comment_drop", "voice_note"]
     intensity: Literal["subtle", "standard", "strong"] = "standard"
     position: Literal["upper", "center", "lower"] = "center"
     cursor_start_x: float | None = Field(default=None, ge=.08, le=.92)

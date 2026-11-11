@@ -4,7 +4,7 @@ Updated: 2026-11-11 (UTC)
 
 This is the working plan for turning the Lenovo into a private media-editing appliance. A phase is complete only when its exit checks pass. Discussion, generated files, and installed packages do not count as a completed phase by themselves.
 
-Current effects checkpoint: [Phase 32E — Comment Drop](phase-reports/phase-32-comment-drop.md). Registry version 4 formalises the existing caption-aware comment card as a named bounded effect alongside Letter Dive, Live Cursor, Clone Row and Impact Frame. It reuses the established card renderer, protects dialogue captions and changes no audio timing. Source, container, deployment and playback acceptance are tracked separately.
+Current effects checkpoint: [Phase 32F — Voice Note](phase-reports/phase-32-voice-note.md). Registry version 5 adds a bounded voice-message card with an animated waveform, progress marker and real window duration alongside Comment Drop, Letter Dive, Live Cursor, Clone Row and Impact Frame. It uses the existing recorded speech, protects dialogue captions and never identifies a sender or generates replacement audio. Source, container, deployment and playback acceptance are tracked separately.
 
 Product-clarity checkpoint: [Phase 32A — Guided Studio home](phase-reports/phase-32-guided-studio.md). The Home screen now begins with an action-led launcher for the six main owner tasks and includes a compact six-step guide to the whole workflow. Existing live overview, onboarding, recent-job, budget and operations information remains available. Source verification is complete; deployment and phone/owner acceptance remain pending.
 

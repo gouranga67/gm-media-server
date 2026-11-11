@@ -41,4 +41,4 @@ The complete eight-gate source suite passes, including Python compilation, 114 b
 
 ## Next slice
 
-Add **Voice Note** as the next bounded social overlay, then reassess Post Wall and Sketch Words. Shot-aware Rack Focus, Dolly Zoom and Paper Tear remain a later pack with separate footage-quality gates.
+Add **Voice Note** as the next bounded social overlay. [Its source checkpoint is implemented here](phase-32-voice-note.md). After playback acceptance, reassess Post Wall and Sketch Words. Shot-aware Rack Focus, Dolly Zoom and Paper Tear remain a later pack with separate footage-quality gates.

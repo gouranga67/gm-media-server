@@ -33,6 +33,7 @@ class VisualBeatTests(unittest.TestCase):
         for value in (dict(start=0,end=.5,preset='impact_frame'),dict(start=0,end=3,preset='clone_row'),
                       dict(start=0,end=1,preset='live_cursor'),dict(start=0,end=1,preset='letter_dive'),
                       dict(start=0,end=1.5,preset='comment_drop'),
+                      dict(start=0,end=.5,preset='voice_note'),
                       dict(start=0,end=1,preset='arbitrary_js')):
             with self.assertRaises(ValidationError): VisualBeat(**value)
         self.assertNotIn('visual_beats',FinishingTools().model_dump(mode='json'))
@@ -72,9 +73,10 @@ class VisualBeatTests(unittest.TestCase):
     def test_registry_is_versioned_complete_and_matches_the_schema(self):
         registry=public_effect_registry()
         self.assertEqual(registry['version'],EFFECT_REGISTRY_VERSION)
-        self.assertEqual(registry['version'],4)
-        self.assertEqual({item['preset'] for item in registry['effects']},{'impact_frame','clone_row','live_cursor','letter_dive','comment_drop'})
-        self.assertEqual({item.preset for item in EFFECT_DEFINITIONS},{'impact_frame','clone_row','live_cursor','letter_dive','comment_drop'})
+        self.assertEqual(registry['version'],5)
+        expected={'impact_frame','clone_row','live_cursor','letter_dive','comment_drop','voice_note'}
+        self.assertEqual({item['preset'] for item in registry['effects']},expected)
+        self.assertEqual({item.preset for item in EFFECT_DEFINITIONS},expected)
         for item in registry['effects']:
             self.assertLessEqual(item['minimum_duration_seconds'],item['default_duration_seconds'])
             self.assertLessEqual(item['default_duration_seconds'],item['maximum_duration_seconds'])
@@ -93,6 +95,9 @@ class VisualBeatTests(unittest.TestCase):
         comment=next(item for item in registry['effects'] if item['preset']=='comment_drop')
         text=next(item for item in comment['parameters'] if item['key']=='comment_text')
         self.assertEqual(text,{'key':'comment_text','label':'Comment','type':'text','default':'','minimum_length':1,'maximum_length':48})
+        voice=next(item for item in registry['effects'] if item['preset']=='voice_note')
+        self.assertEqual({item['key'] for item in voice['parameters']},{'intensity','position'})
+        self.assertEqual((voice['minimum_duration_seconds'],voice['default_duration_seconds'],voice['maximum_duration_seconds']),(1,2.6,5))
 
     def test_registered_parameters_reach_only_the_bounded_filter_values(self):
         plan=fixture()
@@ -138,6 +143,15 @@ class VisualBeatTests(unittest.TestCase):
         for layer in (-3,-2,-1,0):
             self.assertTrue(any(line.startswith(f'Dialogue: {layer},') for line in ass.splitlines()))
 
+    def test_voice_note_draws_a_caption_aware_real_audio_card(self):
+        tools=FinishingTools(visual_beats=[dict(start=.2,end=2.8,preset='voice_note',intensity='standard',position='lower')])
+        ass=render_ass([dict(start=0,end=3,text='Caption wins.',position='lower_safe')],width=180,height=320,treatments=tools)
+        self.assertIn('0:03',ass)
+        self.assertIn(r'\move(',ass)
+        self.assertGreaterEqual(sum(line.startswith('Dialogue: -1,') for line in ass.splitlines()),12)
+        self.assertTrue(any(line.startswith('Dialogue: -3,') for line in ass.splitlines()))
+        self.assertTrue(any(line.startswith('Dialogue: 0,') for line in ass.splitlines()))
+
     def test_duration_overlap_budget_removal_and_retiming(self):
         plan=fixture()
         validate_finishing(plan,[])
@@ -154,6 +168,12 @@ class VisualBeatTests(unittest.TestCase):
         collision.finishing=FinishingTools(
             callouts=[dict(start=.5,end=1.5,text='Existing card')],
             visual_beats=[dict(start=1,end=2,preset='comment_drop',comment_text='New card')],
+        )
+        with self.assertRaisesRegex(ValueError,'cannot overlap another text callout'):
+            validate_finishing(collision,[])
+        collision.finishing=FinishingTools(
+            callouts=[dict(start=.5,end=1.5,text='Existing card')],
+            visual_beats=[dict(start=1,end=2.5,preset='voice_note')],
         )
         with self.assertRaisesRegex(ValueError,'cannot overlap another text callout'):
             validate_finishing(collision,[])
