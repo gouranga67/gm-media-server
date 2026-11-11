@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 from app.editing_contract import editing_contract, contract_instructions, editing_receipt
 from app.editor_provider import _model_content
+from app.finishing_tools import FinishingTools
 
 
 class EditingContractTests(unittest.TestCase):
@@ -54,8 +55,28 @@ class EditingContractTests(unittest.TestCase):
         self.assertIsNone(replay["planning_contract"])
         context.update(plan_source="model_plan", planning_contract=editing_contract(context),
             local_plan_repairs=["removed_unrequested_music", "removed_unrequested_music"],
-            story_finishing={"changes": ["Shortened measured waiting."]})
+            story_finishing={"changes": ["Shortened measured waiting."]},
+            creative_treatment_review={"removed": 1, "reason": "shared_effect_budget",
+                                       "rejected_visual_beats": ["impact_frame"]})
+        context["job"]["effect_level"] = "social"
+        plan = plan.model_copy(update={"finishing": FinishingTools(visual_beats=[
+            dict(start=.5,end=1.5,preset="clone_row",intensity="strong",position="upper")
+        ])}, deep=True)
         fresh = editing_receipt(context, plan, "chatgpt_plan")
+        self.assertEqual(fresh["version"], 2)
         self.assertEqual(fresh["planning_contract"]["audio_pacing"], "connected_passages")
         self.assertEqual(fresh["local_repairs"], ["removed_unrequested_music"])
         self.assertEqual(fresh["local_story_changes"], ["Shortened measured waiting."])
+        decisions = fresh["effect_decisions"]
+        self.assertEqual(decisions["registry_version"], 11)
+        self.assertEqual(len(decisions["items"]), 11)
+        selected = next(item for item in decisions["items"] if item["preset"] == "clone_row")
+        self.assertEqual((selected["decision"], selected["eligibility"]), ("selected", "eligible"))
+        self.assertEqual(selected["evidence"], ["0.50–1.50s · strong strength"])
+        rejected = next(item for item in decisions["items"] if item["preset"] == "impact_frame")
+        self.assertEqual((rejected["decision"], rejected["eligibility"]), ("rejected", "eligible"))
+        self.assertIn("shared effect budget", rejected["reason"])
+        tear = next(item for item in decisions["items"] if item["preset"] == "paper_tear")
+        self.assertEqual((tear["decision"], tear["eligibility"]), ("skipped", "ineligible"))
+        self.assertIn("No eligible ordinary cut", tear["reason"])
+        self.assertEqual(decisions["counts"], {"selected": 1, "rejected": 1, "skipped": 9})

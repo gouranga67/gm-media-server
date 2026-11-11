@@ -4,7 +4,7 @@ Updated: 2026-11-11 (UTC)
 
 This is the working plan for turning the Lenovo into a private media-editing appliance. A phase is complete only when its exit checks pass. Discussion, generated files, and installed packages do not count as a completed phase by themselves.
 
-Current effects checkpoint: [Phase 32L — Effects Gallery](phase-reports/phase-32-effects-gallery.md). Registry version 11 adds durable best-use and avoid guidance for all eleven native effects. GM Studio groups them into Accent, Social, Text, Camera and Transition cards, explains whether each is ready, needs owner judgement or is unavailable for the current cut, and provides a short effect-specific playback checklist. Browsing and selection remain local until the owner explicitly creates a preview.
+Current effects checkpoint: [Phase 32M — Effect Decision Receipt](phase-reports/phase-32-effect-decisions.md). Every new preview now records all eleven native effects as selected, locally rejected or skipped. Selected effects retain exact timeline evidence, budget rejections name the local rule, structural exclusions identify proven cut conflicts, and GM Studio distinguishes fresh AI plans from saved-plan replay and local controls. The receipt does not invent hidden model reasoning or claim a quality score.
 
 Product-clarity checkpoint: [Phase 32A — Guided Studio home](phase-reports/phase-32-guided-studio.md). The Home screen now begins with an action-led launcher for the six main owner tasks and includes a compact six-step guide to the whole workflow. Existing live overview, onboarding, recent-job, budget and operations information remains available. Source verification is complete; deployment and phone/owner acceptance remain pending.
 

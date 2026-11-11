@@ -2406,15 +2406,24 @@ test('selection lookup failures retain the basket and more than 100 sources requ
 
 
 test("Editing receipt distinguishes model planning, local processing and saved-plan replay", async () => {
-  const receipt = {version:1,plan_source:"model_plan",planning_contract:{audio_pacing:"connected_passages",creative_quotas:false},local_repairs:["removed_unrequested_music"],local_story_changes:["Shortened measured waiting."],audio_processing:{balanced_sources:1,compressed_sources:2,denoised_sources:0}};
+  const receipt = {version:2,plan_source:"model_plan",planning_contract:{audio_pacing:"connected_passages",creative_quotas:false},local_repairs:["removed_unrequested_music"],local_story_changes:["Shortened measured waiting."],audio_processing:{balanced_sources:1,compressed_sources:2,denoised_sources:0},effect_decisions:{version:1,registry_version:11,note:"This records the returned plan and local validation rules, not hidden model reasoning or a quality score.",items:[
+    {preset:"clone_row",label:"Clone row",decision:"selected",eligibility:"eligible",reason:"Selected in the AI plan and retained after validation.",evidence:["0.50–1.50s · strong strength"]},
+    {preset:"paper_tear",label:"Paper tear",decision:"rejected",eligibility:"eligible",reason:"Removed because the shared effect budget was already full.",evidence:["Local shared-effect budget check"]},
+    {preset:"dolly_zoom",label:"Dolly zoom",decision:"skipped",eligibility:"ineligible",reason:"No complete stable video clip remained.",evidence:[]},
+  ]}};
   await act(async()=>root.render(React.createElement(EditingReceipt,{receipt})));
   assert.match(document.body.textContent,/AI planned this edit/);
   assert.match(document.body.textContent,/Complete conversations/);
   assert.match(document.body.textContent,/effects were optional/);
+  assert.match(document.body.textContent,/Effect decisions · 1 selected · 1 rejected · 1 skipped/);
+  assert.match(document.body.textContent,/Clone row.*Selected in the AI plan.*0.50–1.50s/s);
+  assert.match(document.body.textContent,/Paper tear.*shared effect budget/s);
+  assert.match(document.body.textContent,/Dolly zoom.*No complete stable video clip/s);
+  assert.match(document.body.textContent,/not hidden model reasoning or a quality score/);
   assert.match(document.body.textContent,/removed unrequested music/);
   assert.match(document.body.textContent,/1 sources balanced/);
   assert.equal(document.querySelector("details").open,false);
-  await act(async()=>root.render(React.createElement(EditingReceipt,{receipt:{...receipt,plan_source:"saved_plan",planning_contract:null,local_repairs:[],local_story_changes:[]}})));
+  await act(async()=>root.render(React.createElement(EditingReceipt,{receipt:{version:1,plan_source:"saved_plan",planning_contract:null,local_repairs:[],local_story_changes:[],audio_processing:{}}})));
   assert.match(document.body.textContent,/reused a saved edit plan/);
   assert.doesNotMatch(document.body.textContent,/AI planned this edit|Audio direction/);
   await act(async()=>root.render(React.createElement(EditingReceipt,{receipt:undefined})));

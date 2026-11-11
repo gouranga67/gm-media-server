@@ -64,4 +64,4 @@ The host Python environment does not contain the worker dependencies, so the rea
 
 ## Next slice
 
-Run the real-footage effects acceptance pass for Rack Focus, Paper Tear and Dolly Zoom, then add an agent decision receipt that explains why an automatic edit selected, rejected or skipped each eligible effect.
+Completed in [Phase 32M — Effect Decision Receipt](phase-32-effect-decisions.md): each preview now records which native effects were selected, removed by local validation or absent from the saved plan without inventing hidden reasoning.

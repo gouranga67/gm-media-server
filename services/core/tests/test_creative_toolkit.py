@@ -231,7 +231,8 @@ class CreativeToolkitTests(unittest.TestCase):
                 callouts=[
                     dict(start=n * 0.3, end=n * 0.3 + 0.2, text="Real")
                     for n in range(4)
-                ]
+                ],
+                visual_beats=[dict(start=.9, end=1.1, preset="impact_frame")],
             )
         )
         context = dict(job=dict(effect_level="subtle"))
@@ -239,7 +240,8 @@ class CreativeToolkitTests(unittest.TestCase):
         self.assertEqual(len(bounded.finishing.callouts), 2)
         self.assertEqual(bounded.clips, p.clips)
         self.assertEqual(len(p.finishing.callouts), 4)
-        self.assertEqual(context["creative_treatment_review"]["removed"], 2)
+        self.assertEqual(context["creative_treatment_review"]["removed"], 3)
+        self.assertEqual(context["creative_treatment_review"]["rejected_visual_beats"], ["impact_frame"])
 
 
 class CreativeImportTests(unittest.IsolatedAsyncioTestCase):

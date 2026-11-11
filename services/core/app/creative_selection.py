@@ -121,10 +121,16 @@ def bound_generated_treatments(context, plan):
         deep=True,
     )
     if len(cues) > available:
+        rejected_visual_beats = list(dict.fromkeys(
+            getattr(plan.finishing.visual_beats[index], "preset", "")
+            for _, name, index in cues
+            if name == "visual_beats" and (name, index) not in kept
+        ))
         context["creative_treatment_review"] = {
             "removed": len(cues) - available,
             "reason": "shared_effect_budget",
             "additional_model_calls": 0,
+            "rejected_visual_beats": [preset for preset in rejected_visual_beats if preset],
         }
     if not any(tools.model_dump(mode="json").values()):
         tools = None
