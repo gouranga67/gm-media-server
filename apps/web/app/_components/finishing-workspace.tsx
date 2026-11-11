@@ -87,6 +87,7 @@ function FinishingForm({
   const [cursorClick, setCursorClick] = useState(true);
   const [letterText, setLetterText] = useState("");
   const [commentText, setCommentText] = useState("");
+  const [postTexts, setPostTexts] = useState(["", "", ""]);
   const [pointerShape, setPointerShape] = useState<"arrow" | "circle">(
     "circle",
   );
@@ -162,6 +163,8 @@ function FinishingForm({
     setCommentText(String(
       definition?.parameters.find((parameter) => parameter.key === "comment_text")?.default ?? "",
     ));
+    const postDefaults = definition?.parameters.find((parameter) => parameter.key === "post_texts")?.default;
+    setPostTexts(Array.isArray(postDefaults) ? [postDefaults[0] ?? "", postDefaults[1] ?? "", postDefaults[2] ?? ""] : ["", "", ""]);
     setEnd(
       String(
         Number(start) +
@@ -354,6 +357,7 @@ function FinishingForm({
           : {}),
         ...(visualBeat === "letter_dive" ? { letter_text: letterText.trim() } : {}),
         ...(visualBeat === "comment_drop" ? { comment_text: commentText.trim() } : {}),
+        ...(visualBeat === "post_wall" ? { post_texts: postTexts.map((text) => text.trim()).filter(Boolean) } : {}),
       };
       next = {
         ...next,
@@ -752,6 +756,32 @@ function FinishingForm({
                   <p className="rounded-md border border-[#D7D9D3] p-3 text-xs leading-5 text-[#666862]">
                     Draws a voice-message card with a play icon, animated waveform, progress marker and the real window duration. It uses the existing recorded speech, does not generate audio or identify a sender, and moves away from active dialogue captions.
                   </p>
+                ) : null}
+                {visualBeat === "post_wall" ? (
+                  <fieldset className="space-y-3 rounded-md border border-[#D7D9D3] p-3">
+                    <legend className="px-1 text-xs font-bold">Source-backed idea cards</legend>
+                    {postTexts.map((text, index) => (
+                      <label className="block text-xs" key={index}>
+                        Card {index + 1}{index === 2 ? " · optional" : ""}
+                        <input
+                          className={control}
+                          type="text"
+                          required={index < 2}
+                          minLength={index < 2 ? 1 : undefined}
+                          maxLength={effectDefinition?.parameters.find((parameter) => parameter.key === "post_texts")?.item_maximum_length ?? 42}
+                          value={text}
+                          onChange={(event) => {
+                            const nextValue = event.currentTarget.value;
+                            setPostTexts((current) => current.map((value, itemIndex) => itemIndex === index ? nextValue : value));
+                          }}
+                          placeholder="A phrase supported by the footage"
+                        />
+                      </label>
+                    ))}
+                    <p className="text-xs leading-5 text-[#666862]">
+                      Builds a staggered wall of two or three cards. Use real phrases or faithful summaries only; no usernames, likes, shares or invented social posts.
+                    </p>
+                  </fieldset>
                 ) : null}
               </div>
             ) : null}

@@ -42,4 +42,4 @@ The complete eight-gate source suite passes, including Python compilation, 115 b
 
 ## Next slice
 
-Review the social pack in real footage, then choose between **Post Wall / Sketch Words** and the shot-aware camera/transition pack. Rack Focus, Dolly Zoom and Paper Tear require separate footage-quality gates.
+Add **Post Wall** as a bounded source-backed card treatment. [Its source checkpoint is implemented here](phase-32-post-wall.md). Sketch Words remains the final social-pack candidate before the shot-aware Rack Focus, Dolly Zoom and Paper Tear quality gates.

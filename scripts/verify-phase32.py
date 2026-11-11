@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read-only Phase 32F effect-registry check; no render or model request."""
+"""Read-only Phase 32G effect-registry check; no render or model request."""
 
 import json
 from pathlib import Path
@@ -11,8 +11,8 @@ def main():
     request = runpy.run_path(str(Path(__file__).with_name("verify-phase14.py")))["request"]
     registry = request("effects/registry")
     effects = {effect.get("preset"): effect for effect in registry.get("effects", [])}
-    if registry.get("version") != 5 or set(effects) != {"impact_frame", "clone_row", "live_cursor", "letter_dive", "comment_drop", "voice_note"}:
-        raise RuntimeError("deploy the Phase 32F native effects registry")
+    if registry.get("version") != 6 or set(effects) != {"impact_frame", "clone_row", "live_cursor", "letter_dive", "comment_drop", "voice_note", "post_wall"}:
+        raise RuntimeError("deploy the Phase 32G native effects registry")
     expected = {
         "impact_frame": (0.1, 0.25, {"intensity"}),
         "clone_row": (0.1, 2.5, {"intensity", "position"}),
@@ -20,6 +20,7 @@ def main():
         "letter_dive": (0.6, 2.5, {"intensity", "position", "letter_text"}),
         "comment_drop": (1.0, 4.0, {"intensity", "position", "comment_text"}),
         "voice_note": (1.0, 5.0, {"intensity", "position"}),
+        "post_wall": (1.2, 5.0, {"intensity", "post_texts"}),
     }
     for preset, (minimum, maximum, parameter_keys) in expected.items():
         effect = effects[preset]
@@ -55,6 +56,9 @@ def main():
         raise RuntimeError("the Comment Drop text contract is incomplete")
     if cursor["click"].get("type") != "boolean" or cursor["click"].get("default") is not True:
         raise RuntimeError("the Live Cursor click contract is incomplete")
+    post_texts = {parameter["key"]: parameter for parameter in effects["post_wall"]["parameters"]}["post_texts"]
+    if post_texts.get("type") != "text_list" or (post_texts.get("minimum_items"), post_texts.get("maximum_items"), post_texts.get("item_maximum_length")) != (2, 3, 42):
+        raise RuntimeError("the Post Wall card contract is incomplete")
     print(json.dumps({
         "status": "passed",
         "registry_version": registry["version"],
@@ -64,12 +68,12 @@ def main():
         "model_calls": 0,
         "note": "Synthetic and real-footage playback remain separate acceptance checks.",
     }, indent=2))
-    print("PASS  Voice Note registry contract is deployed; no editing work started.")
+    print("PASS  Post Wall registry contract is deployed; no editing work started.")
 
 
 if __name__ == "__main__":
     try:
         main()
     except Exception as error:
-        print(f"Phase 32F verification failed: {error}", file=sys.stderr)
+        print(f"Phase 32G verification failed: {error}", file=sys.stderr)
         raise SystemExit(1)

@@ -34,6 +34,7 @@ class VisualBeatTests(unittest.TestCase):
                       dict(start=0,end=1,preset='live_cursor'),dict(start=0,end=1,preset='letter_dive'),
                       dict(start=0,end=1.5,preset='comment_drop'),
                       dict(start=0,end=.5,preset='voice_note'),
+                      dict(start=0,end=2,preset='post_wall'),
                       dict(start=0,end=1,preset='arbitrary_js')):
             with self.assertRaises(ValidationError): VisualBeat(**value)
         self.assertNotIn('visual_beats',FinishingTools().model_dump(mode='json'))
@@ -64,6 +65,14 @@ class VisualBeatTests(unittest.TestCase):
             VisualBeat(start=0,end=2,preset='comment_drop',comment_text=r'{\fad}')
         with self.assertRaisesRegex(ValidationError,'does not accept comment text'):
             VisualBeat(start=0,end=1.4,preset='letter_dive',letter_text='YES',comment_text='NO')
+        wall=VisualBeat(start=0,end=3,preset='post_wall',intensity='strong',post_texts=['  Real footage  ','Review first'])
+        self.assertEqual(wall.model_dump(mode='json')['post_texts'],['Real footage','Review first'])
+        with self.assertRaisesRegex(ValidationError,'two or three'):
+            VisualBeat(start=0,end=3,preset='post_wall',post_texts=['Only one'])
+        with self.assertRaisesRegex(ValidationError,'short plain'):
+            VisualBeat(start=0,end=3,preset='post_wall',post_texts=['Good',r'{\move}'])
+        with self.assertRaisesRegex(ValidationError,'does not accept post text'):
+            VisualBeat(start=0,end=2.6,preset='voice_note',post_texts=['No','Cards'])
         for recipe in ('talking_head','montage'):
             schema=schema_for_recipe(recipe)['properties']['finishing']['anyOf'][1]
             beat=schema['properties']['visual_beats']['items']
@@ -73,8 +82,8 @@ class VisualBeatTests(unittest.TestCase):
     def test_registry_is_versioned_complete_and_matches_the_schema(self):
         registry=public_effect_registry()
         self.assertEqual(registry['version'],EFFECT_REGISTRY_VERSION)
-        self.assertEqual(registry['version'],5)
-        expected={'impact_frame','clone_row','live_cursor','letter_dive','comment_drop','voice_note'}
+        self.assertEqual(registry['version'],6)
+        expected={'impact_frame','clone_row','live_cursor','letter_dive','comment_drop','voice_note','post_wall'}
         self.assertEqual({item['preset'] for item in registry['effects']},expected)
         self.assertEqual({item.preset for item in EFFECT_DEFINITIONS},expected)
         for item in registry['effects']:
@@ -98,6 +107,11 @@ class VisualBeatTests(unittest.TestCase):
         voice=next(item for item in registry['effects'] if item['preset']=='voice_note')
         self.assertEqual({item['key'] for item in voice['parameters']},{'intensity','position'})
         self.assertEqual((voice['minimum_duration_seconds'],voice['default_duration_seconds'],voice['maximum_duration_seconds']),(1,2.6,5))
+        wall=next(item for item in registry['effects'] if item['preset']=='post_wall')
+        parameters={item['key']:item for item in wall['parameters']}
+        self.assertEqual(set(parameters),{'intensity','post_texts'})
+        self.assertEqual(parameters['post_texts'],{'key':'post_texts','label':'Source-backed cards','type':'text_list','default':[],
+            'minimum_items':2,'maximum_items':3,'item_maximum_length':42})
 
     def test_registered_parameters_reach_only_the_bounded_filter_values(self):
         plan=fixture()
@@ -152,6 +166,18 @@ class VisualBeatTests(unittest.TestCase):
         self.assertTrue(any(line.startswith('Dialogue: -3,') for line in ass.splitlines()))
         self.assertTrue(any(line.startswith('Dialogue: 0,') for line in ass.splitlines()))
 
+    def test_post_wall_staggers_source_backed_cards_below_captions(self):
+        tools=FinishingTools(visual_beats=[dict(start=.2,end=3.2,preset='post_wall',intensity='strong',
+            post_texts=['Real footage','Local render','Review first'])])
+        ass=render_ass([dict(start=0,end=3.5,text='Caption wins.',position='lower_safe')],width=180,height=320,treatments=tools)
+        for text in ('Real footage','Local render','Review first'):
+            self.assertIn(text,ass)
+        panels=[line for line in ass.splitlines() if line.startswith('Dialogue: -3,')]
+        self.assertEqual(len(panels),3)
+        self.assertEqual(len({line.split(',')[1] for line in panels}),3)
+        self.assertTrue(all(r'\move(' in line for line in panels))
+        self.assertTrue(any(line.startswith('Dialogue: 0,') for line in ass.splitlines()))
+
     def test_duration_overlap_budget_removal_and_retiming(self):
         plan=fixture()
         validate_finishing(plan,[])
@@ -168,6 +194,12 @@ class VisualBeatTests(unittest.TestCase):
         collision.finishing=FinishingTools(
             callouts=[dict(start=.5,end=1.5,text='Existing card')],
             visual_beats=[dict(start=1,end=2,preset='comment_drop',comment_text='New card')],
+        )
+        with self.assertRaisesRegex(ValueError,'cannot overlap another text callout'):
+            validate_finishing(collision,[])
+        collision.finishing=FinishingTools(
+            callouts=[dict(start=.5,end=1.5,text='Existing card')],
+            visual_beats=[dict(start=1,end=3,preset='post_wall',post_texts=['One','Two'])],
         )
         with self.assertRaisesRegex(ValueError,'cannot overlap another text callout'):
             validate_finishing(collision,[])

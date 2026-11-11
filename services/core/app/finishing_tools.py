@@ -299,7 +299,7 @@ def validate_finishing(
                 raise ValueError(f"{name} cannot overlap or extend beyond this edit")
             previous = region.end
     for beat in tools.visual_beats:
-        if beat.preset in {"comment_drop", "voice_note"} and any(
+        if beat.preset in {"comment_drop", "voice_note", "post_wall"} and any(
             callout.start < beat.end and callout.end > beat.start for callout in tools.callouts
         ):
             raise ValueError(f"{beat.preset} cannot overlap another text callout")

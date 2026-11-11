@@ -8,7 +8,7 @@ from app.effect_registry import effect_definition
 
 
 class VisualBeat(TreatmentWindow):
-    preset: Literal["impact_frame", "clone_row", "live_cursor", "letter_dive", "comment_drop", "voice_note"]
+    preset: Literal["impact_frame", "clone_row", "live_cursor", "letter_dive", "comment_drop", "voice_note", "post_wall"]
     intensity: Literal["subtle", "standard", "strong"] = "standard"
     position: Literal["upper", "center", "lower"] = "center"
     cursor_start_x: float | None = Field(default=None, ge=.08, le=.92)
@@ -18,6 +18,7 @@ class VisualBeat(TreatmentWindow):
     click: bool | None = None
     letter_text: str | None = Field(default=None, min_length=1, max_length=18)
     comment_text: str | None = Field(default=None, min_length=1, max_length=48)
+    post_texts: list[str] | None = Field(default=None, min_length=2, max_length=3)
 
     @field_validator("letter_text", "comment_text")
     @classmethod
@@ -28,6 +29,19 @@ class VisualBeat(TreatmentWindow):
         if not value or any(character in value for character in "{}\\") or any(ord(character) < 32 for character in value):
             raise ValueError("native text effects require short plain text without subtitle commands")
         return value
+
+    @field_validator("post_texts")
+    @classmethod
+    def safe_post_texts(cls, value):
+        if value is None:
+            return value
+        cleaned = []
+        for text in value:
+            text = text.strip()
+            if not text or len(text) > 42 or any(character in text for character in "{}\\") or any(ord(character) < 32 for character in text):
+                raise ValueError("post_wall requires two or three short plain source-backed cards")
+            cleaned.append(text)
+        return cleaned
 
     @model_validator(mode="after")
     def short_beat(self):
@@ -56,6 +70,10 @@ class VisualBeat(TreatmentWindow):
             raise ValueError("comment_drop requires source-backed text")
         if self.preset != "comment_drop" and self.comment_text is not None:
             raise ValueError(f"{self.preset} does not accept comment text")
+        if self.preset == "post_wall" and self.post_texts is None:
+            raise ValueError("post_wall requires two or three source-backed cards")
+        if self.preset != "post_wall" and self.post_texts is not None:
+            raise ValueError(f"{self.preset} does not accept post text")
         return self
 
     @model_serializer(mode="wrap")
@@ -65,7 +83,7 @@ class VisualBeat(TreatmentWindow):
             data.pop("intensity", None)
         if data.get("position") == "center":
             data.pop("position", None)
-        for name in ("cursor_start_x", "cursor_start_y", "cursor_end_x", "cursor_end_y", "click", "letter_text", "comment_text"):
+        for name in ("cursor_start_x", "cursor_start_y", "cursor_end_x", "cursor_end_y", "click", "letter_text", "comment_text", "post_texts"):
             if data.get(name) is None:
                 data.pop(name, None)
         return data

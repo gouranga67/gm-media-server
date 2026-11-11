@@ -33,7 +33,7 @@ def main():
         visual_beats=[dict(start=1.6,end=2.8,preset='voice_note',intensity='standard',position='upper'),
                       dict(start=3.2,end=4.4,preset='live_cursor',intensity='standard',cursor_start_x=.2,cursor_start_y=.3,cursor_end_x=.78,cursor_end_y=.3,click=True),
                       dict(start=4.45,end=5.05,preset='letter_dive',intensity='strong',position='upper',letter_text='BUILD'),
-                      dict(start=5.2,end=6.9,preset='clone_row',intensity='subtle',position='upper')])
+                      dict(start=5.2,end=6.9,preset='post_wall',intensity='standard',post_texts=['REAL FOOTAGE','LOCAL RENDER','REVIEW FIRST'])])
     plan=TalkingHeadEditPlan(schema_version='1.5',recipe='talking_head',clips=[dict(asset_id=uuid4(),source_in=0,source_out=7,crop='center_fill')],
         caption_style='clean_blue_v1',audio_preset='spoken_voice_v1',end_card='none',editorial_summary='Synthetic graphics and timing demonstration.',finishing=tools)
     events=[dict(start=0,end=1.5,text="Here’s what we’ve built."),dict(start=2,end=3.2,text='Generated 40 million dollars'),dict(start=3.2,end=4.6,text='in revenue for clients.'),dict(start=5,end=6.7,text='Three shots. One audio track.')]
@@ -42,11 +42,11 @@ def main():
     encoder=_render_video([(source,0,7)],plan,ass,output,120)
     error=rendered_audio_packet_error(output,60)
     if error:raise RuntimeError(error)
-    for t,name in ((2.2,'voice-note-frame.png'),(3.1,'headline-frame.png'),(3.8,'live-cursor-frame.png'),(4.8,'letter-dive-frame.png'),(5.8,'clone-row-frame.png')):
+    for t,name in ((2.2,'voice-note-frame.png'),(3.1,'headline-frame.png'),(3.8,'live-cursor-frame.png'),(4.8,'letter-dive-frame.png'),(5.8,'post-wall-frame.png')):
         ff('-ss',str(t),'-i',str(output),'-frames:v','1',str(root/name))
     report=dict(status='passed',synthetic_demo=True,encoder=encoder,render_seconds=round(time.monotonic()-started,2),
         duration_seconds=7,width=540,height=960,hosted_model_calls=0,audio_packet_timing_verified=True,
-        native_effect_registry_version=EFFECT_REGISTRY_VERSION,effects=['voice_note','live_cursor','letter_dive','clone_row'])
+        native_effect_registry_version=EFFECT_REGISTRY_VERSION,effects=['voice_note','live_cursor','letter_dive','post_wall'])
     (root/'report.json').write_text(json.dumps(report,indent=2)+'\n')
     source.unlink()
     print(json.dumps(report,indent=2))

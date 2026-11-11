@@ -76,6 +76,8 @@ def treatment_timeline(context, plan):
                 detail += f"; {cue.position} position; source-backed comment: {cue.comment_text}"
             elif cue.preset == "voice_note":
                 detail += f"; {cue.position} position; waveform and progress represent this real recorded-audio window"
+            elif cue.preset == "post_wall":
+                detail += f"; {len(cue.post_texts)} source-backed cards: " + " / ".join(cue.post_texts)
             else:
                 detail += f"; {cue.position} position"
             add("graphic", cue.preset.replace("_", " ").capitalize(), cue.start, cue.end,

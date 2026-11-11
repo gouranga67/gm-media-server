@@ -50,8 +50,8 @@ After deployment:
 ## Next build slices
 
 - **Phase 32B — Effects foundation:** establish the reusable effects registry, parameter contract, preview samples and render-test pattern around the existing Clone Row and Impact Frame effects. [Source checkpoint implemented](phase-32-effects-foundation.md); container and playback acceptance remain pending.
-- **Phase 32C–F — Social animation pack:** add one effect at a time, beginning with low-risk overlays. [Live Cursor](phase-32-live-cursor.md), [Letter Dive](phase-32-letter-dive.md), [Comment Drop](phase-32-comment-drop.md) and [Voice Note](phase-32-voice-note.md) now have bounded registry implementations.
-- **Phase 32G — Camera and transition pack:** add and evaluate Rack Focus, Dolly Zoom, Paper Tear and other shot-aware transitions, with masking or segmentation kept behind explicit quality gates where required.
+- **Phase 32C–G — Social animation pack:** add one effect at a time, beginning with low-risk overlays. [Live Cursor](phase-32-live-cursor.md), [Letter Dive](phase-32-letter-dive.md), [Comment Drop](phase-32-comment-drop.md), [Voice Note](phase-32-voice-note.md) and [Post Wall](phase-32-post-wall.md) now have bounded registry implementations.
+- **Phase 32H — Camera and transition pack:** add and evaluate Rack Focus, Dolly Zoom, Paper Tear and other shot-aware transitions, with masking or segmentation kept behind explicit quality gates where required.
 
 Each effect must remain selectable by name and bounded parameters, preserve original footage, produce a reviewable preview and pass a real-footage playback check before it is treated as accepted.
 
@@ -63,7 +63,7 @@ This is the complete named set recovered from the earlier planning discussion. I
 |---|---|---|
 | Live Cursor | Easy | Registry v2 deployed; playback acceptance pending |
 | Clone Row | Medium | Native bounded first version already implemented; move behind the shared Phase 32B contract |
-| Post Wall | Medium | Phase 32C candidate |
+| Post Wall | Medium | Registry v6 source checkpoint implemented |
 | Letter Dive | Easy | Registry v3 source checkpoint implemented |
 | Comment Drop | Easy | Registry v4 source checkpoint implemented by reusing the comment-card renderer |
 | Sketch Words | Medium | Phase 32C candidate |

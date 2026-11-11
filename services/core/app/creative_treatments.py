@@ -86,12 +86,15 @@ def treatment_events(tools, width, height, captions=(), caption_position="lower_
             f"Dialogue: {layer},{_timestamp(cue.start)},{_timestamp(cue.end)},GMBlue,,0,0,0,,{{{tags}}}{text}"
         )
 
-    def free_caption_band(start, end, requested):
-        active_bands = {
+    def occupied_caption_bands(start, end):
+        return {
             item.get("position") or caption_position
             for item in captions
             if item["start"] < end and item["end"] > start
         }
+
+    def free_caption_band(start, end, requested):
+        active_bands = occupied_caption_bands(start, end)
         if requested not in active_bands:
             return requested
         return next(
@@ -189,6 +192,55 @@ def treatment_events(tools, width, height, captions=(), caption_position="lower_
             path = f"m {-2 * radius} {-radius * 0.25:.1f} l {-radius} {-radius * 0.25:.1f} {-radius} {-radius * 0.6:.1f} 0 0 {-radius} {radius * 0.6:.1f} {-radius} {radius * 0.25:.1f} {-2 * radius} {radius * 0.25:.1f}"
         event(cue, tags + "\\p1", path)
     for cue in tools.visual_beats:
+        if cue.preset == "post_wall":
+            occupied = occupied_caption_bands(cue.start, cue.end)
+            if len(occupied) > 1:
+                continue  # A full card wall yields when dialogue already needs most bands.
+            unit = min(width, height) / 540
+            card_width = round(width * .72)
+            card_height = max(34, round(80 * unit))
+            centres = (
+                [.14, .31, .48] if "lower_safe" in occupied else
+                [.38, .55, .70] if "upper" in occupied else
+                [.14, .27, .68] if "middle" in occupied else
+                [.18, .42, .66]
+            )
+            if len(cue.post_texts) == 2:
+                centres = [centres[0], centres[-1]]
+            accent = str((brand_kit or {}).get("accent_color") or "#F4C95D")
+            red, green, blue = (int(accent[i:i+2], 16) for i in (1, 3, 5))
+            colour = f"&H{blue:02X}{green:02X}{red:02X}&"
+            enter_ms = {"subtle": 130, "standard": 190, "strong": 250}[cue.intensity]
+            stagger_span = {"subtle": .20, "standard": .36, "strong": .54}[cue.intensity]
+            rotations = (-2, 2, -1)
+            for index, copy in enumerate(cue.post_texts):
+                card_cue = cue.model_copy(update={"start": cue.start + index * stagger_span / max(1, len(cue.post_texts) - 1)})
+                left = round(width * (.10 if index % 2 == 0 else .18))
+                top = round(height * centres[index] - card_height / 2)
+                from_x = left + round(width * (-.05 if index % 2 == 0 else .05))
+                entrance = f"\\move({from_x},{top},{left},{top},0,{enter_ms})\\fad(60,100)"
+                if cue.intensity == "strong":
+                    entrance += f"\\fscx94\\fscy94\\t(0,{enter_ms},\\fscx100\\fscy100)"
+                panel = f"m 0 0 l {card_width} 0 {card_width} {card_height} 0 {card_height}"
+                base_tags = f"\\an7\\frz{rotations[index]}"
+                event(card_cue, base_tags + "\\p1\\bord1\\shad0\\1c&H201A16&\\1a&H18&\\3c&H4A4D48&" + entrance, panel, -3)
+                stripe_width = max(2, round(5 * unit))
+                stripe = f"m 0 0 l {stripe_width} 0 {stripe_width} {card_height} 0 {card_height}"
+                event(card_cue, base_tags + f"\\p1\\bord0\\shad0\\1c{colour}" + entrance, stripe, -2)
+                wrapped, size = caption_lines(copy, "DejaVu Sans", max(10, round(27 * unit)), card_width * .82, minimum_scale=.45)
+                rows = wrapped.splitlines()[:2]
+                line_height = size * 1.18
+                first_y = top + card_height / 2 - (len(rows) - 1) * line_height / 2
+                for row_index, row in enumerate(rows):
+                    text_tags = (
+                        f"\\an5\\frz{rotations[index]}\\fnDejaVu Sans\\fs{size}\\b1\\bord0.8\\shad0"
+                        f"\\1c&HFFFFFF&\\3c&H201A16&\\move({from_x + card_width//2},{round(first_y + row_index*line_height)},"
+                        f"{left + card_width//2},{round(first_y + row_index*line_height)},0,{enter_ms})\\fad(60,100)"
+                    )
+                    if cue.intensity == "strong":
+                        text_tags += f"\\fscx94\\fscy94\\t(0,{enter_ms},\\fscx100\\fscy100)"
+                    event(card_cue, text_tags, row, -1)
+            continue
         if cue.preset == "voice_note":
             requested = {"upper": "upper", "center": "middle", "lower": "lower_safe"}[cue.position]
             position = free_caption_band(cue.start, cue.end, requested)

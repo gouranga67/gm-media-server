@@ -1546,7 +1546,7 @@ export const removeSourceRange = (assetId: string, id: string) => apiRequest(`li
 
 export type FinishingTools = {
   readonly callouts?: readonly { readonly start: number; readonly end: number; readonly text: string; readonly position: "upper" | "middle" | "lower_safe"; readonly style: "label" | "thought" | "counter" | "headline" | "comment"; readonly animation: "fade" | "pop" | "slide_up" }[];
-  readonly visual_beats?: readonly { readonly start: number; readonly end: number; readonly preset: VisualEffectPreset; readonly intensity?: VisualEffectIntensity; readonly position?: VisualEffectPosition; readonly cursor_start_x?: number; readonly cursor_start_y?: number; readonly cursor_end_x?: number; readonly cursor_end_y?: number; readonly click?: boolean; readonly letter_text?: string; readonly comment_text?: string }[];
+  readonly visual_beats?: readonly { readonly start: number; readonly end: number; readonly preset: VisualEffectPreset; readonly intensity?: VisualEffectIntensity; readonly position?: VisualEffectPosition; readonly cursor_start_x?: number; readonly cursor_start_y?: number; readonly cursor_end_x?: number; readonly cursor_end_y?: number; readonly click?: boolean; readonly letter_text?: string; readonly comment_text?: string; readonly post_texts?: readonly string[] }[];
   readonly pointers?: readonly { readonly start: number; readonly end: number; readonly x: number; readonly y: number; readonly size: number; readonly shape: "arrow" | "circle"; readonly direction: "right" | "left" | "up" | "down" }[];
   readonly music_regions?: readonly { readonly start: number; readonly end: number; readonly gain_db: number }[];
   readonly audio_joins?: readonly { readonly clip_index: number; readonly lead_seconds: number; readonly tail_seconds: number }[];
@@ -1571,19 +1571,22 @@ export type FinishingTools = {
     readonly framing_applied?: boolean;
     readonly points: readonly { readonly time: number; readonly x: number; readonly y: number; readonly width: number; readonly height: number }[] }[];
 };
-export type VisualEffectPreset = "impact_frame" | "clone_row" | "live_cursor" | "letter_dive" | "comment_drop" | "voice_note";
+export type VisualEffectPreset = "impact_frame" | "clone_row" | "live_cursor" | "letter_dive" | "comment_drop" | "voice_note" | "post_wall";
 export type VisualEffectIntensity = "subtle" | "standard" | "strong";
 export type VisualEffectPosition = "upper" | "center" | "lower";
 export type VisualEffectParameter = {
-  readonly key: "intensity" | "position" | "cursor_start_x" | "cursor_start_y" | "cursor_end_x" | "cursor_end_y" | "click" | "letter_text" | "comment_text";
+  readonly key: "intensity" | "position" | "cursor_start_x" | "cursor_start_y" | "cursor_end_x" | "cursor_end_y" | "click" | "letter_text" | "comment_text" | "post_texts";
   readonly label: string;
-  readonly type: "enum" | "number" | "boolean" | "text";
+  readonly type: "enum" | "number" | "boolean" | "text" | "text_list";
   readonly values?: readonly string[];
-  readonly default: string | number | boolean;
+  readonly default: string | number | boolean | readonly string[];
   readonly minimum?: number;
   readonly maximum?: number;
   readonly minimum_length?: number;
   readonly maximum_length?: number;
+  readonly minimum_items?: number;
+  readonly maximum_items?: number;
+  readonly item_maximum_length?: number;
 };
 export type VisualEffectDefinition = {
   readonly preset: VisualEffectPreset;

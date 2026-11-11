@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 
-EFFECT_REGISTRY_VERSION = 5
+EFFECT_REGISTRY_VERSION = 6
 
 
 @dataclass(frozen=True)
@@ -20,13 +20,16 @@ class EffectParameter:
     maximum: float | None = None
     minimum_length: int | None = None
     maximum_length: int | None = None
+    minimum_items: int | None = None
+    maximum_items: int | None = None
+    item_maximum_length: int | None = None
 
     def public(self) -> dict[str, Any]:
         result = {
             "key": self.key,
             "label": self.label,
             "type": self.kind,
-            "default": self.default,
+            "default": list(self.default) if self.kind == "text_list" else self.default,
         }
         if self.values:
             result["values"] = list(self.values)
@@ -38,6 +41,12 @@ class EffectParameter:
             result["minimum_length"] = self.minimum_length
         if self.maximum_length is not None:
             result["maximum_length"] = self.maximum_length
+        if self.minimum_items is not None:
+            result["minimum_items"] = self.minimum_items
+        if self.maximum_items is not None:
+            result["maximum_items"] = self.maximum_items
+        if self.item_maximum_length is not None:
+            result["item_maximum_length"] = self.item_maximum_length
         return result
 
 
@@ -97,6 +106,10 @@ CURSOR_END_Y = EffectParameter("cursor_end_y", "End vertical", "number", 0.4, mi
 CURSOR_CLICK = EffectParameter("click", "Click pulse", "boolean", True)
 LETTER_TEXT = EffectParameter("letter_text", "Text", "text", "", minimum_length=1, maximum_length=18)
 COMMENT_TEXT = EffectParameter("comment_text", "Comment", "text", "", minimum_length=1, maximum_length=48)
+POST_TEXTS = EffectParameter(
+    "post_texts", "Source-backed cards", "text_list", (),
+    minimum_items=2, maximum_items=3, item_maximum_length=42,
+)
 
 
 EFFECT_DEFINITIONS = (
@@ -165,6 +178,17 @@ EFFECT_DEFINITIONS = (
         maximum_duration_seconds=5.0,
         default_duration_seconds=2.6,
         parameters=(INTENSITY, POSITION),
+    ),
+    EffectDefinition(
+        preset="post_wall",
+        label="Post wall",
+        summary="Two or three source-backed idea cards build into a staggered wall without fake social metadata.",
+        category="social",
+        version=1,
+        minimum_duration_seconds=1.2,
+        maximum_duration_seconds=5.0,
+        default_duration_seconds=3.0,
+        parameters=(INTENSITY, POST_TEXTS),
     ),
 )
 
