@@ -66,8 +66,14 @@ def treatment_timeline(context, plan):
         for cue in tools.callouts:
             add("callout", "Text: " + cue.text, cue.start, cue.end, f"{cue.style}; {cue.animation}")
         for cue in tools.visual_beats:
+            detail = f"Native picture treatment; {cue.intensity} strength"
+            if cue.preset == "live_cursor":
+                detail += (f"; bounded frame coordinates {cue.cursor_start_x:.2f},{cue.cursor_start_y:.2f} to "
+                           f"{cue.cursor_end_x:.2f},{cue.cursor_end_y:.2f}; click pulse {'on' if cue.click else 'off'}; no object tracking")
+            else:
+                detail += f"; {cue.position} position"
             add("graphic", cue.preset.replace("_", " ").capitalize(), cue.start, cue.end,
-                f"Native picture treatment; {cue.intensity} strength; {cue.position} position; recorded dialogue timing is unchanged.")
+                detail + "; recorded dialogue timing is unchanged and captions stay above the effect.")
         for cue in tools.pointers:
             add("graphic", "Fixed " + cue.shape, cue.start, cue.end, "Fixed coordinates; no object tracking.")
         for cue in tools.music_regions:

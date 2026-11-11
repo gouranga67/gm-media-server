@@ -794,6 +794,8 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
         + editor_effect_instruction()
         + "Use impact_frame as one accent, never a strobe. Use clone_row only for an "
         "explicit request or clearly playful repetition; never fake another person, action or reaction. Leave unused arrays empty. "
+        "Use live_cursor only when visual evidence identifies a genuine on-screen target. Move between normalized safe-frame "
+        "coordinates and use the click pulse only for a real selection or emphasis; never imply an interface action that did not occur. "
         "Pointers are fixed arrows/circles at normalized frame coordinates: use only if the shown object location is clear; "
         "they do not track moving objects. Music regions briefly reduce/mute only the selected music, then restore it, "
         "for a real reaction; never mute or stretch dialogue. Use sparingly around evidence-backed moments, not to meet a quota. "

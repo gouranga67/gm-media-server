@@ -574,7 +574,9 @@ def render_montage_preview(
     events = finish_caption_events(events, plan.finishing)
     from app.subtitle_document import resolve_events, document_fingerprint
     events = resolve_events(context, plan, events)
-    has_overlays = bool(events or (plan.finishing and (plan.finishing.callouts or plan.finishing.pointers)))
+    has_overlays = bool(events or (plan.finishing and (
+        plan.finishing.callouts or plan.finishing.pointers or plan.finishing.visual_beats
+    )))
     if has_overlays:
         _atomic_text(
             captions_ass,
@@ -664,7 +666,9 @@ def render_montage_delivery(
     from app.subtitle_document import resolve_events, document_fingerprint
     events = resolve_events(context, plan, events)
     _atomic_text(captions, render_webvtt(events))
-    has_overlays = bool(events or (plan.finishing and (plan.finishing.callouts or plan.finishing.pointers)))
+    has_overlays = bool(events or (plan.finishing and (
+        plan.finishing.callouts or plan.finishing.pointers or plan.finishing.visual_beats
+    )))
     if has_overlays:
         _atomic_text(
             captions_ass,

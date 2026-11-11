@@ -6,24 +6,33 @@ from dataclasses import dataclass
 from typing import Any
 
 
-EFFECT_REGISTRY_VERSION = 1
+EFFECT_REGISTRY_VERSION = 2
 
 
 @dataclass(frozen=True)
 class EffectParameter:
     key: str
     label: str
-    values: tuple[str, ...]
-    default: str
+    kind: str
+    default: Any
+    values: tuple[Any, ...] = ()
+    minimum: float | None = None
+    maximum: float | None = None
 
     def public(self) -> dict[str, Any]:
-        return {
+        result = {
             "key": self.key,
             "label": self.label,
-            "type": "enum",
-            "values": list(self.values),
+            "type": self.kind,
             "default": self.default,
         }
+        if self.values:
+            result["values"] = list(self.values)
+        if self.minimum is not None:
+            result["minimum"] = self.minimum
+        if self.maximum is not None:
+            result["maximum"] = self.maximum
+        return result
 
 
 @dataclass(frozen=True)
@@ -64,15 +73,22 @@ class EffectDefinition:
 INTENSITY = EffectParameter(
     key="intensity",
     label="Strength",
+    kind="enum",
     values=("subtle", "standard", "strong"),
     default="standard",
 )
 POSITION = EffectParameter(
     key="position",
     label="Position",
+    kind="enum",
     values=("upper", "center", "lower"),
     default="center",
 )
+CURSOR_START_X = EffectParameter("cursor_start_x", "Start horizontal", "number", 0.25, minimum=0.08, maximum=0.92)
+CURSOR_START_Y = EffectParameter("cursor_start_y", "Start vertical", "number", 0.4, minimum=0.1, maximum=0.82)
+CURSOR_END_X = EffectParameter("cursor_end_x", "End horizontal", "number", 0.75, minimum=0.08, maximum=0.92)
+CURSOR_END_Y = EffectParameter("cursor_end_y", "End vertical", "number", 0.4, minimum=0.1, maximum=0.82)
+CURSOR_CLICK = EffectParameter("click", "Click pulse", "boolean", True)
 
 
 EFFECT_DEFINITIONS = (
@@ -97,6 +113,17 @@ EFFECT_DEFINITIONS = (
         maximum_duration_seconds=2.5,
         default_duration_seconds=2.0,
         parameters=(INTENSITY, POSITION),
+    ),
+    EffectDefinition(
+        preset="live_cursor",
+        label="Live cursor",
+        summary="A pointer moves between two safe frame positions with an optional click pulse.",
+        category="pointer",
+        version=1,
+        minimum_duration_seconds=0.4,
+        maximum_duration_seconds=4.0,
+        default_duration_seconds=1.5,
+        parameters=(INTENSITY, CURSOR_START_X, CURSOR_START_Y, CURSOR_END_X, CURSOR_END_Y, CURSOR_CLICK),
     ),
 )
 
@@ -125,6 +152,6 @@ def editor_effect_instruction() -> str:
     )
     return (
         f"Optional finishing.visual_beats from native effect registry v{EFFECT_REGISTRY_VERSION}: "
-        f"{descriptions}. Strength is subtle, standard or strong. Use only a listed position; "
+        f"{descriptions}. Strength is subtle, standard or strong. Use only the parameters listed for that effect; "
         "effects preserve recorded dialogue and render below captions. "
     )

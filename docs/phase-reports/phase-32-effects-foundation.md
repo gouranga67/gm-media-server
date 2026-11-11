@@ -1,6 +1,6 @@
 # Phase 32B — Effects Engine foundation
 
-Implemented in source on 2026-11-11. Container render verification, deployment and real-footage playback acceptance remain pending.
+Implemented, container-verified, deployed and owner-tested on 2026-11-11.
 
 ## Purpose
 
@@ -55,4 +55,4 @@ Before accepting Phase 32B:
 
 ## Next slice
 
-Phase 32C begins with **Live Cursor** as the first new registry entry. It should reuse the same timing, parameter, explicit-submit, manifest and render-test contracts. Letter Dive, Comment Drop, Voice Note, Post Wall and Sketch Words follow one at a time after playback acceptance.
+Phase 32C begins with **Live Cursor** as the first new registry entry. It reuses the same timing, parameter, explicit-submit, manifest and render-test contracts. [The source checkpoint is implemented here](phase-32-live-cursor.md). Letter Dive, Comment Drop, Voice Note, Post Wall and Sketch Words follow one at a time after playback acceptance.

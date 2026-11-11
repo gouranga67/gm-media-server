@@ -2,15 +2,20 @@
 
 import re
 from typing import Literal
-from pydantic import model_serializer, model_validator
+from pydantic import Field, model_serializer, model_validator
 from app.creative_treatments import TreatmentWindow
 from app.effect_registry import effect_definition
 
 
 class VisualBeat(TreatmentWindow):
-    preset: Literal["impact_frame", "clone_row"]
+    preset: Literal["impact_frame", "clone_row", "live_cursor"]
     intensity: Literal["subtle", "standard", "strong"] = "standard"
     position: Literal["upper", "center", "lower"] = "center"
+    cursor_start_x: float | None = Field(default=None, ge=.08, le=.92)
+    cursor_start_y: float | None = Field(default=None, ge=.1, le=.82)
+    cursor_end_x: float | None = Field(default=None, ge=.08, le=.92)
+    cursor_end_y: float | None = Field(default=None, ge=.1, le=.82)
+    click: bool | None = None
 
     @model_validator(mode="after")
     def short_beat(self):
@@ -26,6 +31,11 @@ class VisualBeat(TreatmentWindow):
             raise ValueError(f"{self.preset} has a fixed frame position")
         if position is not None and self.position not in position.values:
             raise ValueError(f"{self.preset} does not support position {self.position}")
+        cursor_values = (self.cursor_start_x, self.cursor_start_y, self.cursor_end_x, self.cursor_end_y, self.click)
+        if self.preset == "live_cursor" and any(value is None for value in cursor_values):
+            raise ValueError("live_cursor requires a bounded start, end and click choice")
+        if self.preset != "live_cursor" and any(value is not None for value in cursor_values):
+            raise ValueError(f"{self.preset} does not accept cursor parameters")
         return self
 
     @model_serializer(mode="wrap")
@@ -35,6 +45,9 @@ class VisualBeat(TreatmentWindow):
             data.pop("intensity", None)
         if data.get("position") == "center":
             data.pop("position", None)
+        for name in ("cursor_start_x", "cursor_start_y", "cursor_end_x", "cursor_end_y", "click"):
+            if data.get(name) is None:
+                data.pop(name, None)
         return data
 
 
@@ -60,7 +73,7 @@ def append_visual_beats(graph, plan, *, width, height):
             }[cue.intensity]
             edge = max(2, round(min(width, height)*edge_ratio))
             parts.append(f"[{base}]drawbox=x=0:y=0:w=iw:h=ih:color=0xF4C95D@{opacity:g}:t={edge}:enable='{active}'[{target}]")
-        else:
+        elif cue.preset == "clone_row":
             # A triptych of the full recorded shot, not person segmentation.
             # Trim work to the requested window. PTS is restored before overlay.
             tile_w = max(2, width//6*2)
@@ -77,5 +90,8 @@ def append_visual_beats(graph, plan, *, width, height):
             parts.append(f"[clone{i}a][clone{i}b][clone{i}c]hstack=inputs=3,setpts=PTS+{cue.start:.3f}/TB[clonerow{i}]")
             parts.append(f"[beatbed{i}]drawbox=x=0:y=0:w=iw:h=ih:color=black@{shade:g}:t=fill:enable='{active}'[clonebed{i}]")
             parts.append(f"[clonebed{i}][clonerow{i}]overlay=x=(W-w)/2:y={y}:eof_action=pass:repeatlast=0:enable='{active}'[{target}]")
+        else:
+            # Live cursor is an ASS vector treatment below dialogue captions.
+            parts.append(f"[{base}]null[{target}]")
     parts.append(f"[beatbase{len(cues)}]{captions or 'null'}[vout]")
     return ";".join(parts)

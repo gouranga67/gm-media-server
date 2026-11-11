@@ -80,6 +80,11 @@ function FinishingForm({
   const [visualBeat, setVisualBeat] = useState<VisualEffectPreset>("impact_frame");
   const [visualBeatIntensity, setVisualBeatIntensity] = useState<VisualEffectIntensity>("standard");
   const [visualBeatPosition, setVisualBeatPosition] = useState<VisualEffectPosition>("center");
+  const [cursorStartX, setCursorStartX] = useState("0.25");
+  const [cursorStartY, setCursorStartY] = useState("0.4");
+  const [cursorEndX, setCursorEndX] = useState("0.75");
+  const [cursorEndY, setCursorEndY] = useState("0.4");
+  const [cursorClick, setCursorClick] = useState(true);
   const [pointerShape, setPointerShape] = useState<"arrow" | "circle">(
     "circle",
   );
@@ -126,6 +131,9 @@ function FinishingForm({
   const positionParameter = effectDefinition?.parameters.find(
     (parameter) => parameter.key === "position",
   );
+  const cursorParameters = effectDefinition?.parameters.filter(
+    (parameter) => parameter.type === "number",
+  ) ?? [];
   function selectEffect(preset: VisualEffectPreset) {
     const definition = inspection?.effect_registry.effects.find(
       (effect) => effect.preset === preset,
@@ -139,6 +147,13 @@ function FinishingForm({
       (definition?.parameters.find((parameter) => parameter.key === "position")
         ?.default ?? "center") as VisualEffectPosition,
     );
+    const value = (key: string, fallback: number) =>
+      definition?.parameters.find((parameter) => parameter.key === key)?.default ?? fallback;
+    setCursorStartX(String(value("cursor_start_x", 0.25)));
+    setCursorStartY(String(value("cursor_start_y", 0.4)));
+    setCursorEndX(String(value("cursor_end_x", 0.75)));
+    setCursorEndY(String(value("cursor_end_y", 0.4)));
+    setCursorClick(Boolean(value("click", 1)));
     setEnd(
       String(
         Number(start) +
@@ -314,19 +329,30 @@ function FinishingForm({
           },
         ],
       };
-    if (tool === "visual_beat")
+    if (tool === "visual_beat") {
+      const effect: NonNullable<FinishingTools["visual_beats"]>[number] = {
+        ...window,
+        preset: visualBeat,
+        intensity: visualBeatIntensity,
+        ...(visualBeat === "clone_row" ? { position: visualBeatPosition } : {}),
+        ...(visualBeat === "live_cursor"
+          ? {
+              cursor_start_x: Number(cursorStartX),
+              cursor_start_y: Number(cursorStartY),
+              cursor_end_x: Number(cursorEndX),
+              cursor_end_y: Number(cursorEndY),
+              click: cursorClick,
+            }
+          : {}),
+      };
       next = {
         ...next,
         visual_beats: [
           ...(next.visual_beats ?? []).filter(outside),
-          {
-            ...window,
-            preset: visualBeat,
-            intensity: visualBeatIntensity,
-            position: visualBeatPosition,
-          },
+          effect,
         ],
       };
+    }
     if (tool === "music_pause")
       next = {
         ...next,
@@ -633,7 +659,7 @@ function FinishingForm({
                     <label className="text-xs">
                       {intensityParameter.label}
                       <select className={control} value={visualBeatIntensity} onChange={(e) => setVisualBeatIntensity(e.currentTarget.value as VisualEffectIntensity)}>
-                        {intensityParameter.values.map((value) => <option value={value} key={value}>{value}</option>)}
+                        {intensityParameter.values?.map((value) => <option value={value} key={value}>{value}</option>)}
                       </select>
                     </label>
                   ) : null}
@@ -641,11 +667,41 @@ function FinishingForm({
                     <label className="text-xs">
                       {positionParameter.label}
                       <select className={control} value={visualBeatPosition} onChange={(e) => setVisualBeatPosition(e.currentTarget.value as VisualEffectPosition)}>
-                        {positionParameter.values.map((value) => <option value={value} key={value}>{value}</option>)}
+                        {positionParameter.values?.map((value) => <option value={value} key={value}>{value}</option>)}
                       </select>
                     </label>
                   ) : null}
                 </div>
+                {visualBeat === "live_cursor" ? (
+                  <div className="space-y-3 rounded-md border border-[#D7D9D3] p-3">
+                    <p className="text-xs leading-5 text-[#666862]">
+                      Coordinates are fractions of the frame. The first point moves to the second; this does not track an object automatically.
+                    </p>
+                    <div className="grid grid-cols-2 gap-3">
+                      {cursorParameters.map((parameter) => {
+                        const state = parameter.key === "cursor_start_x"
+                          ? [cursorStartX, setCursorStartX] as const
+                          : parameter.key === "cursor_start_y"
+                            ? [cursorStartY, setCursorStartY] as const
+                            : parameter.key === "cursor_end_x"
+                              ? [cursorEndX, setCursorEndX] as const
+                              : parameter.key === "cursor_end_y"
+                                ? [cursorEndY, setCursorEndY] as const
+                                : undefined;
+                        return state ? (
+                          <label className="text-xs" key={parameter.key}>
+                            {parameter.label}
+                            <input className={control} min={parameter.minimum} max={parameter.maximum} step="0.01" type="number" required value={state[0]} onChange={(event) => state[1](event.currentTarget.value)} />
+                          </label>
+                        ) : null;
+                      })}
+                    </div>
+                    <label className="flex min-h-11 items-center gap-2 text-xs">
+                      <input type="checkbox" checked={cursorClick} onChange={(event) => setCursorClick(event.currentTarget.checked)} />
+                      Show a click pulse at the destination
+                    </label>
+                  </div>
+                ) : null}
               </div>
             ) : null}
             {tool === "pointer" ? (

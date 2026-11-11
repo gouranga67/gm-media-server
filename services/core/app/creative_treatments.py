@@ -178,4 +178,35 @@ def treatment_events(tools, width, height, captions=(), caption_position="lower_
             tags += f"\\bord1\\frz{angle}"
             path = f"m {-2 * radius} {-radius * 0.25:.1f} l {-radius} {-radius * 0.25:.1f} {-radius} {-radius * 0.6:.1f} 0 0 {-radius} {radius * 0.6:.1f} {-radius} {radius * 0.25:.1f} {-2 * radius} {radius * 0.25:.1f}"
         event(cue, tags + "\\p1", path)
+    for cue in tools.visual_beats:
+        if cue.preset != "live_cursor":
+            continue
+        scale = {"subtle": .75, "standard": 1, "strong": 1.3}[cue.intensity]
+        unit = min(width, height) / 540 * scale
+        start_x, start_y = round(width * cue.cursor_start_x), round(height * cue.cursor_start_y)
+        end_x, end_y = round(width * cue.cursor_end_x), round(height * cue.cursor_end_y)
+        duration_ms = max(1, round((cue.end - cue.start) * 1000))
+        pointer = "m 0 0 l 0 30 7 23 14 39 20 36 13 20 26 20"
+        tags = (
+            f"\\an7\\move({start_x},{start_y},{end_x},{end_y},0,{duration_ms})"
+            f"\\fad(40,80)\\fscx{100 * unit:.1f}\\fscy{100 * unit:.1f}"
+            "\\1c&HFFFFFF&\\3c&H20211F&\\bord1.4\\shad0\\p1"
+        )
+        event(cue, tags, pointer, -1)
+        if cue.click:
+            pulse = cue.model_copy(update={"start": max(cue.start, cue.end - .28)})
+            radius = max(5, round(13 * unit))
+            k = radius * .55228475
+            circle = (
+                f"m {radius} 0 b {radius + k:.1f} 0 {2 * radius} {radius - k:.1f} {2 * radius} {radius} "
+                f"{2 * radius} {radius + k:.1f} {radius + k:.1f} {2 * radius} {radius} {2 * radius} "
+                f"{radius - k:.1f} {2 * radius} 0 {radius + k:.1f} 0 {radius} 0 {radius - k:.1f} "
+                f"{radius - k:.1f} 0 {radius} 0"
+            )
+            pulse_tags = (
+                f"\\an7\\pos({end_x - radius},{end_y - radius})\\fad(20,100)"
+                "\\1a&HFF&\\3c&H60DAFF&\\bord2\\shad0\\fscx55\\fscy55"
+                "\\t(0,220,\\fscx125\\fscy125)\\p1"
+            )
+            event(pulse, pulse_tags, circle, -2)
     return "\n".join(lines) + ("\n" if lines else "")

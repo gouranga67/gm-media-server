@@ -30,7 +30,8 @@ def fixture():
 
 class VisualBeatTests(unittest.TestCase):
     def test_strict_bounded_schema_and_no_empty_legacy_hash_change(self):
-        for value in (dict(start=0,end=.5,preset='impact_frame'),dict(start=0,end=3,preset='clone_row'),dict(start=0,end=1,preset='arbitrary_js')):
+        for value in (dict(start=0,end=.5,preset='impact_frame'),dict(start=0,end=3,preset='clone_row'),
+                      dict(start=0,end=1,preset='live_cursor'),dict(start=0,end=1,preset='arbitrary_js')):
             with self.assertRaises(ValidationError): VisualBeat(**value)
         self.assertNotIn('visual_beats',FinishingTools().model_dump(mode='json'))
         legacy=VisualBeat(start=0,end=.2,preset='impact_frame')
@@ -40,6 +41,14 @@ class VisualBeatTests(unittest.TestCase):
         self.assertEqual(configured.model_dump(mode='json')['position'],'upper')
         with self.assertRaisesRegex(ValidationError,'fixed frame position'):
             VisualBeat(start=0,end=.2,preset='impact_frame',position='upper')
+        live=VisualBeat(start=0,end=1,preset='live_cursor',intensity='strong',
+            cursor_start_x=.2,cursor_start_y=.3,cursor_end_x=.8,cursor_end_y=.6,click=False)
+        self.assertEqual(live.model_dump(mode='json'),dict(start=0,end=1,preset='live_cursor',intensity='strong',
+            cursor_start_x=.2,cursor_start_y=.3,cursor_end_x=.8,cursor_end_y=.6,click=False))
+        with self.assertRaisesRegex(ValidationError,'does not accept cursor parameters'):
+            VisualBeat(start=0,end=.2,preset='impact_frame',click=True)
+        with self.assertRaises(ValidationError):
+            VisualBeat(start=0,end=1,preset='live_cursor',cursor_start_x=0,cursor_start_y=.3,cursor_end_x=.8,cursor_end_y=.6,click=True)
         for recipe in ('talking_head','montage'):
             schema=schema_for_recipe(recipe)['properties']['finishing']['anyOf'][1]
             beat=schema['properties']['visual_beats']['items']
@@ -49,20 +58,28 @@ class VisualBeatTests(unittest.TestCase):
     def test_registry_is_versioned_complete_and_matches_the_schema(self):
         registry=public_effect_registry()
         self.assertEqual(registry['version'],EFFECT_REGISTRY_VERSION)
-        self.assertEqual({item['preset'] for item in registry['effects']},{'impact_frame','clone_row'})
-        self.assertEqual({item.preset for item in EFFECT_DEFINITIONS},{'impact_frame','clone_row'})
+        self.assertEqual(registry['version'],2)
+        self.assertEqual({item['preset'] for item in registry['effects']},{'impact_frame','clone_row','live_cursor'})
+        self.assertEqual({item.preset for item in EFFECT_DEFINITIONS},{'impact_frame','clone_row','live_cursor'})
         for item in registry['effects']:
             self.assertLessEqual(item['minimum_duration_seconds'],item['default_duration_seconds'])
             self.assertLessEqual(item['default_duration_seconds'],item['maximum_duration_seconds'])
             self.assertTrue(item['preserves_dialogue'])
             self.assertTrue(item['captions_above_effect'])
             self.assertFalse(item['requires_segmentation'])
+        live=next(item for item in registry['effects'] if item['preset']=='live_cursor')
+        parameters={item['key']:item for item in live['parameters']}
+        self.assertEqual(set(parameters),{'intensity','cursor_start_x','cursor_start_y','cursor_end_x','cursor_end_y','click'})
+        self.assertEqual(parameters['cursor_start_x']['type'],'number')
+        self.assertEqual((parameters['cursor_start_x']['minimum'],parameters['cursor_start_x']['maximum']),(.08,.92))
+        self.assertEqual(parameters['click'],{'key':'click','label':'Click pulse','type':'boolean','default':True})
 
     def test_registered_parameters_reach_only_the_bounded_filter_values(self):
         plan=fixture()
         plan.finishing.visual_beats=[
             VisualBeat(start=.5,end=.7,preset='impact_frame',intensity='strong'),
             VisualBeat(start=1,end=2,preset='clone_row',intensity='subtle',position='lower'),
+            VisualBeat(start=2.1,end=3.1,preset='live_cursor',cursor_start_x=.2,cursor_start_y=.3,cursor_end_x=.8,cursor_end_y=.6,click=True),
         ]
         graph=append_visual_beats('[picture]null[vout]',plan,width=180,height=320)
         self.assertIn('color=0xF4C95D@1:t=5',graph)
@@ -70,6 +87,19 @@ class VisualBeatTests(unittest.TestCase):
         self.assertIn('overlay=x=(W-w)/2:y=H-h-38',graph)
         self.assertNotIn('subtle',graph)
         self.assertNotIn('lower',graph)
+        self.assertIn('[beatbase2]null[beatbase3]',graph)
+
+    def test_live_cursor_is_an_ass_vector_below_caption_dialogue(self):
+        tools=FinishingTools(visual_beats=[dict(start=.2,end=1.2,preset='live_cursor',intensity='strong',
+            cursor_start_x=.2,cursor_start_y=.25,cursor_end_x=.8,cursor_end_y=.5,click=True)])
+        ass=render_ass([dict(start=0,end=2,text='Caption wins.')],width=180,height=320,treatments=tools)
+        self.assertIn(r'\move(36,80,144,160,0,1000)',ass)
+        self.assertIn(r'\p1}m 0 0 l 0 30',ass)
+        self.assertIn(r'\pos(138,154)',ass)
+        cursor_line=next(line for line in ass.splitlines() if r'\move(36,80,144,160' in line)
+        caption_line=next(line for line in ass.splitlines() if 'Caption wins.' in line)
+        self.assertTrue(cursor_line.startswith('Dialogue: -1,'))
+        self.assertTrue(caption_line.startswith('Dialogue: 0,'))
 
     def test_duration_overlap_budget_removal_and_retiming(self):
         plan=fixture()
@@ -105,7 +135,9 @@ class VisualBeatRenderTests(unittest.TestCase):
             self.ff('-f','lavfi','-i',"color=c=0x254050:s=180x320:r=30:d=3,drawbox=x=60:y=80:w=60:h=120:c=red:t=fill,drawbox=x=60:y=80:w=60:h=120:c=lime:t=fill:enable='gte(t,1.2)'",
                 '-f','lavfi','-i','sine=frequency=440:sample_rate=48000:duration=3','-c:v','libx264','-pix_fmt','yuv420p','-c:a','aac',str(source))
             p=fixture()
-            captions.write_text(render_ass([dict(start=0,end=3,text='Keep speech intact.')],width=180,height=320))
+            p.finishing.visual_beats.insert(0,VisualBeat(start=.1,end=.7,preset='live_cursor',
+                cursor_start_x=.2,cursor_start_y=.15,cursor_end_x=.8,cursor_end_y=.15,click=True))
+            captions.write_text(render_ass([dict(start=0,end=3,text='Keep speech intact.')],width=180,height=320,treatments=p.finishing))
             settings=Settings(database_url='postgresql://unused',upload_hook_secret='x'*32,media_root=root)
             for recipe in ('talking_head','montage'):
                 output=root/f'{recipe}.mp4'
@@ -123,6 +155,8 @@ class VisualBeatRenderTests(unittest.TestCase):
                     return self.ff('-ss',str(t),'-i',str(output),'-frames:v','1','-f','rawvideo','-pix_fmt','rgb24','pipe:1')
                 def pixel(buf,x,y):return tuple(buf[(y*180+x)*3:(y*180+x)*3+3])
                 before,during,after=frame(.5),frame(1.1),frame(1.8)
+                # The moving white cursor is visible near its mid-path point.
+                self.assertGreater(sum(min(pixel(before,x,y))>170 for y in range(42,72) for x in range(100,125)),10)
                 # Three full-shot panels each retain the red subject at x=30,90,150.
                 for x in (30,90,150):
                     self.assertGreater(pixel(during,x,160)[0],130)
