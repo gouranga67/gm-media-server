@@ -49,4 +49,4 @@ Worker-container execution and real playback remain deployment acceptance checks
 
 ## Next slice
 
-Prototype **Dolly Zoom** as a bounded crop-and-scale illusion, with explicit camera-motion limitations and real-shot eligibility checks.
+Prototype **Dolly Zoom** as a bounded crop-and-scale illusion, with explicit camera-motion limitations and real-shot eligibility checks. [Its source checkpoint is implemented here](phase-32-dolly-zoom.md).

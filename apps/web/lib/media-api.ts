@@ -1546,7 +1546,7 @@ export const removeSourceRange = (assetId: string, id: string) => apiRequest(`li
 
 export type FinishingTools = {
   readonly callouts?: readonly { readonly start: number; readonly end: number; readonly text: string; readonly position: "upper" | "middle" | "lower_safe"; readonly style: "label" | "thought" | "counter" | "headline" | "comment"; readonly animation: "fade" | "pop" | "slide_up" }[];
-  readonly visual_beats?: readonly { readonly start: number; readonly end: number; readonly preset: VisualEffectPreset; readonly intensity?: VisualEffectIntensity; readonly position?: VisualEffectPosition; readonly cursor_start_x?: number; readonly cursor_start_y?: number; readonly cursor_end_x?: number; readonly cursor_end_y?: number; readonly click?: boolean; readonly letter_text?: string; readonly comment_text?: string; readonly post_texts?: readonly string[]; readonly sketch_text?: string; readonly focus_start_x?: number; readonly focus_start_y?: number; readonly focus_end_x?: number; readonly focus_end_y?: number; readonly boundary_index?: number; readonly tear_direction?: "left" | "right" }[];
+  readonly visual_beats?: readonly { readonly start: number; readonly end: number; readonly preset: VisualEffectPreset; readonly intensity?: VisualEffectIntensity; readonly position?: VisualEffectPosition; readonly cursor_start_x?: number; readonly cursor_start_y?: number; readonly cursor_end_x?: number; readonly cursor_end_y?: number; readonly click?: boolean; readonly letter_text?: string; readonly comment_text?: string; readonly post_texts?: readonly string[]; readonly sketch_text?: string; readonly focus_start_x?: number; readonly focus_start_y?: number; readonly focus_end_x?: number; readonly focus_end_y?: number; readonly boundary_index?: number; readonly tear_direction?: "left" | "right"; readonly dolly_clip_index?: number; readonly dolly_direction?: "push_in" | "pull_out"; readonly dolly_anchor_x?: number; readonly dolly_anchor_y?: number }[];
   readonly pointers?: readonly { readonly start: number; readonly end: number; readonly x: number; readonly y: number; readonly size: number; readonly shape: "arrow" | "circle"; readonly direction: "right" | "left" | "up" | "down" }[];
   readonly music_regions?: readonly { readonly start: number; readonly end: number; readonly gain_db: number }[];
   readonly audio_joins?: readonly { readonly clip_index: number; readonly lead_seconds: number; readonly tail_seconds: number }[];
@@ -1571,11 +1571,11 @@ export type FinishingTools = {
     readonly framing_applied?: boolean;
     readonly points: readonly { readonly time: number; readonly x: number; readonly y: number; readonly width: number; readonly height: number }[] }[];
 };
-export type VisualEffectPreset = "impact_frame" | "clone_row" | "live_cursor" | "letter_dive" | "comment_drop" | "voice_note" | "post_wall" | "sketch_words" | "rack_focus" | "paper_tear";
+export type VisualEffectPreset = "impact_frame" | "clone_row" | "live_cursor" | "letter_dive" | "comment_drop" | "voice_note" | "post_wall" | "sketch_words" | "rack_focus" | "paper_tear" | "dolly_zoom";
 export type VisualEffectIntensity = "subtle" | "standard" | "strong";
 export type VisualEffectPosition = "upper" | "center" | "lower";
 export type VisualEffectParameter = {
-  readonly key: "intensity" | "position" | "cursor_start_x" | "cursor_start_y" | "cursor_end_x" | "cursor_end_y" | "click" | "letter_text" | "comment_text" | "post_texts" | "sketch_text" | "focus_start_x" | "focus_start_y" | "focus_end_x" | "focus_end_y" | "boundary_index" | "tear_direction";
+  readonly key: "intensity" | "position" | "cursor_start_x" | "cursor_start_y" | "cursor_end_x" | "cursor_end_y" | "click" | "letter_text" | "comment_text" | "post_texts" | "sketch_text" | "focus_start_x" | "focus_start_y" | "focus_end_x" | "focus_end_y" | "boundary_index" | "tear_direction" | "dolly_clip_index" | "dolly_direction" | "dolly_anchor_x" | "dolly_anchor_y";
   readonly label: string;
   readonly type: "enum" | "number" | "boolean" | "text" | "text_list";
   readonly values?: readonly string[];

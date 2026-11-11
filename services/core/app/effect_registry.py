@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 
-EFFECT_REGISTRY_VERSION = 9
+EFFECT_REGISTRY_VERSION = 10
 
 
 @dataclass(frozen=True)
@@ -119,6 +119,12 @@ TEAR_BOUNDARY_INDEX = EffectParameter("boundary_index", "Clip boundary", "number
 TEAR_DIRECTION = EffectParameter(
     "tear_direction", "Pull direction", "enum", "left", values=("left", "right")
 )
+DOLLY_CLIP_INDEX = EffectParameter("dolly_clip_index", "Video clip", "number", 0, minimum=0, maximum=47)
+DOLLY_DIRECTION = EffectParameter(
+    "dolly_direction", "Move", "enum", "push_in", values=("push_in", "pull_out")
+)
+DOLLY_ANCHOR_X = EffectParameter("dolly_anchor_x", "Horizontal anchor", "number", 0.5, minimum=0.3, maximum=0.7)
+DOLLY_ANCHOR_Y = EffectParameter("dolly_anchor_y", "Vertical anchor", "number", 0.5, minimum=0.25, maximum=0.75)
 
 
 EFFECT_DEFINITIONS = (
@@ -231,6 +237,17 @@ EFFECT_DEFINITIONS = (
         maximum_duration_seconds=1.0,
         default_duration_seconds=0.7,
         parameters=(INTENSITY, TEAR_BOUNDARY_INDEX, TEAR_DIRECTION),
+    ),
+    EffectDefinition(
+        preset="dolly_zoom",
+        label="Dolly zoom",
+        summary="A bounded crop-and-scale push or pull over one stable clip; no real camera parallax or depth reconstruction.",
+        category="camera",
+        version=1,
+        minimum_duration_seconds=1.0,
+        maximum_duration_seconds=8.0,
+        default_duration_seconds=2.0,
+        parameters=(INTENSITY, DOLLY_CLIP_INDEX, DOLLY_DIRECTION, DOLLY_ANCHOR_X, DOLLY_ANCHOR_Y),
     ),
 )
 

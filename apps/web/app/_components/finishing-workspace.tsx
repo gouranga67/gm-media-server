@@ -95,6 +95,10 @@ function FinishingForm({
   const [focusEndY, setFocusEndY] = useState("0.55");
   const [tearBoundaryIndex, setTearBoundaryIndex] = useState(1);
   const [tearDirection, setTearDirection] = useState<"left" | "right">("left");
+  const [dollyClipIndex, setDollyClipIndex] = useState(0);
+  const [dollyDirection, setDollyDirection] = useState<"push_in" | "pull_out">("push_in");
+  const [dollyAnchorX, setDollyAnchorX] = useState("0.5");
+  const [dollyAnchorY, setDollyAnchorY] = useState("0.5");
   const [pointerShape, setPointerShape] = useState<"arrow" | "circle">(
     "circle",
   );
@@ -157,6 +161,19 @@ function FinishingForm({
       incomingDuration: incoming.duration,
     }] : [];
   });
+  const dollyClips = clips.flatMap((clip, index) => {
+    const at = clips.slice(0, index).reduce((total, item) => total + item.duration, 0);
+    const endAt = at + clip.duration;
+    const settings = inspection?.settings;
+    const hasCameraConflict = clip.visual_preset !== "standard"
+      || settings?.motions.some((motion) => motion.clip_index === index)
+      || (settings?.smart_framing === "face" && settings.visual_profiles?.some((profile) => profile.clip_index === index))
+      || settings?.product_profiles?.some((profile) => profile.clip_index === index);
+    const hasLayerConflict = settings?.layers.some((layer) => layer.start < endAt && layer.end > at);
+    return clip.media_kind === "video" && clip.duration >= 1 && clip.duration <= 8 && !hasCameraConflict && !hasLayerConflict
+      ? [{ clipIndex: index, at, endAt, name: clip.source_name, duration: clip.duration }]
+      : [];
+  });
   function selectEffect(preset: VisualEffectPreset) {
     const definition = inspection?.effect_registry.effects.find(
       (effect) => effect.preset === preset,
@@ -195,11 +212,20 @@ function FinishingForm({
     setTearDirection(
       (definition?.parameters.find((parameter) => parameter.key === "tear_direction")?.default ?? "left") as "left" | "right",
     );
+    setDollyDirection(
+      (definition?.parameters.find((parameter) => parameter.key === "dolly_direction")?.default ?? "push_in") as "push_in" | "pull_out",
+    );
+    setDollyAnchorX(String(value("dolly_anchor_x", 0.5)));
+    setDollyAnchorY(String(value("dolly_anchor_y", 0.5)));
     const duration = definition?.default_duration_seconds ?? (preset === "impact_frame" ? 0.2 : 2);
     if (preset === "paper_tear" && clipBoundaries[0]) {
       setTearBoundaryIndex(clipBoundaries[0].boundaryIndex);
       setStart(String(Number(clipBoundaries[0].at.toFixed(3))));
       setEnd(String(Number((clipBoundaries[0].at + Math.min(duration, clipBoundaries[0].incomingDuration)).toFixed(3))));
+    } else if (preset === "dolly_zoom" && dollyClips[0]) {
+      setDollyClipIndex(dollyClips[0].clipIndex);
+      setStart(String(Number(dollyClips[0].at.toFixed(3))));
+      setEnd(String(Number(dollyClips[0].endAt.toFixed(3))));
     } else {
       setEnd(String(Number(start) + duration));
     }
@@ -401,6 +427,14 @@ function FinishingForm({
         ...(visualBeat === "paper_tear"
           ? { boundary_index: tearBoundaryIndex, tear_direction: tearDirection }
           : {}),
+        ...(visualBeat === "dolly_zoom"
+          ? {
+              dolly_clip_index: dollyClipIndex,
+              dolly_direction: dollyDirection,
+              dolly_anchor_x: Number(dollyAnchorX),
+              dolly_anchor_y: Number(dollyAnchorY),
+            }
+          : {}),
       };
       next = {
         ...next,
@@ -522,7 +556,7 @@ function FinishingForm({
                     type="number"
                     required
                     value={start}
-                    readOnly={tool === "visual_beat" && visualBeat === "paper_tear"}
+                    readOnly={tool === "visual_beat" && (visualBeat === "paper_tear" || visualBeat === "dolly_zoom")}
                     onChange={(e) => setStart(e.currentTarget.value)}
                   />
                 </label>
@@ -536,6 +570,7 @@ function FinishingForm({
                     type="number"
                     required
                     value={end}
+                    readOnly={tool === "visual_beat" && visualBeat === "dolly_zoom"}
                     onChange={(e) => setEnd(e.currentTarget.value)}
                   />
                 </label>
@@ -826,6 +861,49 @@ function FinishingForm({
                       </div>
                     ) : (
                       <p className="text-xs font-bold text-[#A23B2A]">Paper Tear needs two clips joined by an ordinary cut, with at least 0.4 seconds in the incoming clip.</p>
+                    )}
+                  </div>
+                ) : null}
+                {visualBeat === "dolly_zoom" ? (
+                  <div className="space-y-3 rounded-md border border-[#D7D9D3] p-3">
+                    <p className="text-xs leading-5 text-[#666862]">
+                      This is a crop-and-scale illusion over one complete stable video clip. It cannot reproduce real camera parallax, reconstruct depth or lock a subject automatically. Choose an anchor that remains visible throughout the shot; later timeline changes remove the effect for safety.
+                    </p>
+                    {dollyClips.length ? (
+                      <div className="grid grid-cols-2 gap-3">
+                        <label className="col-span-2 text-xs">
+                          Stable video clip
+                          <select className={control} value={dollyClipIndex} onChange={(event) => {
+                            const clipIndex = Number(event.currentTarget.value);
+                            const selected = dollyClips.find((item) => item.clipIndex === clipIndex);
+                            setDollyClipIndex(clipIndex);
+                            if (selected) {
+                              setStart(String(Number(selected.at.toFixed(3))));
+                              setEnd(String(Number(selected.endAt.toFixed(3))));
+                            }
+                          }}>
+                            {dollyClips.map((clip) => <option value={clip.clipIndex} key={clip.clipIndex}>Clip {clip.clipIndex + 1} · {clip.name} · {clip.duration.toFixed(2)}s</option>)}
+                          </select>
+                        </label>
+                        <label className="text-xs">
+                          Move
+                          <select className={control} value={dollyDirection} onChange={(event) => setDollyDirection(event.currentTarget.value as "push_in" | "pull_out")}>
+                            <option value="push_in">Push in</option>
+                            <option value="pull_out">Pull out</option>
+                          </select>
+                        </label>
+                        <span />
+                        <label className="text-xs">
+                          Horizontal anchor
+                          <input className={control} min={0.3} max={0.7} step="0.01" type="number" required value={dollyAnchorX} onChange={(event) => setDollyAnchorX(event.currentTarget.value)} />
+                        </label>
+                        <label className="text-xs">
+                          Vertical anchor
+                          <input className={control} min={0.25} max={0.75} step="0.01" type="number" required value={dollyAnchorY} onChange={(event) => setDollyAnchorY(event.currentTarget.value)} />
+                        </label>
+                      </div>
+                    ) : (
+                      <p className="text-xs font-bold text-[#A23B2A]">Dolly Zoom needs a 1–8 second video clip without another camera move, tracked crop or overlapping picture layer.</p>
                     )}
                   </div>
                 ) : null}
@@ -1133,6 +1211,7 @@ function FinishingForm({
               disabled={
                 busy ||
                 (tool === "visual_beat" && visualBeat === "paper_tear" && clipBoundaries.length === 0) ||
+                (tool === "visual_beat" && visualBeat === "dolly_zoom" && dollyClips.length === 0) ||
                 ((tool === "audio" ||
                   tool === "captions" ||
                   tool === "layer" ||

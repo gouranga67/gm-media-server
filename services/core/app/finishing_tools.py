@@ -309,6 +309,30 @@ def validate_finishing(
                 raise ValueError("paper_tear must finish inside the incoming clip")
             if plan.clips[beat.boundary_index].transition != "cut":
                 raise ValueError("paper_tear cannot replace or overlap another transition")
+        if beat.preset == "dolly_zoom":
+            if beat.dolly_clip_index is None or beat.dolly_clip_index >= len(plan.clips):
+                raise ValueError("dolly_zoom must identify an existing video clip")
+            clip = plan.clips[beat.dolly_clip_index]
+            clip_start = sum(durations[: beat.dolly_clip_index])
+            clip_end = clip_start + durations[beat.dolly_clip_index]
+            if abs(beat.start - clip_start) > .01 or abs(beat.end - clip_end) > .01:
+                raise ValueError("dolly_zoom must cover exactly one complete clip")
+            if getattr(clip, "media_kind", "video") != "video":
+                raise ValueError("dolly_zoom requires recorded video, not a still image")
+            if clip.visual_preset != "standard" or any(
+                motion.clip_index == beat.dolly_clip_index for motion in tools.motions
+            ):
+                raise ValueError("dolly_zoom cannot stack with another camera move")
+            if (
+                tools.smart_framing == "face"
+                and any(profile.clip_index == beat.dolly_clip_index for profile in tools.visual_profiles)
+            ) or any(profile.clip_index == beat.dolly_clip_index for profile in tools.product_profiles):
+                raise ValueError("dolly_zoom cannot stack with tracked reframing")
+            if any(layer.start < beat.end and layer.end > beat.start for layer in tools.layers) or any(
+                cue.start_seconds < beat.end and cue.start_seconds + cue.duration_seconds > beat.start
+                for cue in plan.broll
+            ):
+                raise ValueError("dolly_zoom cannot cover another picture layer")
         if beat.preset in {"comment_drop", "voice_note", "post_wall", "sketch_words"} and any(
             callout.start < beat.end and callout.end > beat.start for callout in tools.callouts
         ):
@@ -768,9 +792,9 @@ def retime_finishing(
     for name in ("audio_regions", "caption_regions", "layers", "callouts", "pointers", "music_regions", "visual_beats"):
         result = []
         for region in data.get(name, []):
-            if name == "visual_beats" and region.get("preset") == "paper_tear":
-                # A paper tear belongs to an exact saved clip boundary. Any
-                # trim, reorder or source replacement requires choosing it again.
+            if name == "visual_beats" and region.get("preset") in {"paper_tear", "dolly_zoom"}:
+                # These effects belong to an exact saved boundary or complete
+                # shot. Any timeline change requires choosing them again.
                 continue
             for old_start, old_end, new_start in mapping:
                 start, end = (

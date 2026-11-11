@@ -163,7 +163,7 @@ globalThis.fetch = async (url, options = {}) => {
     if (alternativeFailure) return {ok:false,status:409,json:async()=>({detail:"This alternative could not be queued. Your original is unchanged."})};
     payload={id:"alternative",version:3,status:"pending"};
   }
-  else if (route === `jobs/${jobId}/finishing-tools`) payload = { version: 2, settings: { motions:[],colours:[],audio_regions:[],caption_regions:[],layers:[],music_start_seconds:0,voice_denoise:false,audio_joins:[] }, effect_registry:{version:9,effects:[
+  else if (route === `jobs/${jobId}/finishing-tools`) payload = { version: 2, settings: { motions:[],colours:[],audio_regions:[],caption_regions:[],layers:[],music_start_seconds:0,voice_denoise:false,audio_joins:[] }, effect_registry:{version:10,effects:[
     {preset:"impact_frame",label:"Impact frame",summary:"A single accent border for a meaningful visual beat.",category:"accent",version:1,minimum_duration_seconds:.1,maximum_duration_seconds:.25,default_duration_seconds:.2,parameters:[{key:"intensity",label:"Strength",type:"enum",values:["subtle","standard","strong"],default:"standard"}],preserves_dialogue:true,captions_above_effect:true,requires_segmentation:false},
     {preset:"clone_row",label:"Clone row",summary:"Three live copies of the complete recorded shot; no person cutout.",category:"layout",version:1,minimum_duration_seconds:.1,maximum_duration_seconds:2.5,default_duration_seconds:2,parameters:[{key:"intensity",label:"Strength",type:"enum",values:["subtle","standard","strong"],default:"standard"},{key:"position",label:"Position",type:"enum",values:["upper","center","lower"],default:"center"}],preserves_dialogue:true,captions_above_effect:true,requires_segmentation:false},
     {preset:"live_cursor",label:"Live cursor",summary:"A pointer moves between two safe frame positions with an optional click pulse.",category:"pointer",version:1,minimum_duration_seconds:.4,maximum_duration_seconds:4,default_duration_seconds:1.5,parameters:[{key:"intensity",label:"Strength",type:"enum",values:["subtle","standard","strong"],default:"standard"},{key:"cursor_start_x",label:"Start horizontal",type:"number",minimum:.08,maximum:.92,default:.25},{key:"cursor_start_y",label:"Start vertical",type:"number",minimum:.1,maximum:.82,default:.4},{key:"cursor_end_x",label:"End horizontal",type:"number",minimum:.08,maximum:.92,default:.75},{key:"cursor_end_y",label:"End vertical",type:"number",minimum:.1,maximum:.82,default:.4},{key:"click",label:"Click pulse",type:"boolean",default:true}],preserves_dialogue:true,captions_above_effect:true,requires_segmentation:false},
@@ -173,7 +173,8 @@ globalThis.fetch = async (url, options = {}) => {
     {preset:"post_wall",label:"Post wall",summary:"Two or three source-backed idea cards build into a staggered wall without fake social metadata.",category:"social",version:1,minimum_duration_seconds:1.2,maximum_duration_seconds:5,default_duration_seconds:3,parameters:[{key:"intensity",label:"Strength",type:"enum",values:["subtle","standard","strong"],default:"standard"},{key:"post_texts",label:"Source-backed cards",type:"text_list",default:[],minimum_items:2,maximum_items:3,item_maximum_length:42}],preserves_dialogue:true,captions_above_effect:true,requires_segmentation:false},
     {preset:"sketch_words",label:"Sketch words",summary:"One to three source-backed words draw on with marker-like lettering and accent strokes.",category:"typography",version:1,minimum_duration_seconds:.8,maximum_duration_seconds:3,default_duration_seconds:1.6,parameters:[{key:"intensity",label:"Strength",type:"enum",values:["subtle","standard","strong"],default:"standard"},{key:"position",label:"Position",type:"enum",values:["upper","center","lower"],default:"center"},{key:"sketch_text",label:"Words",type:"text",minimum_length:1,maximum_length:24,default:""}],preserves_dialogue:true,captions_above_effect:true,requires_segmentation:false},
     {preset:"rack_focus",label:"Rack focus",summary:"A simulated sharp focus window moves across a softly blurred stable shot; no depth detection.",category:"camera",version:1,minimum_duration_seconds:1,maximum_duration_seconds:4,default_duration_seconds:2,parameters:[{key:"intensity",label:"Strength",type:"enum",values:["subtle","standard","strong"],default:"standard"},{key:"focus_start_x",label:"Start horizontal",type:"number",minimum:.3,maximum:.7,default:.35},{key:"focus_start_y",label:"Start vertical",type:"number",minimum:.18,maximum:.82,default:.35},{key:"focus_end_x",label:"End horizontal",type:"number",minimum:.3,maximum:.7,default:.65},{key:"focus_end_y",label:"End vertical",type:"number",minimum:.18,maximum:.82,default:.55}],preserves_dialogue:true,captions_above_effect:true,requires_segmentation:false},
-    {preset:"paper_tear",label:"Paper tear",summary:"The outgoing clip tears away in staggered paper strips to reveal the next real clip.",category:"transition",version:1,minimum_duration_seconds:.4,maximum_duration_seconds:1,default_duration_seconds:.7,parameters:[{key:"intensity",label:"Strength",type:"enum",values:["subtle","standard","strong"],default:"standard"},{key:"boundary_index",label:"Clip boundary",type:"number",minimum:1,maximum:47,default:1},{key:"tear_direction",label:"Pull direction",type:"enum",values:["left","right"],default:"left"}],preserves_dialogue:true,captions_above_effect:true,requires_segmentation:false}
+    {preset:"paper_tear",label:"Paper tear",summary:"The outgoing clip tears away in staggered paper strips to reveal the next real clip.",category:"transition",version:1,minimum_duration_seconds:.4,maximum_duration_seconds:1,default_duration_seconds:.7,parameters:[{key:"intensity",label:"Strength",type:"enum",values:["subtle","standard","strong"],default:"standard"},{key:"boundary_index",label:"Clip boundary",type:"number",minimum:1,maximum:47,default:1},{key:"tear_direction",label:"Pull direction",type:"enum",values:["left","right"],default:"left"}],preserves_dialogue:true,captions_above_effect:true,requires_segmentation:false},
+    {preset:"dolly_zoom",label:"Dolly zoom",summary:"A bounded crop-and-scale push or pull over one stable clip; no real camera parallax or depth reconstruction.",category:"camera",version:1,minimum_duration_seconds:1,maximum_duration_seconds:8,default_duration_seconds:2,parameters:[{key:"intensity",label:"Strength",type:"enum",values:["subtle","standard","strong"],default:"standard"},{key:"dolly_clip_index",label:"Video clip",type:"number",minimum:0,maximum:47,default:0},{key:"dolly_direction",label:"Move",type:"enum",values:["push_in","pull_out"],default:"push_in"},{key:"dolly_anchor_x",label:"Horizontal anchor",type:"number",minimum:.3,maximum:.7,default:.5},{key:"dolly_anchor_y",label:"Vertical anchor",type:"number",minimum:.25,maximum:.75,default:.5}],preserves_dialogue:true,captions_above_effect:true,requires_segmentation:false}
   ]}, sources:[{ asset_id:serverId,name:"Review image",media_kind:"image",duration_seconds:0 }], product_tracking_candidates:Array.from({length:3},(_,clip_index)=>({clip_index,asset_id:serverId,duration_seconds:3,source_in:2,source_out:5,eligible:true,note:""})), stabilization_candidates:Array.from({length:6},(_,clip_index)=>({clip_index,asset_id:serverId,duration_seconds:clip_index===5?14:3,source_in:0,source_out:clip_index===5?14:3,eligible:clip_index!==5,note:clip_index===5?"Choose a 1–8 second shot":""})) };
   else if (route === "concepts/library-status") payload = { unique_sources: 3, catalogued_sources: 3, spoken_sources: 2, visually_indexed_sources: 3, still_processing: 0 };
   else if (route === "concepts" && (options.method ?? "GET") === "GET") payload = conceptHistory;
@@ -1497,7 +1498,7 @@ test("native visual effects are explicit local tools and never render on selecti
   assert.match(document.body.textContent,/Visual effect \/ animation/);
   await chooseOption("select", "visual_beat");
   assert.match(document.body.textContent,/single accent border for a meaningful visual beat/);
-  assert.match(document.body.textContent,/Registry v9/);
+  assert.match(document.body.textContent,/Registry v10/);
   const preset=document.querySelectorAll("select")[1];
   await act(async()=>{preset.value="clone_row";preset.dispatchEvent(new Event("change",{bubbles:true}));});
   assert.match(document.body.textContent,/no person cutout/);
@@ -1667,6 +1668,39 @@ test("Paper Tear binds itself to a real cut and preserves explicit submission", 
   await act(async()=>document.querySelector("form").dispatchEvent(new Event("submit",{bubbles:true,cancelable:true})));
   const request=posts(`jobs/${jobId}/revisions`).at(-1).body;
   assert.deepEqual(request.finishing_settings.visual_beats,[{start:1,end:1.7,preset:"paper_tear",intensity:"standard",boundary_index:1,tear_direction:"right"}]);
+});
+
+test("Dolly Zoom binds a bounded illusion to one complete stable video clip", async () => {
+  const revisionCount=posts(`jobs/${jobId}/revisions`).length;
+  const clips=[
+    {clip_id:"one",duration:2,source_in:0,source_out:2,source_name:"Stable presenter",media_kind:"video",transition:"cut",visual_preset:"standard"},
+    {clip_id:"two",duration:1.5,source_in:2,source_out:3.5,source_name:"Second shot",media_kind:"video",transition:"cut",visual_preset:"standard"},
+  ];
+  await act(async () => root.render(React.createElement(FinishingWorkspace, { jobId, version: 2, clips, onUpdated: () => {} })));
+  await click(document.querySelector("summary"));
+  await waitFor(() => document.querySelector("select"));
+  await chooseOption("select", "visual_beat");
+  const preset=document.querySelectorAll("select")[1];
+  await act(async()=>{preset.value="dolly_zoom";preset.dispatchEvent(new Event("change",{bubbles:true}));});
+  assert.match(document.body.textContent,/cannot reproduce real camera parallax/);
+  assert.match(document.body.textContent,/Stable presenter/);
+  const times=[...document.querySelectorAll('input[type="number"]')].slice(0,2);
+  assert.deepEqual(times.map(input=>input.value),["0","2"]);
+  assert.equal(times[0].readOnly,true);assert.equal(times[1].readOnly,true);
+  const strength=[...document.querySelectorAll("select")].find(select=>[...select.options].some(option=>option.value==="strong"));
+  const direction=[...document.querySelectorAll("select")].find(select=>[...select.options].some(option=>option.value==="pull_out"));
+  const anchors=[...document.querySelectorAll('input[type="number"]')].slice(2,4);
+  const valueSetter=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,"value").set;
+  await act(async()=>{
+    strength.value="strong";strength.dispatchEvent(new Event("change",{bubbles:true}));
+    direction.value="pull_out";direction.dispatchEvent(new Event("change",{bubbles:true}));
+    valueSetter.call(anchors[0],"0.45");anchors[0].dispatchEvent(new Event("input",{bubbles:true}));
+    valueSetter.call(anchors[1],"0.55");anchors[1].dispatchEvent(new Event("input",{bubbles:true}));
+  });
+  assert.equal(posts(`jobs/${jobId}/revisions`).length,revisionCount);
+  await act(async()=>document.querySelector("form").dispatchEvent(new Event("submit",{bubbles:true,cancelable:true})));
+  const request=posts(`jobs/${jobId}/revisions`).at(-1).body;
+  assert.deepEqual(request.finishing_settings.visual_beats,[{start:0,end:2,preset:"dolly_zoom",intensity:"strong",dolly_clip_index:0,dolly_direction:"pull_out",dolly_anchor_x:.45,dolly_anchor_y:.55}]);
 });
 
 

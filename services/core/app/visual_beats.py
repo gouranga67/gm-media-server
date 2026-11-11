@@ -8,7 +8,7 @@ from app.effect_registry import effect_definition
 
 
 class VisualBeat(TreatmentWindow):
-    preset: Literal["impact_frame", "clone_row", "live_cursor", "letter_dive", "comment_drop", "voice_note", "post_wall", "sketch_words", "rack_focus", "paper_tear"]
+    preset: Literal["impact_frame", "clone_row", "live_cursor", "letter_dive", "comment_drop", "voice_note", "post_wall", "sketch_words", "rack_focus", "paper_tear", "dolly_zoom"]
     intensity: Literal["subtle", "standard", "strong"] = "standard"
     position: Literal["upper", "center", "lower"] = "center"
     cursor_start_x: float | None = Field(default=None, ge=.08, le=.92)
@@ -26,6 +26,10 @@ class VisualBeat(TreatmentWindow):
     focus_end_y: float | None = Field(default=None, ge=.18, le=.82)
     boundary_index: int | None = Field(default=None, ge=1, le=47)
     tear_direction: Literal["left", "right"] | None = None
+    dolly_clip_index: int | None = Field(default=None, ge=0, le=47)
+    dolly_direction: Literal["push_in", "pull_out"] | None = None
+    dolly_anchor_x: float | None = Field(default=None, ge=.3, le=.7)
+    dolly_anchor_y: float | None = Field(default=None, ge=.25, le=.75)
 
     @field_validator("letter_text", "comment_text", "sketch_text")
     @classmethod
@@ -102,6 +106,12 @@ class VisualBeat(TreatmentWindow):
                 raise ValueError("paper_tear requires a clip boundary and pull direction")
         elif self.boundary_index is not None or self.tear_direction is not None:
             raise ValueError(f"{self.preset} does not accept paper tear parameters")
+        dolly_values = (self.dolly_clip_index, self.dolly_direction, self.dolly_anchor_x, self.dolly_anchor_y)
+        if self.preset == "dolly_zoom":
+            if any(value is None for value in dolly_values):
+                raise ValueError("dolly_zoom requires one clip, direction and bounded anchor")
+        elif any(value is not None for value in dolly_values):
+            raise ValueError(f"{self.preset} does not accept dolly zoom parameters")
         return self
 
     @model_serializer(mode="wrap")
@@ -111,7 +121,7 @@ class VisualBeat(TreatmentWindow):
             data.pop("intensity", None)
         if data.get("position") == "center":
             data.pop("position", None)
-        for name in ("cursor_start_x", "cursor_start_y", "cursor_end_x", "cursor_end_y", "click", "letter_text", "comment_text", "post_texts", "sketch_text", "focus_start_x", "focus_start_y", "focus_end_x", "focus_end_y", "boundary_index", "tear_direction"):
+        for name in ("cursor_start_x", "cursor_start_y", "cursor_end_x", "cursor_end_y", "click", "letter_text", "comment_text", "post_texts", "sketch_text", "focus_start_x", "focus_start_y", "focus_end_x", "focus_end_y", "boundary_index", "tear_direction", "dolly_clip_index", "dolly_direction", "dolly_anchor_x", "dolly_anchor_y"):
             if data.get(name) is None:
                 data.pop(name, None)
         return data
@@ -232,6 +242,30 @@ def append_visual_beats(graph, plan, *, width, height):
                     f"enable='{active}'[{next_base}]"
                 )
                 current = next_base
+        elif cue.preset == "dolly_zoom":
+            # Honest dolly-style illusion: animate only a full-frame crop and
+            # scale around a fixed anchor. There is no parallax, depth model,
+            # subject segmentation or physical camera reconstruction.
+            amount = {"subtle": .08, "standard": .14, "strong": .20}[cue.intensity]
+            duration = cue.end - cue.start
+            progress = f"min(max((t-{cue.start:.3f})/{duration:.3f}\\,0)\\,1)"
+            zoom = (
+                f"1+{amount:.2f}*{progress}"
+                if cue.dolly_direction == "push_in"
+                else f"1+{amount:.2f}*(1-{progress})"
+            )
+            scaled_w = f"trunc({width}*({zoom})/2)*2"
+            scaled_h = f"trunc({height}*({zoom})/2)*2"
+            parts.append(f"[{base}]split=2[dollybed{i}][dollysource{i}]")
+            parts.append(
+                f"[dollysource{i}]scale=w='{scaled_w}':h='{scaled_h}':eval=frame,"
+                f"crop=w={width}:h={height}:x='(iw-ow)*{cue.dolly_anchor_x:.4f}':"
+                f"y='(ih-oh)*{cue.dolly_anchor_y:.4f}',setsar=1[dollyframe{i}]"
+            )
+            parts.append(
+                f"[dollybed{i}][dollyframe{i}]overlay=x=0:y=0:eof_action=pass:repeatlast=0:"
+                f"enable='{active}'[{target}]"
+            )
         else:
             # Typography/pointer effects are ASS treatments below dialogue captions.
             parts.append(f"[{base}]null[{target}]")

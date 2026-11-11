@@ -86,6 +86,10 @@ def treatment_timeline(context, plan):
             elif cue.preset == "paper_tear":
                 detail += (f"; exact boundary before clip {cue.boundary_index + 1}; pulls {cue.tear_direction}; "
                            "frozen outgoing frame reveals the real incoming clip")
+            elif cue.preset == "dolly_zoom":
+                detail += (f"; complete clip {cue.dolly_clip_index + 1}; {cue.dolly_direction.replace('_', ' ')} "
+                           f"around fixed anchor {cue.dolly_anchor_x:.2f},{cue.dolly_anchor_y:.2f}; "
+                           "crop-and-scale illusion only, with no camera parallax or depth reconstruction")
             else:
                 detail += f"; {cue.position} position"
             add("graphic", cue.preset.replace("_", " ").capitalize(), cue.start, cue.end,

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read-only Phase 32J effect-registry check; no render or model request."""
+"""Read-only Phase 32K effect-registry check; no render or model request."""
 
 import json
 from pathlib import Path
@@ -11,8 +11,8 @@ def main():
     request = runpy.run_path(str(Path(__file__).with_name("verify-phase14.py")))["request"]
     registry = request("effects/registry")
     effects = {effect.get("preset"): effect for effect in registry.get("effects", [])}
-    if registry.get("version") != 9 or set(effects) != {"impact_frame", "clone_row", "live_cursor", "letter_dive", "comment_drop", "voice_note", "post_wall", "sketch_words", "rack_focus", "paper_tear"}:
-        raise RuntimeError("deploy the Phase 32J native effects registry")
+    if registry.get("version") != 10 or set(effects) != {"impact_frame", "clone_row", "live_cursor", "letter_dive", "comment_drop", "voice_note", "post_wall", "sketch_words", "rack_focus", "paper_tear", "dolly_zoom"}:
+        raise RuntimeError("deploy the Phase 32K native effects registry")
     expected = {
         "impact_frame": (0.1, 0.25, {"intensity"}),
         "clone_row": (0.1, 2.5, {"intensity", "position"}),
@@ -24,6 +24,7 @@ def main():
         "sketch_words": (0.8, 3.0, {"intensity", "position", "sketch_text"}),
         "rack_focus": (1.0, 4.0, {"intensity", "focus_start_x", "focus_start_y", "focus_end_x", "focus_end_y"}),
         "paper_tear": (0.4, 1.0, {"intensity", "boundary_index", "tear_direction"}),
+        "dolly_zoom": (1.0, 8.0, {"intensity", "dolly_clip_index", "dolly_direction", "dolly_anchor_x", "dolly_anchor_y"}),
     }
     for preset, (minimum, maximum, parameter_keys) in expected.items():
         effect = effects[preset]
@@ -78,6 +79,11 @@ def main():
         raise RuntimeError("the Paper Tear boundary contract is incomplete")
     if tear["tear_direction"].get("values") != ["left", "right"] or tear["tear_direction"].get("default") != "left":
         raise RuntimeError("the Paper Tear direction contract is incomplete")
+    dolly = {parameter["key"]: parameter for parameter in effects["dolly_zoom"]["parameters"]}
+    if dolly["dolly_direction"].get("values") != ["push_in", "pull_out"] or dolly["dolly_direction"].get("default") != "push_in":
+        raise RuntimeError("the Dolly Zoom direction contract is incomplete")
+    if (dolly["dolly_anchor_x"].get("minimum"), dolly["dolly_anchor_x"].get("maximum"), dolly["dolly_anchor_y"].get("minimum"), dolly["dolly_anchor_y"].get("maximum")) != (0.3, 0.7, 0.25, 0.75):
+        raise RuntimeError("the Dolly Zoom anchor contract is incomplete")
     print(json.dumps({
         "status": "passed",
         "registry_version": registry["version"],
@@ -87,12 +93,12 @@ def main():
         "model_calls": 0,
         "note": "Synthetic and real-footage playback remain separate acceptance checks.",
     }, indent=2))
-    print("PASS  Paper Tear registry contract is deployed; no editing work started.")
+    print("PASS  Dolly Zoom registry contract is deployed; no editing work started.")
 
 
 if __name__ == "__main__":
     try:
         main()
     except Exception as error:
-        print(f"Phase 32J verification failed: {error}", file=sys.stderr)
+        print(f"Phase 32K verification failed: {error}", file=sys.stderr)
         raise SystemExit(1)

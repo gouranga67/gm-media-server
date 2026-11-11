@@ -38,6 +38,7 @@ class VisualBeatTests(unittest.TestCase):
                       dict(start=0,end=1.5,preset='sketch_words'),
                       dict(start=0,end=2,preset='rack_focus'),
                       dict(start=0,end=.7,preset='paper_tear'),
+                      dict(start=0,end=2,preset='dolly_zoom'),
                       dict(start=0,end=1,preset='arbitrary_js')):
             with self.assertRaises(ValidationError): VisualBeat(**value)
         self.assertNotIn('visual_beats',FinishingTools().model_dump(mode='json'))
@@ -99,6 +100,13 @@ class VisualBeatTests(unittest.TestCase):
             VisualBeat(start=1,end=1.7,preset='paper_tear',boundary_index=1)
         with self.assertRaisesRegex(ValidationError,'does not accept paper tear parameters'):
             VisualBeat(start=0,end=.2,preset='impact_frame',boundary_index=1)
+        dolly=VisualBeat(start=0,end=2,preset='dolly_zoom',intensity='strong',dolly_clip_index=0,
+            dolly_direction='pull_out',dolly_anchor_x=.4,dolly_anchor_y=.6)
+        self.assertEqual(dolly.model_dump(mode='json')['dolly_direction'],'pull_out')
+        with self.assertRaisesRegex(ValidationError,'requires one clip'):
+            VisualBeat(start=0,end=2,preset='dolly_zoom',dolly_clip_index=0,dolly_direction='push_in')
+        with self.assertRaisesRegex(ValidationError,'does not accept dolly zoom parameters'):
+            VisualBeat(start=0,end=.2,preset='impact_frame',dolly_clip_index=0)
         for recipe in ('talking_head','montage'):
             schema=schema_for_recipe(recipe)['properties']['finishing']['anyOf'][1]
             beat=schema['properties']['visual_beats']['items']
@@ -108,8 +116,8 @@ class VisualBeatTests(unittest.TestCase):
     def test_registry_is_versioned_complete_and_matches_the_schema(self):
         registry=public_effect_registry()
         self.assertEqual(registry['version'],EFFECT_REGISTRY_VERSION)
-        self.assertEqual(registry['version'],9)
-        expected={'impact_frame','clone_row','live_cursor','letter_dive','comment_drop','voice_note','post_wall','sketch_words','rack_focus','paper_tear'}
+        self.assertEqual(registry['version'],10)
+        expected={'impact_frame','clone_row','live_cursor','letter_dive','comment_drop','voice_note','post_wall','sketch_words','rack_focus','paper_tear','dolly_zoom'}
         self.assertEqual({item['preset'] for item in registry['effects']},expected)
         self.assertEqual({item.preset for item in EFFECT_DEFINITIONS},expected)
         for item in registry['effects']:
@@ -153,6 +161,12 @@ class VisualBeatTests(unittest.TestCase):
         self.assertEqual((tear['minimum_duration_seconds'],tear['default_duration_seconds'],tear['maximum_duration_seconds']),(.4,.7,1))
         self.assertEqual(parameters['boundary_index'],{'key':'boundary_index','label':'Clip boundary','type':'number','default':1,'minimum':1,'maximum':47})
         self.assertEqual(parameters['tear_direction']['values'],['left','right'])
+        dolly=next(item for item in registry['effects'] if item['preset']=='dolly_zoom')
+        parameters={item['key']:item for item in dolly['parameters']}
+        self.assertEqual(set(parameters),{'intensity','dolly_clip_index','dolly_direction','dolly_anchor_x','dolly_anchor_y'})
+        self.assertEqual((dolly['minimum_duration_seconds'],dolly['default_duration_seconds'],dolly['maximum_duration_seconds']),(1,2,8))
+        self.assertEqual(parameters['dolly_direction']['values'],['push_in','pull_out'])
+        self.assertEqual((parameters['dolly_anchor_x']['minimum'],parameters['dolly_anchor_x']['maximum']),(.3,.7))
 
     def test_registered_parameters_reach_only_the_bounded_filter_values(self):
         plan=fixture()
@@ -190,6 +204,16 @@ class VisualBeatTests(unittest.TestCase):
         self.assertIn('split=9[tearstrip0_0]',graph)
         self.assertEqual(graph.count('color=0xF7F1E3@0.96'),9)
         self.assertIn(r"overlay=x='-w*min(max((t-1.000)/0.700\,0)\,1)'",graph)
+
+    def test_dolly_zoom_builds_only_a_bounded_crop_and_scale_illusion(self):
+        plan=fixture()
+        plan.finishing.visual_beats=[VisualBeat(start=0,end=3,preset='dolly_zoom',intensity='strong',
+            dolly_clip_index=0,dolly_direction='push_in',dolly_anchor_x=.3,dolly_anchor_y=.7)]
+        graph=append_visual_beats('[picture]null[vout]',plan,width=180,height=320)
+        self.assertIn('[beatbase0]split=2[dollybed0][dollysource0]',graph)
+        self.assertIn(r"scale=w='trunc(180*(1+0.20*min(max((t-0.000)/3.000\,0)\,1))/2)*2'",graph)
+        self.assertIn("crop=w=180:h=320:x='(iw-ow)*0.3000':y='(ih-oh)*0.7000'",graph)
+        self.assertNotIn('parallax',graph)
 
     def test_live_cursor_is_an_ass_vector_below_caption_dialogue(self):
         tools=FinishingTools(visual_beats=[dict(start=.2,end=1.2,preset='live_cursor',intensity='strong',
@@ -275,6 +299,15 @@ class VisualBeatTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'start exactly'):validate_finishing(misplaced,[])
         competing=tear_plan.model_copy(deep=True);competing.clips[1].transition='cross_dissolve'
         with self.assertRaisesRegex(ValueError,'another transition'):validate_finishing(competing,[])
+        dolly_plan=fixture();dolly_plan.finishing=FinishingTools(visual_beats=[dict(start=0,end=3,preset='dolly_zoom',
+            dolly_clip_index=0,dolly_direction='push_in',dolly_anchor_x=.5,dolly_anchor_y=.5)])
+        validate_finishing(dolly_plan,[])
+        moved=apply_timeline_adjustments(dolly_plan,[dict(clip_index=0,source_in=.2)])
+        self.assertFalse(moved.finishing.visual_beats,'shot-bound camera effects must be reselected after timeline edits')
+        partial=dolly_plan.model_copy(deep=True);partial.finishing.visual_beats[0].end=2.9
+        with self.assertRaisesRegex(ValueError,'exactly one complete clip'):validate_finishing(partial,[])
+        camera_conflict=dolly_plan.model_copy(deep=True);camera_conflict.clips[0].visual_preset='punch_in'
+        with self.assertRaisesRegex(ValueError,'another camera move'):validate_finishing(camera_conflict,[])
         collision=fixture()
         collision.finishing=FinishingTools(
             callouts=[dict(start=.5,end=1.5,text='Existing card')],
@@ -427,6 +460,34 @@ class VisualBeatRenderTests(unittest.TestCase):
             self.assertGreater(after[1],after[0]*20,'the real incoming clip must remain after the tear')
             pcm=array.array('h',self.ff('-i',str(output),'-vn','-ac','1','-ar','8000','-f','s16le','pipe:1'))
             for t in (1.4,1.6,2.1,2.4):
+                samples=pcm[round(t*8000):round((t+.1)*8000)]
+                self.assertGreater(sum(abs(v) for v in samples)/len(samples),500)
+            self.assertIsNone(rendered_audio_packet_error(output,60))
+
+    def test_dolly_zoom_enlarges_the_real_picture_and_keeps_audio_continuous(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);source=root/'dolly-source.mp4';captions=root/'captions.ass';output=root/'dolly-output.mp4'
+            self.ff('-f','lavfi','-i','color=c=blue:s=180x320:r=30:d=3,drawbox=x=60:y=110:w=60:h=100:c=red:t=fill',
+                '-f','lavfi','-i','sine=frequency=440:sample_rate=48000:duration=3',
+                '-c:v','libx264','-pix_fmt','yuv420p','-c:a','aac',str(source))
+            asset=uuid4()
+            tools=FinishingTools(visual_beats=[dict(start=0,end=2,preset='dolly_zoom',intensity='strong',
+                dolly_clip_index=0,dolly_direction='push_in',dolly_anchor_x=.5,dolly_anchor_y=.5)])
+            plan=TalkingHeadEditPlan(schema_version='1.5',recipe='talking_head',
+                clips=[dict(asset_id=asset,source_in=0,source_out=2,crop='center_fill'),
+                       dict(asset_id=asset,source_in=2,source_out=3,crop='center_fill')],
+                caption_style='clean_blue_v1',audio_preset='spoken_voice_v1',end_card='none',
+                editorial_summary='Dolly-style crop verification.',finishing=tools)
+            validate_finishing(plan,[])
+            captions.write_text(render_ass([],width=180,height=320,treatments=tools))
+            _render_video([(source,0,2),(source,2,3)],plan,captions,output,60,width=180,height=320)
+            def frame(t):return self.ff('-ss',str(t),'-i',str(output),'-frames:v','1','-f','rawvideo','-pix_fmt','rgb24','pipe:1')
+            def red_pixels(buf):
+                return sum(buf[i] > buf[i+2] + 60 for i in range(0,len(buf),3))
+            early,late=red_pixels(frame(.05)),red_pixels(frame(1.85))
+            self.assertGreater(late,early*1.2,'the fixed-anchor push should enlarge the real centre subject')
+            pcm=array.array('h',self.ff('-i',str(output),'-vn','-ac','1','-ar','8000','-f','s16le','pipe:1'))
+            for t in (.1,1,1.9,2.4):
                 samples=pcm[round(t*8000):round((t+.1)*8000)]
                 self.assertGreater(sum(abs(v) for v in samples)/len(samples),500)
             self.assertIsNone(rendered_audio_packet_error(output,60))
