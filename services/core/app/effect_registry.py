@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 
-EFFECT_REGISTRY_VERSION = 8
+EFFECT_REGISTRY_VERSION = 9
 
 
 @dataclass(frozen=True)
@@ -115,6 +115,10 @@ FOCUS_START_X = EffectParameter("focus_start_x", "Start horizontal", "number", 0
 FOCUS_START_Y = EffectParameter("focus_start_y", "Start vertical", "number", 0.35, minimum=0.18, maximum=0.82)
 FOCUS_END_X = EffectParameter("focus_end_x", "End horizontal", "number", 0.65, minimum=0.3, maximum=0.7)
 FOCUS_END_Y = EffectParameter("focus_end_y", "End vertical", "number", 0.55, minimum=0.18, maximum=0.82)
+TEAR_BOUNDARY_INDEX = EffectParameter("boundary_index", "Clip boundary", "number", 1, minimum=1, maximum=47)
+TEAR_DIRECTION = EffectParameter(
+    "tear_direction", "Pull direction", "enum", "left", values=("left", "right")
+)
 
 
 EFFECT_DEFINITIONS = (
@@ -216,6 +220,17 @@ EFFECT_DEFINITIONS = (
         maximum_duration_seconds=4.0,
         default_duration_seconds=2.0,
         parameters=(INTENSITY, FOCUS_START_X, FOCUS_START_Y, FOCUS_END_X, FOCUS_END_Y),
+    ),
+    EffectDefinition(
+        preset="paper_tear",
+        label="Paper tear",
+        summary="The outgoing clip tears away in staggered paper strips to reveal the next real clip.",
+        category="transition",
+        version=1,
+        minimum_duration_seconds=0.4,
+        maximum_duration_seconds=1.0,
+        default_duration_seconds=0.7,
+        parameters=(INTENSITY, TEAR_BOUNDARY_INDEX, TEAR_DIRECTION),
     ),
 )
 

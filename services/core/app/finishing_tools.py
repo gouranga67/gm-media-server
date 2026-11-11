@@ -299,6 +299,16 @@ def validate_finishing(
                 raise ValueError(f"{name} cannot overlap or extend beyond this edit")
             previous = region.end
     for beat in tools.visual_beats:
+        if beat.preset == "paper_tear":
+            if beat.boundary_index is None or beat.boundary_index >= len(plan.clips):
+                raise ValueError("paper_tear must identify an existing clip boundary")
+            boundary = sum(durations[: beat.boundary_index])
+            if abs(beat.start - boundary) > .01:
+                raise ValueError("paper_tear must start exactly at its selected clip boundary")
+            if beat.end > boundary + durations[beat.boundary_index] + .01:
+                raise ValueError("paper_tear must finish inside the incoming clip")
+            if plan.clips[beat.boundary_index].transition != "cut":
+                raise ValueError("paper_tear cannot replace or overlap another transition")
         if beat.preset in {"comment_drop", "voice_note", "post_wall", "sketch_words"} and any(
             callout.start < beat.end and callout.end > beat.start for callout in tools.callouts
         ):
@@ -758,6 +768,10 @@ def retime_finishing(
     for name in ("audio_regions", "caption_regions", "layers", "callouts", "pointers", "music_regions", "visual_beats"):
         result = []
         for region in data.get(name, []):
+            if name == "visual_beats" and region.get("preset") == "paper_tear":
+                # A paper tear belongs to an exact saved clip boundary. Any
+                # trim, reorder or source replacement requires choosing it again.
+                continue
             for old_start, old_end, new_start in mapping:
                 start, end = (
                     max(region["start"], old_start),

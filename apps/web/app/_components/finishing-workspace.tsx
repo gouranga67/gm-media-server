@@ -93,6 +93,8 @@ function FinishingForm({
   const [focusStartY, setFocusStartY] = useState("0.35");
   const [focusEndX, setFocusEndX] = useState("0.65");
   const [focusEndY, setFocusEndY] = useState("0.55");
+  const [tearBoundaryIndex, setTearBoundaryIndex] = useState(1);
+  const [tearDirection, setTearDirection] = useState<"left" | "right">("left");
   const [pointerShape, setPointerShape] = useState<"arrow" | "circle">(
     "circle",
   );
@@ -145,6 +147,16 @@ function FinishingForm({
   const focusParameters = effectDefinition?.parameters.filter(
     (parameter) => parameter.key.startsWith("focus_") && parameter.type === "number",
   ) ?? [];
+  const clipBoundaries = clips.slice(0, -1).flatMap((clip, index) => {
+    const incoming = clips[index + 1];
+    return incoming?.transition === "cut" && incoming.duration >= 0.4 ? [{
+      boundaryIndex: index + 1,
+      at: clips.slice(0, index + 1).reduce((total, item) => total + item.duration, 0),
+      outgoing: clip.source_name,
+      incoming: incoming.source_name,
+      incomingDuration: incoming.duration,
+    }] : [];
+  });
   function selectEffect(preset: VisualEffectPreset) {
     const definition = inspection?.effect_registry.effects.find(
       (effect) => effect.preset === preset,
@@ -180,13 +192,17 @@ function FinishingForm({
     setFocusStartY(String(value("focus_start_y", 0.35)));
     setFocusEndX(String(value("focus_end_x", 0.65)));
     setFocusEndY(String(value("focus_end_y", 0.55)));
-    setEnd(
-      String(
-        Number(start) +
-          (definition?.default_duration_seconds ??
-            (preset === "impact_frame" ? 0.2 : 2)),
-      ),
+    setTearDirection(
+      (definition?.parameters.find((parameter) => parameter.key === "tear_direction")?.default ?? "left") as "left" | "right",
     );
+    const duration = definition?.default_duration_seconds ?? (preset === "impact_frame" ? 0.2 : 2);
+    if (preset === "paper_tear" && clipBoundaries[0]) {
+      setTearBoundaryIndex(clipBoundaries[0].boundaryIndex);
+      setStart(String(Number(clipBoundaries[0].at.toFixed(3))));
+      setEnd(String(Number((clipBoundaries[0].at + Math.min(duration, clipBoundaries[0].incomingDuration)).toFixed(3))));
+    } else {
+      setEnd(String(Number(start) + duration));
+    }
   }
   useEffect(() => {
     let active = true;
@@ -382,6 +398,9 @@ function FinishingForm({
               focus_end_y: Number(focusEndY),
             }
           : {}),
+        ...(visualBeat === "paper_tear"
+          ? { boundary_index: tearBoundaryIndex, tear_direction: tearDirection }
+          : {}),
       };
       next = {
         ...next,
@@ -503,6 +522,7 @@ function FinishingForm({
                     type="number"
                     required
                     value={start}
+                    readOnly={tool === "visual_beat" && visualBeat === "paper_tear"}
                     onChange={(e) => setStart(e.currentTarget.value)}
                   />
                 </label>
@@ -764,6 +784,49 @@ function FinishingForm({
                         ) : null;
                       })}
                     </div>
+                  </div>
+                ) : null}
+                {visualBeat === "paper_tear" ? (
+                  <div className="space-y-3 rounded-md border border-[#D7D9D3] p-3">
+                    <p className="text-xs leading-5 text-[#666862]">
+                      Paper Tear starts exactly at a saved cut. It freezes the final outgoing frame into staggered strips and reveals the real incoming clip underneath. Recorded audio continues unchanged. Changing the cut later removes this transition for safety.
+                    </p>
+                    {clipBoundaries.length ? (
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <label className="text-xs">
+                          Clip boundary
+                          <select
+                            className={control}
+                            value={tearBoundaryIndex}
+                            onChange={(event) => {
+                              const boundaryIndex = Number(event.currentTarget.value);
+                              const boundary = clipBoundaries.find((item) => item.boundaryIndex === boundaryIndex);
+                              setTearBoundaryIndex(boundaryIndex);
+                              if (boundary) {
+                                const duration = Math.min(effectDefinition?.default_duration_seconds ?? 0.7, boundary.incomingDuration);
+                                setStart(String(Number(boundary.at.toFixed(3))));
+                                setEnd(String(Number((boundary.at + duration).toFixed(3))));
+                              }
+                            }}
+                          >
+                            {clipBoundaries.map((boundary) => (
+                              <option value={boundary.boundaryIndex} key={boundary.boundaryIndex}>
+                                After clip {boundary.boundaryIndex} · {boundary.outgoing} → {boundary.incoming} · {boundary.at.toFixed(2)}s
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="text-xs">
+                          Pull direction
+                          <select className={control} value={tearDirection} onChange={(event) => setTearDirection(event.currentTarget.value as "left" | "right")}>
+                            <option value="left">Pull outgoing picture left</option>
+                            <option value="right">Pull outgoing picture right</option>
+                          </select>
+                        </label>
+                      </div>
+                    ) : (
+                      <p className="text-xs font-bold text-[#A23B2A]">Paper Tear needs two clips joined by an ordinary cut, with at least 0.4 seconds in the incoming clip.</p>
+                    )}
                   </div>
                 ) : null}
                 {visualBeat === "letter_dive" ? (
@@ -1069,6 +1132,7 @@ function FinishingForm({
               className="min-h-11 w-full rounded-md bg-[#173F5F] px-3 text-sm font-bold text-white disabled:opacity-50"
               disabled={
                 busy ||
+                (tool === "visual_beat" && visualBeat === "paper_tear" && clipBoundaries.length === 0) ||
                 ((tool === "audio" ||
                   tool === "captions" ||
                   tool === "layer" ||

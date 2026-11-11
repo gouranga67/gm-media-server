@@ -31,22 +31,23 @@ def main():
     tools=FinishingTools(callouts=[dict(start=.2,end=1.5,text='A stronger first impression',style='headline'),
         dict(start=3,end=4.6,text='$40 million in client revenue',style='headline')],
         visual_beats=[dict(start=1.6,end=2.8,preset='voice_note',intensity='standard',position='upper'),
-                      dict(start=3.2,end=4.4,preset='rack_focus',intensity='standard',focus_start_x=.35,focus_start_y=.3,focus_end_x=.65,focus_end_y=.55),
+                      dict(start=3.2,end=3.9,preset='paper_tear',intensity='standard',boundary_index=1,tear_direction='left'),
                       dict(start=4.45,end=5.25,preset='sketch_words',intensity='strong',position='upper',sketch_text='BUILD IT'),
                       dict(start=5.3,end=6.9,preset='post_wall',intensity='standard',post_texts=['REAL FOOTAGE','LOCAL RENDER','REVIEW FIRST'])])
-    plan=TalkingHeadEditPlan(schema_version='1.5',recipe='talking_head',clips=[dict(asset_id=uuid4(),source_in=0,source_out=7,crop='center_fill')],
+    asset=uuid4()
+    plan=TalkingHeadEditPlan(schema_version='1.5',recipe='talking_head',clips=[dict(asset_id=asset,source_in=0,source_out=3.2,crop='center_fill'),dict(asset_id=asset,source_in=3.2,source_out=7,crop='center_fill')],
         caption_style='clean_blue_v1',audio_preset='spoken_voice_v1',end_card='none',editorial_summary='Synthetic graphics and timing demonstration.',finishing=tools)
     events=[dict(start=0,end=1.5,text="Here’s what we’ve built."),dict(start=2,end=3.2,text='Generated 40 million dollars'),dict(start=3.2,end=4.6,text='in revenue for clients.'),dict(start=5,end=6.7,text='Three shots. One audio track.')]
     ass.write_text(render_ass(events,treatments=tools),encoding='utf-8')
     started=time.monotonic()
-    encoder=_render_video([(source,0,7)],plan,ass,output,120)
+    encoder=_render_video([(source,0,3.2),(source,3.2,7)],plan,ass,output,120)
     error=rendered_audio_packet_error(output,60)
     if error:raise RuntimeError(error)
-    for t,name in ((2.2,'voice-note-frame.png'),(3.1,'headline-frame.png'),(3.8,'rack-focus-frame.png'),(4.9,'sketch-words-frame.png'),(5.8,'post-wall-frame.png')):
+    for t,name in ((2.2,'voice-note-frame.png'),(3.1,'headline-frame.png'),(3.55,'paper-tear-frame.png'),(4.9,'sketch-words-frame.png'),(5.8,'post-wall-frame.png')):
         ff('-ss',str(t),'-i',str(output),'-frames:v','1',str(root/name))
     report=dict(status='passed',synthetic_demo=True,encoder=encoder,render_seconds=round(time.monotonic()-started,2),
         duration_seconds=7,width=540,height=960,hosted_model_calls=0,audio_packet_timing_verified=True,
-        native_effect_registry_version=EFFECT_REGISTRY_VERSION,effects=['voice_note','rack_focus','sketch_words','post_wall'])
+        native_effect_registry_version=EFFECT_REGISTRY_VERSION,effects=['voice_note','paper_tear','sketch_words','post_wall'])
     (root/'report.json').write_text(json.dumps(report,indent=2)+'\n')
     source.unlink()
     print(json.dumps(report,indent=2))

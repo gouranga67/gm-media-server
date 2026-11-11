@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read-only Phase 32I effect-registry check; no render or model request."""
+"""Read-only Phase 32J effect-registry check; no render or model request."""
 
 import json
 from pathlib import Path
@@ -11,8 +11,8 @@ def main():
     request = runpy.run_path(str(Path(__file__).with_name("verify-phase14.py")))["request"]
     registry = request("effects/registry")
     effects = {effect.get("preset"): effect for effect in registry.get("effects", [])}
-    if registry.get("version") != 8 or set(effects) != {"impact_frame", "clone_row", "live_cursor", "letter_dive", "comment_drop", "voice_note", "post_wall", "sketch_words", "rack_focus"}:
-        raise RuntimeError("deploy the Phase 32I native effects registry")
+    if registry.get("version") != 9 or set(effects) != {"impact_frame", "clone_row", "live_cursor", "letter_dive", "comment_drop", "voice_note", "post_wall", "sketch_words", "rack_focus", "paper_tear"}:
+        raise RuntimeError("deploy the Phase 32J native effects registry")
     expected = {
         "impact_frame": (0.1, 0.25, {"intensity"}),
         "clone_row": (0.1, 2.5, {"intensity", "position"}),
@@ -23,6 +23,7 @@ def main():
         "post_wall": (1.2, 5.0, {"intensity", "post_texts"}),
         "sketch_words": (0.8, 3.0, {"intensity", "position", "sketch_text"}),
         "rack_focus": (1.0, 4.0, {"intensity", "focus_start_x", "focus_start_y", "focus_end_x", "focus_end_y"}),
+        "paper_tear": (0.4, 1.0, {"intensity", "boundary_index", "tear_direction"}),
     }
     for preset, (minimum, maximum, parameter_keys) in expected.items():
         effect = effects[preset]
@@ -72,6 +73,11 @@ def main():
     for key, (minimum, maximum, default) in expected_focus.items():
         if focus[key].get("type") != "number" or (focus[key].get("minimum"), focus[key].get("maximum"), focus[key].get("default")) != (minimum, maximum, default):
             raise RuntimeError(f"the Rack Focus {key} contract is incomplete")
+    tear = {parameter["key"]: parameter for parameter in effects["paper_tear"]["parameters"]}
+    if (tear["boundary_index"].get("minimum"), tear["boundary_index"].get("maximum"), tear["boundary_index"].get("default")) != (1, 47, 1):
+        raise RuntimeError("the Paper Tear boundary contract is incomplete")
+    if tear["tear_direction"].get("values") != ["left", "right"] or tear["tear_direction"].get("default") != "left":
+        raise RuntimeError("the Paper Tear direction contract is incomplete")
     print(json.dumps({
         "status": "passed",
         "registry_version": registry["version"],
@@ -81,12 +87,12 @@ def main():
         "model_calls": 0,
         "note": "Synthetic and real-footage playback remain separate acceptance checks.",
     }, indent=2))
-    print("PASS  Rack Focus registry contract is deployed; no editing work started.")
+    print("PASS  Paper Tear registry contract is deployed; no editing work started.")
 
 
 if __name__ == "__main__":
     try:
         main()
     except Exception as error:
-        print(f"Phase 32I verification failed: {error}", file=sys.stderr)
+        print(f"Phase 32J verification failed: {error}", file=sys.stderr)
         raise SystemExit(1)

@@ -47,4 +47,4 @@ Worker-container execution and real playback remain deployment acceptance checks
 
 ## Next slice
 
-Add **Paper Tear** as a true clip-boundary transition with recorded audio continuity, then prototype **Dolly Zoom** within the existing crop and motion limits.
+Add **Paper Tear** as a true clip-boundary transition with recorded audio continuity. [Its source checkpoint is implemented here](phase-32-paper-tear.md). Then prototype **Dolly Zoom** within the existing crop and motion limits.

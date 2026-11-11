@@ -37,6 +37,7 @@ class VisualBeatTests(unittest.TestCase):
                       dict(start=0,end=2,preset='post_wall'),
                       dict(start=0,end=1.5,preset='sketch_words'),
                       dict(start=0,end=2,preset='rack_focus'),
+                      dict(start=0,end=.7,preset='paper_tear'),
                       dict(start=0,end=1,preset='arbitrary_js')):
             with self.assertRaises(ValidationError): VisualBeat(**value)
         self.assertNotIn('visual_beats',FinishingTools().model_dump(mode='json'))
@@ -92,6 +93,12 @@ class VisualBeatTests(unittest.TestCase):
             VisualBeat(start=0,end=2,preset='rack_focus',focus_start_x=.1,focus_start_y=.5,focus_end_x=.6,focus_end_y=.5)
         with self.assertRaisesRegex(ValidationError,'does not accept focus coordinates'):
             VisualBeat(start=0,end=1.6,preset='sketch_words',sketch_text='REAL',focus_start_x=.3)
+        tear=VisualBeat(start=1,end=1.7,preset='paper_tear',intensity='strong',boundary_index=1,tear_direction='right')
+        self.assertEqual(tear.model_dump(mode='json')['boundary_index'],1)
+        with self.assertRaisesRegex(ValidationError,'requires a clip boundary'):
+            VisualBeat(start=1,end=1.7,preset='paper_tear',boundary_index=1)
+        with self.assertRaisesRegex(ValidationError,'does not accept paper tear parameters'):
+            VisualBeat(start=0,end=.2,preset='impact_frame',boundary_index=1)
         for recipe in ('talking_head','montage'):
             schema=schema_for_recipe(recipe)['properties']['finishing']['anyOf'][1]
             beat=schema['properties']['visual_beats']['items']
@@ -101,8 +108,8 @@ class VisualBeatTests(unittest.TestCase):
     def test_registry_is_versioned_complete_and_matches_the_schema(self):
         registry=public_effect_registry()
         self.assertEqual(registry['version'],EFFECT_REGISTRY_VERSION)
-        self.assertEqual(registry['version'],8)
-        expected={'impact_frame','clone_row','live_cursor','letter_dive','comment_drop','voice_note','post_wall','sketch_words','rack_focus'}
+        self.assertEqual(registry['version'],9)
+        expected={'impact_frame','clone_row','live_cursor','letter_dive','comment_drop','voice_note','post_wall','sketch_words','rack_focus','paper_tear'}
         self.assertEqual({item['preset'] for item in registry['effects']},expected)
         self.assertEqual({item.preset for item in EFFECT_DEFINITIONS},expected)
         for item in registry['effects']:
@@ -140,6 +147,12 @@ class VisualBeatTests(unittest.TestCase):
         self.assertEqual(set(parameters),{'intensity','focus_start_x','focus_start_y','focus_end_x','focus_end_y'})
         self.assertEqual((parameters['focus_start_x']['minimum'],parameters['focus_start_x']['maximum'],parameters['focus_start_x']['default']),(.3,.7,.35))
         self.assertEqual((parameters['focus_end_y']['minimum'],parameters['focus_end_y']['maximum'],parameters['focus_end_y']['default']),(.18,.82,.55))
+        tear=next(item for item in registry['effects'] if item['preset']=='paper_tear')
+        parameters={item['key']:item for item in tear['parameters']}
+        self.assertEqual(set(parameters),{'intensity','boundary_index','tear_direction'})
+        self.assertEqual((tear['minimum_duration_seconds'],tear['default_duration_seconds'],tear['maximum_duration_seconds']),(.4,.7,1))
+        self.assertEqual(parameters['boundary_index'],{'key':'boundary_index','label':'Clip boundary','type':'number','default':1,'minimum':1,'maximum':47})
+        self.assertEqual(parameters['tear_direction']['values'],['left','right'])
 
     def test_registered_parameters_reach_only_the_bounded_filter_values(self):
         plan=fixture()
@@ -166,6 +179,17 @@ class VisualBeatTests(unittest.TestCase):
         self.assertIn("crop=w=90:h=96",graph)
         self.assertIn(r"min(max((t-0.400)/2.000\,0)\,1)",graph)
         self.assertNotIn('depth',graph)
+
+    def test_paper_tear_freezes_the_outgoing_frame_into_bounded_strips(self):
+        plan=fixture()
+        plan.finishing.visual_beats=[VisualBeat(start=1,end=1.7,preset='paper_tear',intensity='strong',
+            boundary_index=1,tear_direction='left')]
+        graph=append_visual_beats('[picture]null[vout]',plan,width=180,height=320)
+        self.assertIn('[beatbase0]split=2[tearbed0][tearoutgoing0]',graph)
+        self.assertIn('trim=start=0.900:end=1.000,reverse,trim=end_frame=1',graph)
+        self.assertIn('split=9[tearstrip0_0]',graph)
+        self.assertEqual(graph.count('color=0xF7F1E3@0.96'),9)
+        self.assertIn(r"overlay=x='-w*min(max((t-1.000)/0.700\,0)\,1)'",graph)
 
     def test_live_cursor_is_an_ass_vector_below_caption_dialogue(self):
         tools=FinishingTools(visual_beats=[dict(start=.2,end=1.2,preset='live_cursor',intensity='strong',
@@ -241,6 +265,16 @@ class VisualBeatTests(unittest.TestCase):
         changed=apply_timeline_adjustments(plan,[dict(clip_index=0,source_in=.4)])
         self.assertAlmostEqual(changed.finishing.visual_beats[0].start,.4)
         self.assertEqual(plan.finishing.visual_beats[0].start,.8)
+        tear_plan=fixture()
+        tear_plan.clips.append(tear_plan.clips[0].model_copy(update={'source_in':3,'source_out':5}))
+        tear_plan.finishing=FinishingTools(visual_beats=[dict(start=3,end=3.7,preset='paper_tear',boundary_index=1,tear_direction='left')])
+        validate_finishing(tear_plan,[])
+        moved=apply_timeline_adjustments(tear_plan,[dict(clip_index=0,source_in=.2)])
+        self.assertFalse(moved.finishing.visual_beats,'boundary transitions must be explicitly reselected after timeline edits')
+        misplaced=tear_plan.model_copy(deep=True);misplaced.finishing.visual_beats[0].start=2.9
+        with self.assertRaisesRegex(ValueError,'start exactly'):validate_finishing(misplaced,[])
+        competing=tear_plan.model_copy(deep=True);competing.clips[1].transition='cross_dissolve'
+        with self.assertRaisesRegex(ValueError,'another transition'):validate_finishing(competing,[])
         collision=fixture()
         collision.finishing=FinishingTools(
             callouts=[dict(start=.5,end=1.5,text='Existing card')],
@@ -362,6 +396,37 @@ class VisualBeatRenderTests(unittest.TestCase):
             self.assertLess(inside,outside*.75,'the moving focus window should retain more source detail than the blurred bed')
             pcm=array.array('h',self.ff('-i',str(output),'-vn','-ac','1','-ar','8000','-f','s16le','pipe:1'))
             for t in (.1,.8,1.6,2.3):
+                samples=pcm[round(t*8000):round((t+.1)*8000)]
+                self.assertGreater(sum(abs(v) for v in samples)/len(samples),500)
+            self.assertIsNone(rendered_audio_packet_error(output,60))
+
+    def test_paper_tear_reveals_the_real_incoming_clip_and_keeps_audio_continuous(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);source=root/'tear-source.mp4';captions=root/'captions.ass';output=root/'tear-output.mp4'
+            self.ff('-f','lavfi','-i',"color=c=red:s=180x320:r=30:d=3,drawbox=x=0:y=0:w=iw:h=ih:c=blue:t=fill:enable='gte(t,1.5)'",
+                '-f','lavfi','-i','sine=frequency=440:sample_rate=48000:duration=3',
+                '-c:v','libx264','-pix_fmt','yuv420p','-c:a','aac',str(source))
+            asset=uuid4()
+            tools=FinishingTools(visual_beats=[dict(start=1.5,end=2.2,preset='paper_tear',intensity='strong',
+                boundary_index=1,tear_direction='left')])
+            plan=TalkingHeadEditPlan(schema_version='1.5',recipe='talking_head',
+                clips=[dict(asset_id=asset,source_in=0,source_out=1.5,crop='center_fill'),
+                       dict(asset_id=asset,source_in=1.5,source_out=3,crop='center_fill')],
+                caption_style='clean_blue_v1',audio_preset='spoken_voice_v1',end_card='none',
+                editorial_summary='Paper transition verification.',finishing=tools)
+            validate_finishing(plan,[])
+            captions.write_text(render_ass([],width=180,height=320,treatments=tools))
+            _render_video([(source,0,1.5),(source,1.5,3)],plan,captions,output,60,width=180,height=320)
+            def frame(t):return self.ff('-ss',str(t),'-i',str(output),'-frames:v','1','-f','rawvideo','-pix_fmt','rgb24','pipe:1')
+            def colour_counts(buf):
+                pixels=[tuple(buf[i:i+3]) for i in range(0,len(buf),3)]
+                return (sum(r>b+60 for r,g,b in pixels),sum(b>r+60 for r,g,b in pixels))
+            early=colour_counts(frame(1.55));middle=colour_counts(frame(1.85));after=colour_counts(frame(2.3))
+            self.assertGreater(early[0],early[1]*3,'the frozen outgoing frame should initially cover the cut')
+            self.assertGreater(middle[0],1000);self.assertGreater(middle[1],1000)
+            self.assertGreater(after[1],after[0]*20,'the real incoming clip must remain after the tear')
+            pcm=array.array('h',self.ff('-i',str(output),'-vn','-ac','1','-ar','8000','-f','s16le','pipe:1'))
+            for t in (1.4,1.6,2.1,2.4):
                 samples=pcm[round(t*8000):round((t+.1)*8000)]
                 self.assertGreater(sum(abs(v) for v in samples)/len(samples),500)
             self.assertIsNone(rendered_audio_packet_error(output,60))

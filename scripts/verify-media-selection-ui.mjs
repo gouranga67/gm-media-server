@@ -163,7 +163,7 @@ globalThis.fetch = async (url, options = {}) => {
     if (alternativeFailure) return {ok:false,status:409,json:async()=>({detail:"This alternative could not be queued. Your original is unchanged."})};
     payload={id:"alternative",version:3,status:"pending"};
   }
-  else if (route === `jobs/${jobId}/finishing-tools`) payload = { version: 2, settings: { motions:[],colours:[],audio_regions:[],caption_regions:[],layers:[],music_start_seconds:0,voice_denoise:false,audio_joins:[] }, effect_registry:{version:8,effects:[
+  else if (route === `jobs/${jobId}/finishing-tools`) payload = { version: 2, settings: { motions:[],colours:[],audio_regions:[],caption_regions:[],layers:[],music_start_seconds:0,voice_denoise:false,audio_joins:[] }, effect_registry:{version:9,effects:[
     {preset:"impact_frame",label:"Impact frame",summary:"A single accent border for a meaningful visual beat.",category:"accent",version:1,minimum_duration_seconds:.1,maximum_duration_seconds:.25,default_duration_seconds:.2,parameters:[{key:"intensity",label:"Strength",type:"enum",values:["subtle","standard","strong"],default:"standard"}],preserves_dialogue:true,captions_above_effect:true,requires_segmentation:false},
     {preset:"clone_row",label:"Clone row",summary:"Three live copies of the complete recorded shot; no person cutout.",category:"layout",version:1,minimum_duration_seconds:.1,maximum_duration_seconds:2.5,default_duration_seconds:2,parameters:[{key:"intensity",label:"Strength",type:"enum",values:["subtle","standard","strong"],default:"standard"},{key:"position",label:"Position",type:"enum",values:["upper","center","lower"],default:"center"}],preserves_dialogue:true,captions_above_effect:true,requires_segmentation:false},
     {preset:"live_cursor",label:"Live cursor",summary:"A pointer moves between two safe frame positions with an optional click pulse.",category:"pointer",version:1,minimum_duration_seconds:.4,maximum_duration_seconds:4,default_duration_seconds:1.5,parameters:[{key:"intensity",label:"Strength",type:"enum",values:["subtle","standard","strong"],default:"standard"},{key:"cursor_start_x",label:"Start horizontal",type:"number",minimum:.08,maximum:.92,default:.25},{key:"cursor_start_y",label:"Start vertical",type:"number",minimum:.1,maximum:.82,default:.4},{key:"cursor_end_x",label:"End horizontal",type:"number",minimum:.08,maximum:.92,default:.75},{key:"cursor_end_y",label:"End vertical",type:"number",minimum:.1,maximum:.82,default:.4},{key:"click",label:"Click pulse",type:"boolean",default:true}],preserves_dialogue:true,captions_above_effect:true,requires_segmentation:false},
@@ -172,7 +172,8 @@ globalThis.fetch = async (url, options = {}) => {
     {preset:"voice_note",label:"Voice note",summary:"A voice-message card animates over the real recorded speech without changing its audio.",category:"social",version:1,minimum_duration_seconds:1,maximum_duration_seconds:5,default_duration_seconds:2.6,parameters:[{key:"intensity",label:"Strength",type:"enum",values:["subtle","standard","strong"],default:"standard"},{key:"position",label:"Position",type:"enum",values:["upper","center","lower"],default:"center"}],preserves_dialogue:true,captions_above_effect:true,requires_segmentation:false},
     {preset:"post_wall",label:"Post wall",summary:"Two or three source-backed idea cards build into a staggered wall without fake social metadata.",category:"social",version:1,minimum_duration_seconds:1.2,maximum_duration_seconds:5,default_duration_seconds:3,parameters:[{key:"intensity",label:"Strength",type:"enum",values:["subtle","standard","strong"],default:"standard"},{key:"post_texts",label:"Source-backed cards",type:"text_list",default:[],minimum_items:2,maximum_items:3,item_maximum_length:42}],preserves_dialogue:true,captions_above_effect:true,requires_segmentation:false},
     {preset:"sketch_words",label:"Sketch words",summary:"One to three source-backed words draw on with marker-like lettering and accent strokes.",category:"typography",version:1,minimum_duration_seconds:.8,maximum_duration_seconds:3,default_duration_seconds:1.6,parameters:[{key:"intensity",label:"Strength",type:"enum",values:["subtle","standard","strong"],default:"standard"},{key:"position",label:"Position",type:"enum",values:["upper","center","lower"],default:"center"},{key:"sketch_text",label:"Words",type:"text",minimum_length:1,maximum_length:24,default:""}],preserves_dialogue:true,captions_above_effect:true,requires_segmentation:false},
-    {preset:"rack_focus",label:"Rack focus",summary:"A simulated sharp focus window moves across a softly blurred stable shot; no depth detection.",category:"camera",version:1,minimum_duration_seconds:1,maximum_duration_seconds:4,default_duration_seconds:2,parameters:[{key:"intensity",label:"Strength",type:"enum",values:["subtle","standard","strong"],default:"standard"},{key:"focus_start_x",label:"Start horizontal",type:"number",minimum:.3,maximum:.7,default:.35},{key:"focus_start_y",label:"Start vertical",type:"number",minimum:.18,maximum:.82,default:.35},{key:"focus_end_x",label:"End horizontal",type:"number",minimum:.3,maximum:.7,default:.65},{key:"focus_end_y",label:"End vertical",type:"number",minimum:.18,maximum:.82,default:.55}],preserves_dialogue:true,captions_above_effect:true,requires_segmentation:false}
+    {preset:"rack_focus",label:"Rack focus",summary:"A simulated sharp focus window moves across a softly blurred stable shot; no depth detection.",category:"camera",version:1,minimum_duration_seconds:1,maximum_duration_seconds:4,default_duration_seconds:2,parameters:[{key:"intensity",label:"Strength",type:"enum",values:["subtle","standard","strong"],default:"standard"},{key:"focus_start_x",label:"Start horizontal",type:"number",minimum:.3,maximum:.7,default:.35},{key:"focus_start_y",label:"Start vertical",type:"number",minimum:.18,maximum:.82,default:.35},{key:"focus_end_x",label:"End horizontal",type:"number",minimum:.3,maximum:.7,default:.65},{key:"focus_end_y",label:"End vertical",type:"number",minimum:.18,maximum:.82,default:.55}],preserves_dialogue:true,captions_above_effect:true,requires_segmentation:false},
+    {preset:"paper_tear",label:"Paper tear",summary:"The outgoing clip tears away in staggered paper strips to reveal the next real clip.",category:"transition",version:1,minimum_duration_seconds:.4,maximum_duration_seconds:1,default_duration_seconds:.7,parameters:[{key:"intensity",label:"Strength",type:"enum",values:["subtle","standard","strong"],default:"standard"},{key:"boundary_index",label:"Clip boundary",type:"number",minimum:1,maximum:47,default:1},{key:"tear_direction",label:"Pull direction",type:"enum",values:["left","right"],default:"left"}],preserves_dialogue:true,captions_above_effect:true,requires_segmentation:false}
   ]}, sources:[{ asset_id:serverId,name:"Review image",media_kind:"image",duration_seconds:0 }], product_tracking_candidates:Array.from({length:3},(_,clip_index)=>({clip_index,asset_id:serverId,duration_seconds:3,source_in:2,source_out:5,eligible:true,note:""})), stabilization_candidates:Array.from({length:6},(_,clip_index)=>({clip_index,asset_id:serverId,duration_seconds:clip_index===5?14:3,source_in:0,source_out:clip_index===5?14:3,eligible:clip_index!==5,note:clip_index===5?"Choose a 1–8 second shot":""})) };
   else if (route === "concepts/library-status") payload = { unique_sources: 3, catalogued_sources: 3, spoken_sources: 2, visually_indexed_sources: 3, still_processing: 0 };
   else if (route === "concepts" && (options.method ?? "GET") === "GET") payload = conceptHistory;
@@ -1496,7 +1497,7 @@ test("native visual effects are explicit local tools and never render on selecti
   assert.match(document.body.textContent,/Visual effect \/ animation/);
   await chooseOption("select", "visual_beat");
   assert.match(document.body.textContent,/single accent border for a meaningful visual beat/);
-  assert.match(document.body.textContent,/Registry v8/);
+  assert.match(document.body.textContent,/Registry v9/);
   const preset=document.querySelectorAll("select")[1];
   await act(async()=>{preset.value="clone_row";preset.dispatchEvent(new Event("change",{bubbles:true}));});
   assert.match(document.body.textContent,/no person cutout/);
@@ -1641,6 +1642,31 @@ test("Rack Focus exposes bounded coordinates and its honest simulated-focus cont
   await act(async()=>document.querySelector("form").dispatchEvent(new Event("submit",{bubbles:true,cancelable:true})));
   const request=posts(`jobs/${jobId}/revisions`).at(-1).body;
   assert.deepEqual(request.finishing_settings.visual_beats,[{start:0,end:2,preset:"rack_focus",intensity:"strong",focus_start_x:.35,focus_start_y:.35,focus_end_x:.65,focus_end_y:.55}]);
+});
+
+test("Paper Tear binds itself to a real cut and preserves explicit submission", async () => {
+  const revisionCount=posts(`jobs/${jobId}/revisions`).length;
+  const clips=[
+    {clip_id:"one",duration:1,source_in:0,source_out:1,source_name:"Opening",transition:"cut"},
+    {clip_id:"two",duration:2,source_in:1,source_out:3,source_name:"Payoff",transition:"cut"},
+  ];
+  await act(async () => root.render(React.createElement(FinishingWorkspace, { jobId, version: 2, clips, onUpdated: () => {} })));
+  await click(document.querySelector("summary"));
+  await waitFor(() => document.querySelector("select"));
+  await chooseOption("select", "visual_beat");
+  const preset=document.querySelectorAll("select")[1];
+  await act(async()=>{preset.value="paper_tear";preset.dispatchEvent(new Event("change",{bubbles:true}));});
+  assert.match(document.body.textContent,/starts exactly at a saved cut/);
+  assert.match(document.body.textContent,/Opening → Payoff/);
+  const times=[...document.querySelectorAll('input[type="number"]')].slice(0,2);
+  assert.deepEqual(times.map(input=>input.value),["1","1.7"]);
+  assert.equal(times[0].readOnly,true);
+  const direction=[...document.querySelectorAll("select")].find(select=>[...select.options].some(option=>option.value==="right"));
+  await act(async()=>{direction.value="right";direction.dispatchEvent(new Event("change",{bubbles:true}));});
+  assert.equal(posts(`jobs/${jobId}/revisions`).length,revisionCount);
+  await act(async()=>document.querySelector("form").dispatchEvent(new Event("submit",{bubbles:true,cancelable:true})));
+  const request=posts(`jobs/${jobId}/revisions`).at(-1).body;
+  assert.deepEqual(request.finishing_settings.visual_beats,[{start:1,end:1.7,preset:"paper_tear",intensity:"standard",boundary_index:1,tear_direction:"right"}]);
 });
 
 

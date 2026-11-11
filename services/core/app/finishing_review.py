@@ -83,6 +83,9 @@ def treatment_timeline(context, plan):
             elif cue.preset == "rack_focus":
                 detail += (f"; simulated focus window {cue.focus_start_x:.2f},{cue.focus_start_y:.2f} to "
                            f"{cue.focus_end_x:.2f},{cue.focus_end_y:.2f}; no depth detection or subject tracking")
+            elif cue.preset == "paper_tear":
+                detail += (f"; exact boundary before clip {cue.boundary_index + 1}; pulls {cue.tear_direction}; "
+                           "frozen outgoing frame reveals the real incoming clip")
             else:
                 detail += f"; {cue.position} position"
             add("graphic", cue.preset.replace("_", " ").capitalize(), cue.start, cue.end,

@@ -8,7 +8,7 @@ from app.effect_registry import effect_definition
 
 
 class VisualBeat(TreatmentWindow):
-    preset: Literal["impact_frame", "clone_row", "live_cursor", "letter_dive", "comment_drop", "voice_note", "post_wall", "sketch_words", "rack_focus"]
+    preset: Literal["impact_frame", "clone_row", "live_cursor", "letter_dive", "comment_drop", "voice_note", "post_wall", "sketch_words", "rack_focus", "paper_tear"]
     intensity: Literal["subtle", "standard", "strong"] = "standard"
     position: Literal["upper", "center", "lower"] = "center"
     cursor_start_x: float | None = Field(default=None, ge=.08, le=.92)
@@ -24,6 +24,8 @@ class VisualBeat(TreatmentWindow):
     focus_start_y: float | None = Field(default=None, ge=.18, le=.82)
     focus_end_x: float | None = Field(default=None, ge=.3, le=.7)
     focus_end_y: float | None = Field(default=None, ge=.18, le=.82)
+    boundary_index: int | None = Field(default=None, ge=1, le=47)
+    tear_direction: Literal["left", "right"] | None = None
 
     @field_validator("letter_text", "comment_text", "sketch_text")
     @classmethod
@@ -95,6 +97,11 @@ class VisualBeat(TreatmentWindow):
                 raise ValueError("rack_focus points must identify a visible focus move")
         elif any(value is not None for value in focus_values):
             raise ValueError(f"{self.preset} does not accept focus coordinates")
+        if self.preset == "paper_tear":
+            if self.boundary_index is None or self.tear_direction is None:
+                raise ValueError("paper_tear requires a clip boundary and pull direction")
+        elif self.boundary_index is not None or self.tear_direction is not None:
+            raise ValueError(f"{self.preset} does not accept paper tear parameters")
         return self
 
     @model_serializer(mode="wrap")
@@ -104,7 +111,7 @@ class VisualBeat(TreatmentWindow):
             data.pop("intensity", None)
         if data.get("position") == "center":
             data.pop("position", None)
-        for name in ("cursor_start_x", "cursor_start_y", "cursor_end_x", "cursor_end_y", "click", "letter_text", "comment_text", "post_texts", "sketch_text", "focus_start_x", "focus_start_y", "focus_end_x", "focus_end_y"):
+        for name in ("cursor_start_x", "cursor_start_y", "cursor_end_x", "cursor_end_y", "click", "letter_text", "comment_text", "post_texts", "sketch_text", "focus_start_x", "focus_start_y", "focus_end_x", "focus_end_y", "boundary_index", "tear_direction"):
             if data.get(name) is None:
                 data.pop(name, None)
         return data
@@ -184,6 +191,47 @@ def append_visual_beats(graph, plan, *, width, height):
                 f"[focussoft{i}][focuspatch{i}]overlay=x='{overlay_x}':y='{overlay_y}':"
                 f"eof_action=pass:repeatlast=0:enable='{active}'[{target}]"
             )
+        elif cue.preset == "paper_tear":
+            # Freeze the final outgoing frame and pull it away in staggered
+            # horizontal paper strips. The already assembled next clip remains
+            # underneath, and the separately assembled audio is never touched.
+            strips, edge, stagger_ratio = {
+                "subtle": (5, 2, .10),
+                "standard": (7, 3, .14),
+                "strong": (9, 4, .18),
+            }[cue.intensity]
+            duration = cue.end - cue.start
+            sample_start = max(0, cue.start - .1)
+            labels = "".join(f"[tearstrip{i}_{strip}]" for strip in range(strips))
+            parts.append(f"[{base}]split=2[tearbed{i}][tearoutgoing{i}]")
+            parts.append(
+                f"[tearoutgoing{i}]trim=start={sample_start:.3f}:end={cue.start:.3f},reverse,"
+                f"trim=end_frame=1,setpts=PTS-STARTPTS,tpad=stop_mode=clone:stop_duration={duration:.3f},"
+                f"trim=duration={duration:.3f},setpts=PTS+{cue.start:.3f}/TB,split={strips}{labels}"
+            )
+            current = f"tearbed{i}"
+            for strip in range(strips):
+                y = height * strip // strips
+                next_y = height * (strip + 1) // strips
+                strip_h = next_y - y
+                # A deterministic alternating delay makes the exposed edge
+                # irregular without random or generated imagery.
+                delay = duration * stagger_ratio * ((strip * 3) % strips) / max(1, strips - 1)
+                travel = max(.1, duration - delay)
+                progress = f"min(max((t-{cue.start + delay:.3f})/{travel:.3f}\\,0)\\,1)"
+                x = f"-w*{progress}" if cue.tear_direction == "left" else f"W*{progress}"
+                edge_x = f"iw-{edge}" if cue.tear_direction == "left" else "0"
+                piece = f"tearpiece{i}_{strip}"
+                next_base = target if strip == strips - 1 else f"tearstage{i}_{strip}"
+                parts.append(
+                    f"[tearstrip{i}_{strip}]crop=w={width}:h={strip_h}:x=0:y={y},"
+                    f"drawbox=x={edge_x}:y=0:w={edge}:h=ih:color=0xF7F1E3@0.96:t=fill[{piece}]"
+                )
+                parts.append(
+                    f"[{current}][{piece}]overlay=x='{x}':y={y}:eof_action=pass:repeatlast=0:"
+                    f"enable='{active}'[{next_base}]"
+                )
+                current = next_base
         else:
             # Typography/pointer effects are ASS treatments below dialogue captions.
             parts.append(f"[{base}]null[{target}]")

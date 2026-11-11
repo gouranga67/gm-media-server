@@ -4,7 +4,7 @@ Updated: 2026-11-11 (UTC)
 
 This is the working plan for turning the Lenovo into a private media-editing appliance. A phase is complete only when its exit checks pass. Discussion, generated files, and installed packages do not count as a completed phase by themselves.
 
-Current effects checkpoint: [Phase 32I — Rack Focus](phase-reports/phase-32-rack-focus.md). Registry version 8 begins the camera pack with a bounded simulated focus pull: a sharp source window moves across a softly blurred stable shot. It performs no depth detection or subject tracking, keeps dialogue/caption timing intact and requires real-footage quality acceptance before broader agent use.
+Current effects checkpoint: [Phase 32J — Paper Tear](phase-reports/phase-32-paper-tear.md). Registry version 9 adds a true clip-boundary transition: deterministic torn-paper strips pull the frozen outgoing frame away to reveal the real incoming clip. It is bound to an exact ordinary cut, never changes recorded audio timing and is cleared automatically if the timeline later changes.
 
 Product-clarity checkpoint: [Phase 32A — Guided Studio home](phase-reports/phase-32-guided-studio.md). The Home screen now begins with an action-led launcher for the six main owner tasks and includes a compact six-step guide to the whole workflow. Existing live overview, onboarding, recent-job, budget and operations information remains available. Source verification is complete; deployment and phone/owner acceptance remain pending.
 
