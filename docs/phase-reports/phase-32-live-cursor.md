@@ -1,6 +1,6 @@
 # Phase 32C — Live Cursor
 
-Implemented and source-verified on 2026-11-11. Container render verification, deployment and owner playback acceptance remain pending.
+Implemented, container-verified and deployed on 2026-11-11. Owner playback acceptance remains pending.
 
 ## Purpose
 
@@ -48,4 +48,4 @@ The complete eight-gate source suite passes: Compose configuration, Python compi
 
 ## Next slice
 
-Phase 32D should add **Letter Dive** as the next low-risk overlay animation, retaining the same registry, explicit-submit, dialogue-preservation and real-playback gates. Comment Drop and Voice Note can follow one at a time. Camera-like effects and transitions such as Rack Focus, Dolly Zoom and Paper Tear remain a later shot-aware pack.
+Phase 32D adds **Letter Dive** as the next low-risk overlay animation, retaining the same registry, explicit-submit, dialogue-preservation and real-playback gates. [The source checkpoint is implemented here](phase-32-letter-dive.md). Comment Drop and Voice Note follow one at a time. Camera-like effects and transitions such as Rack Focus, Dolly Zoom and Paper Tear remain a later shot-aware pack.

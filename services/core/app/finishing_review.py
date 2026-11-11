@@ -70,6 +70,8 @@ def treatment_timeline(context, plan):
             if cue.preset == "live_cursor":
                 detail += (f"; bounded frame coordinates {cue.cursor_start_x:.2f},{cue.cursor_start_y:.2f} to "
                            f"{cue.cursor_end_x:.2f},{cue.cursor_end_y:.2f}; click pulse {'on' if cue.click else 'off'}; no object tracking")
+            elif cue.preset == "letter_dive":
+                detail += f"; {cue.position} position; source-backed text: {cue.letter_text}"
             else:
                 detail += f"; {cue.position} position"
             add("graphic", cue.preset.replace("_", " ").capitalize(), cue.start, cue.end,

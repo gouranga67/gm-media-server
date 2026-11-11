@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 
-EFFECT_REGISTRY_VERSION = 2
+EFFECT_REGISTRY_VERSION = 3
 
 
 @dataclass(frozen=True)
@@ -18,6 +18,8 @@ class EffectParameter:
     values: tuple[Any, ...] = ()
     minimum: float | None = None
     maximum: float | None = None
+    minimum_length: int | None = None
+    maximum_length: int | None = None
 
     def public(self) -> dict[str, Any]:
         result = {
@@ -32,6 +34,10 @@ class EffectParameter:
             result["minimum"] = self.minimum
         if self.maximum is not None:
             result["maximum"] = self.maximum
+        if self.minimum_length is not None:
+            result["minimum_length"] = self.minimum_length
+        if self.maximum_length is not None:
+            result["maximum_length"] = self.maximum_length
         return result
 
 
@@ -89,6 +95,7 @@ CURSOR_START_Y = EffectParameter("cursor_start_y", "Start vertical", "number", 0
 CURSOR_END_X = EffectParameter("cursor_end_x", "End horizontal", "number", 0.75, minimum=0.08, maximum=0.92)
 CURSOR_END_Y = EffectParameter("cursor_end_y", "End vertical", "number", 0.4, minimum=0.1, maximum=0.82)
 CURSOR_CLICK = EffectParameter("click", "Click pulse", "boolean", True)
+LETTER_TEXT = EffectParameter("letter_text", "Text", "text", "", minimum_length=1, maximum_length=18)
 
 
 EFFECT_DEFINITIONS = (
@@ -124,6 +131,17 @@ EFFECT_DEFINITIONS = (
         maximum_duration_seconds=4.0,
         default_duration_seconds=1.5,
         parameters=(INTENSITY, CURSOR_START_X, CURSOR_START_Y, CURSOR_END_X, CURSOR_END_Y, CURSOR_CLICK),
+    ),
+    EffectDefinition(
+        preset="letter_dive",
+        label="Letter dive",
+        summary="A short source-backed word or phrase drops in one letter at a time.",
+        category="typography",
+        version=1,
+        minimum_duration_seconds=0.6,
+        maximum_duration_seconds=2.5,
+        default_duration_seconds=1.4,
+        parameters=(INTENSITY, POSITION, LETTER_TEXT),
     ),
 )
 

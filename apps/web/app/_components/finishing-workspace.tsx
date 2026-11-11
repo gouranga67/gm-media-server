@@ -85,6 +85,7 @@ function FinishingForm({
   const [cursorEndX, setCursorEndX] = useState("0.75");
   const [cursorEndY, setCursorEndY] = useState("0.4");
   const [cursorClick, setCursorClick] = useState(true);
+  const [letterText, setLetterText] = useState("");
   const [pointerShape, setPointerShape] = useState<"arrow" | "circle">(
     "circle",
   );
@@ -154,6 +155,9 @@ function FinishingForm({
     setCursorEndX(String(value("cursor_end_x", 0.75)));
     setCursorEndY(String(value("cursor_end_y", 0.4)));
     setCursorClick(Boolean(value("click", 1)));
+    setLetterText(String(
+      definition?.parameters.find((parameter) => parameter.key === "letter_text")?.default ?? "",
+    ));
     setEnd(
       String(
         Number(start) +
@@ -334,7 +338,7 @@ function FinishingForm({
         ...window,
         preset: visualBeat,
         intensity: visualBeatIntensity,
-        ...(visualBeat === "clone_row" ? { position: visualBeatPosition } : {}),
+        ...(positionParameter ? { position: visualBeatPosition } : {}),
         ...(visualBeat === "live_cursor"
           ? {
               cursor_start_x: Number(cursorStartX),
@@ -344,6 +348,7 @@ function FinishingForm({
               click: cursorClick,
             }
           : {}),
+        ...(visualBeat === "letter_dive" ? { letter_text: letterText.trim() } : {}),
       };
       next = {
         ...next,
@@ -701,6 +706,24 @@ function FinishingForm({
                       Show a click pulse at the destination
                     </label>
                   </div>
+                ) : null}
+                {visualBeat === "letter_dive" ? (
+                  <label className="block text-xs">
+                    Short source-backed text
+                    <input
+                      className={control}
+                      type="text"
+                      required
+                      minLength={1}
+                      maxLength={effectDefinition?.parameters.find((parameter) => parameter.key === "letter_text")?.maximum_length ?? 18}
+                      value={letterText}
+                      onChange={(event) => setLetterText(event.currentTarget.value)}
+                      placeholder="A word from the footage"
+                    />
+                    <span className="mt-1 block leading-5 text-[#666862]">
+                      Use a genuine word or short phrase from the footage. Letters drop in individually; dialogue captions remain above it.
+                    </span>
+                  </label>
                 ) : null}
               </div>
             ) : null}

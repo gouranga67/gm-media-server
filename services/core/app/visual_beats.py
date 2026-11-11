@@ -2,13 +2,13 @@
 
 import re
 from typing import Literal
-from pydantic import Field, model_serializer, model_validator
+from pydantic import Field, field_validator, model_serializer, model_validator
 from app.creative_treatments import TreatmentWindow
 from app.effect_registry import effect_definition
 
 
 class VisualBeat(TreatmentWindow):
-    preset: Literal["impact_frame", "clone_row", "live_cursor"]
+    preset: Literal["impact_frame", "clone_row", "live_cursor", "letter_dive"]
     intensity: Literal["subtle", "standard", "strong"] = "standard"
     position: Literal["upper", "center", "lower"] = "center"
     cursor_start_x: float | None = Field(default=None, ge=.08, le=.92)
@@ -16,6 +16,17 @@ class VisualBeat(TreatmentWindow):
     cursor_end_x: float | None = Field(default=None, ge=.08, le=.92)
     cursor_end_y: float | None = Field(default=None, ge=.1, le=.82)
     click: bool | None = None
+    letter_text: str | None = Field(default=None, min_length=1, max_length=18)
+
+    @field_validator("letter_text")
+    @classmethod
+    def safe_letter_text(cls, value):
+        if value is None:
+            return value
+        value = value.strip()
+        if not value or any(character in value for character in "{}\\") or any(ord(character) < 32 for character in value):
+            raise ValueError("letter_dive requires short plain text without subtitle commands")
+        return value
 
     @model_validator(mode="after")
     def short_beat(self):
@@ -36,6 +47,10 @@ class VisualBeat(TreatmentWindow):
             raise ValueError("live_cursor requires a bounded start, end and click choice")
         if self.preset != "live_cursor" and any(value is not None for value in cursor_values):
             raise ValueError(f"{self.preset} does not accept cursor parameters")
+        if self.preset == "letter_dive" and self.letter_text is None:
+            raise ValueError("letter_dive requires source-backed text")
+        if self.preset != "letter_dive" and self.letter_text is not None:
+            raise ValueError(f"{self.preset} does not accept letter text")
         return self
 
     @model_serializer(mode="wrap")
@@ -45,7 +60,7 @@ class VisualBeat(TreatmentWindow):
             data.pop("intensity", None)
         if data.get("position") == "center":
             data.pop("position", None)
-        for name in ("cursor_start_x", "cursor_start_y", "cursor_end_x", "cursor_end_y", "click"):
+        for name in ("cursor_start_x", "cursor_start_y", "cursor_end_x", "cursor_end_y", "click", "letter_text"):
             if data.get(name) is None:
                 data.pop(name, None)
         return data
@@ -91,7 +106,7 @@ def append_visual_beats(graph, plan, *, width, height):
             parts.append(f"[beatbed{i}]drawbox=x=0:y=0:w=iw:h=ih:color=black@{shade:g}:t=fill:enable='{active}'[clonebed{i}]")
             parts.append(f"[clonebed{i}][clonerow{i}]overlay=x=(W-w)/2:y={y}:eof_action=pass:repeatlast=0:enable='{active}'[{target}]")
         else:
-            # Live cursor is an ASS vector treatment below dialogue captions.
+            # Typography/pointer effects are ASS treatments below dialogue captions.
             parts.append(f"[{base}]null[{target}]")
     parts.append(f"[beatbase{len(cues)}]{captions or 'null'}[vout]")
     return ";".join(parts)

@@ -31,7 +31,8 @@ def fixture():
 class VisualBeatTests(unittest.TestCase):
     def test_strict_bounded_schema_and_no_empty_legacy_hash_change(self):
         for value in (dict(start=0,end=.5,preset='impact_frame'),dict(start=0,end=3,preset='clone_row'),
-                      dict(start=0,end=1,preset='live_cursor'),dict(start=0,end=1,preset='arbitrary_js')):
+                      dict(start=0,end=1,preset='live_cursor'),dict(start=0,end=1,preset='letter_dive'),
+                      dict(start=0,end=1,preset='arbitrary_js')):
             with self.assertRaises(ValidationError): VisualBeat(**value)
         self.assertNotIn('visual_beats',FinishingTools().model_dump(mode='json'))
         legacy=VisualBeat(start=0,end=.2,preset='impact_frame')
@@ -49,6 +50,12 @@ class VisualBeatTests(unittest.TestCase):
             VisualBeat(start=0,end=.2,preset='impact_frame',click=True)
         with self.assertRaises(ValidationError):
             VisualBeat(start=0,end=1,preset='live_cursor',cursor_start_x=0,cursor_start_y=.3,cursor_end_x=.8,cursor_end_y=.6,click=True)
+        letters=VisualBeat(start=0,end=1.4,preset='letter_dive',intensity='strong',position='upper',letter_text='  REAL  ')
+        self.assertEqual(letters.model_dump(mode='json')['letter_text'],'REAL')
+        with self.assertRaisesRegex(ValidationError,'plain text'):
+            VisualBeat(start=0,end=1,preset='letter_dive',letter_text=r'{\move}')
+        with self.assertRaisesRegex(ValidationError,'does not accept letter text'):
+            VisualBeat(start=0,end=.2,preset='impact_frame',letter_text='NO')
         for recipe in ('talking_head','montage'):
             schema=schema_for_recipe(recipe)['properties']['finishing']['anyOf'][1]
             beat=schema['properties']['visual_beats']['items']
@@ -58,9 +65,9 @@ class VisualBeatTests(unittest.TestCase):
     def test_registry_is_versioned_complete_and_matches_the_schema(self):
         registry=public_effect_registry()
         self.assertEqual(registry['version'],EFFECT_REGISTRY_VERSION)
-        self.assertEqual(registry['version'],2)
-        self.assertEqual({item['preset'] for item in registry['effects']},{'impact_frame','clone_row','live_cursor'})
-        self.assertEqual({item.preset for item in EFFECT_DEFINITIONS},{'impact_frame','clone_row','live_cursor'})
+        self.assertEqual(registry['version'],3)
+        self.assertEqual({item['preset'] for item in registry['effects']},{'impact_frame','clone_row','live_cursor','letter_dive'})
+        self.assertEqual({item.preset for item in EFFECT_DEFINITIONS},{'impact_frame','clone_row','live_cursor','letter_dive'})
         for item in registry['effects']:
             self.assertLessEqual(item['minimum_duration_seconds'],item['default_duration_seconds'])
             self.assertLessEqual(item['default_duration_seconds'],item['maximum_duration_seconds'])
@@ -73,6 +80,9 @@ class VisualBeatTests(unittest.TestCase):
         self.assertEqual(parameters['cursor_start_x']['type'],'number')
         self.assertEqual((parameters['cursor_start_x']['minimum'],parameters['cursor_start_x']['maximum']),(.08,.92))
         self.assertEqual(parameters['click'],{'key':'click','label':'Click pulse','type':'boolean','default':True})
+        letters=next(item for item in registry['effects'] if item['preset']=='letter_dive')
+        text=next(item for item in letters['parameters'] if item['key']=='letter_text')
+        self.assertEqual(text,{'key':'letter_text','label':'Text','type':'text','default':'','minimum_length':1,'maximum_length':18})
 
     def test_registered_parameters_reach_only_the_bounded_filter_values(self):
         plan=fixture()
@@ -100,6 +110,15 @@ class VisualBeatTests(unittest.TestCase):
         caption_line=next(line for line in ass.splitlines() if line.startswith('Dialogue: 0,'))
         self.assertTrue(cursor_line.startswith('Dialogue: -1,'))
         self.assertTrue(caption_line.startswith('Dialogue: 0,'))
+
+    def test_letter_dive_staggers_plain_text_below_caption_dialogue(self):
+        tools=FinishingTools(visual_beats=[dict(start=.2,end=1.6,preset='letter_dive',intensity='strong',position='upper',letter_text='GO')])
+        ass=render_ass([dict(start=0,end=2,text='Caption wins.')],width=180,height=320,treatments=tools)
+        letters=[line for line in ass.splitlines() if line.startswith('Dialogue: -1,') and r'\fnDejaVu Sans' in line]
+        self.assertEqual(len(letters),2)
+        self.assertIn(r'\move(',letters[0])
+        self.assertNotEqual(letters[0].split(',')[1],letters[1].split(',')[1])
+        self.assertTrue(any(line.startswith('Dialogue: 0,') for line in ass.splitlines()))
 
     def test_duration_overlap_budget_removal_and_retiming(self):
         plan=fixture()
@@ -137,6 +156,8 @@ class VisualBeatRenderTests(unittest.TestCase):
             p=fixture()
             p.finishing.visual_beats.insert(0,VisualBeat(start=.1,end=.7,preset='live_cursor',
                 cursor_start_x=.2,cursor_start_y=.15,cursor_end_x=.8,cursor_end_y=.15,click=True))
+            p.finishing.visual_beats.append(VisualBeat(start=2.3,end=2.9,preset='letter_dive',
+                intensity='strong',position='upper',letter_text='GO'))
             captions.write_text(render_ass([dict(start=0,end=3,text='Keep speech intact.')],width=180,height=320,treatments=p.finishing))
             settings=Settings(database_url='postgresql://unused',upload_hook_secret='x'*32,media_root=root)
             for recipe in ('talking_head','montage'):
@@ -169,6 +190,8 @@ class VisualBeatRenderTests(unittest.TestCase):
                 impact=frame(2.1)
                 self.assertGreater(pixel(impact,1,1)[0],140)
                 self.assertLess(pixel(after,1,1)[0],80)
+                letters=frame(2.7)
+                self.assertGreater(sum(min(pixel(letters,x,y))>170 for y in range(50,90) for x in range(55,125)),20)
                 # White subtitle pixels remain in the lower safe band during the clone row.
                 self.assertGreater(sum(min(pixel(during,x,y))>170 for y in range(220,250) for x in range(180)),20)
                 pcm=array.array('h',self.ff('-i',str(output),'-vn','-ac','1','-ar','8000','-f','s16le','pipe:1'))

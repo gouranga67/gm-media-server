@@ -4,7 +4,7 @@ Updated: 2026-11-11 (UTC)
 
 This is the working plan for turning the Lenovo into a private media-editing appliance. A phase is complete only when its exit checks pass. Discussion, generated files, and installed packages do not count as a completed phase by themselves.
 
-Current effects checkpoint: [Phase 32C — Live Cursor](phase-reports/phase-32-live-cursor.md). Registry version 2 adds the first new social animation through the shared Effects Engine: a bounded point-to-point cursor with optional click pulse, available to GM Studio and the editing agent without tracking, arbitrary code or speech changes. The eight-gate source suite passes; container render tests, deployment and real-footage playback acceptance remain pending.
+Current effects checkpoint: [Phase 32D — Letter Dive](phase-reports/phase-32-letter-dive.md). Registry version 3 adds bounded source-backed text and a staggered per-letter entrance alongside Live Cursor, Clone Row and Impact Frame. GM Studio and the editing agent share the same validation and renderer contract; source, container, deployment and playback acceptance are tracked separately.
 
 Product-clarity checkpoint: [Phase 32A — Guided Studio home](phase-reports/phase-32-guided-studio.md). The Home screen now begins with an action-led launcher for the six main owner tasks and includes a compact six-step guide to the whole workflow. Existing live overview, onboarding, recent-job, budget and operations information remains available. Source verification is complete; deployment and phone/owner acceptance remain pending.
 

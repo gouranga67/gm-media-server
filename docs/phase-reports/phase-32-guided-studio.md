@@ -50,8 +50,8 @@ After deployment:
 ## Next build slices
 
 - **Phase 32B — Effects foundation:** establish the reusable effects registry, parameter contract, preview samples and render-test pattern around the existing Clone Row and Impact Frame effects. [Source checkpoint implemented](phase-32-effects-foundation.md); container and playback acceptance remain pending.
-- **Phase 32C — Social animation pack:** add one effect at a time, beginning with low-risk overlay effects. [Live Cursor is implemented in source](phase-32-live-cursor.md); Letter Dive, Comment Drop and Voice Note follow.
-- **Phase 32D — Camera and transition pack:** add and evaluate Rack Focus, Dolly Zoom, Paper Tear and other shot-aware transitions, with masking or segmentation kept behind explicit quality gates where required.
+- **Phase 32C–D — Social animation pack:** add one effect at a time, beginning with low-risk overlays. [Live Cursor is deployed](phase-32-live-cursor.md), [Letter Dive is implemented in source](phase-32-letter-dive.md), and Comment Drop and Voice Note follow.
+- **Phase 32E — Camera and transition pack:** add and evaluate Rack Focus, Dolly Zoom, Paper Tear and other shot-aware transitions, with masking or segmentation kept behind explicit quality gates where required.
 
 Each effect must remain selectable by name and bounded parameters, preserve original footage, produce a reviewable preview and pass a real-footage playback check before it is treated as accepted.
 
@@ -61,16 +61,16 @@ This is the complete named set recovered from the earlier planning discussion. I
 
 | Effect | Initial estimate | Current position |
 |---|---|---|
-| Live Cursor | Easy | Phase 32C candidate |
+| Live Cursor | Easy | Registry v2 deployed; playback acceptance pending |
 | Clone Row | Medium | Native bounded first version already implemented; move behind the shared Phase 32B contract |
 | Post Wall | Medium | Phase 32C candidate |
-| Letter Dive | Easy | Phase 32C candidate |
+| Letter Dive | Easy | Registry v3 source checkpoint implemented |
 | Comment Drop | Easy | Existing comment-card capability is partial; formalise as a reusable Phase 32C effect |
 | Sketch Words | Medium | Phase 32C candidate |
-| Rack Focus | Easy | Phase 32D candidate; test against real footage |
+| Rack Focus | Easy | Phase 32E candidate; test against real footage |
 | Voice Note | Easy | Phase 32C candidate |
 | Impact Frame | Easy | Native bounded first version already implemented; move behind the shared Phase 32B contract |
-| Dolly Zoom | Medium | Phase 32D candidate; source framing and crop limits required |
-| Paper Tear | Easy | Phase 32D transition candidate |
+| Dolly Zoom | Medium | Phase 32E candidate; source framing and crop limits required |
+| Paper Tear | Easy | Phase 32E transition candidate |
 
 Effects that depend on convincing person cloning, isolation or background separation may require prepared footage, masks or segmentation. They must not silently replace the owner's footage with generated video, and learned cutout work remains behind the existing quality gate.

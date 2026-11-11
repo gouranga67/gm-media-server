@@ -179,6 +179,32 @@ def treatment_events(tools, width, height, captions=(), caption_position="lower_
             path = f"m {-2 * radius} {-radius * 0.25:.1f} l {-radius} {-radius * 0.25:.1f} {-radius} {-radius * 0.6:.1f} 0 0 {-radius} {radius * 0.6:.1f} {-radius} {radius * 0.25:.1f} {-2 * radius} {radius * 0.25:.1f}"
         event(cue, tags + "\\p1", path)
     for cue in tools.visual_beats:
+        if cue.preset == "letter_dive":
+            text = cue.letter_text.upper()
+            unit = min(width, height) / 540
+            size = max(14, round({"subtle": 34, "standard": 43, "strong": 52}[cue.intensity] * unit))
+            widths = [text_width(character, "DejaVu Sans", size, bold=True) for character in text]
+            total_width = sum(widths)
+            x = (width - total_width) / 2
+            final_y = round(height * {"upper": .22, "center": .46, "lower": .70}[cue.position])
+            travel = round(height * {"subtle": .08, "standard": .13, "strong": .18}[cue.intensity])
+            stagger_span = min((cue.end - cue.start) * .38, .65)
+            step = stagger_span / max(1, len(text) - 1)
+            entrance_ms = max(140, round(min(.32, (cue.end - cue.start) * .4) * 1000))
+            for index, character in enumerate(text):
+                center_x = round(x + widths[index] / 2)
+                x += widths[index]
+                if character.isspace():
+                    continue
+                letter = cue.model_copy(update={"start": cue.start + index * step})
+                tags = (
+                    f"\\an5\\fnDejaVu Sans\\fs{size}\\b1\\move({center_x},{final_y-travel},{center_x},{final_y},0,{entrance_ms})"
+                    "\\fad(30,90)\\fscx78\\fscy78"
+                    f"\\t(0,{entrance_ms},\\fscx100\\fscy100)"
+                    "\\1c&HFFFFFF&\\3c&H201A16&\\bord1.6\\shad1"
+                )
+                event(letter, tags, character, -1)
+            continue
         if cue.preset != "live_cursor":
             continue
         scale = {"subtle": .75, "standard": 1, "strong": 1.3}[cue.intensity]
