@@ -86,7 +86,18 @@ def treatment_events(tools, width, height, captions=(), caption_position="lower_
             f"Dialogue: {layer},{_timestamp(cue.start)},{_timestamp(cue.end)},GMBlue,,0,0,0,,{{{tags}}}{text}"
         )
 
-    for cue in tools.callouts:
+    callouts = list(tools.callouts)
+    for cue in tools.visual_beats:
+        if cue.preset == "comment_drop":
+            callouts.append(Callout(
+                start=cue.start,
+                end=cue.end,
+                text=cue.comment_text,
+                position={"upper": "upper", "center": "middle", "lower": "lower_safe"}[cue.position],
+                style="comment",
+                animation={"subtle": "fade", "standard": "slide_up", "strong": "pop"}[cue.intensity],
+            ))
+    for cue in callouts:
         active_bands = {
             event.get("position") or caption_position
             for event in captions

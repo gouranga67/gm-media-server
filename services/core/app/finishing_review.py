@@ -72,6 +72,8 @@ def treatment_timeline(context, plan):
                            f"{cue.cursor_end_x:.2f},{cue.cursor_end_y:.2f}; click pulse {'on' if cue.click else 'off'}; no object tracking")
             elif cue.preset == "letter_dive":
                 detail += f"; {cue.position} position; source-backed text: {cue.letter_text}"
+            elif cue.preset == "comment_drop":
+                detail += f"; {cue.position} position; source-backed comment: {cue.comment_text}"
             else:
                 detail += f"; {cue.position} position"
             add("graphic", cue.preset.replace("_", " ").capitalize(), cue.start, cue.end,

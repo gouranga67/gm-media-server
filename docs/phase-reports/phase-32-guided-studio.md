@@ -50,8 +50,8 @@ After deployment:
 ## Next build slices
 
 - **Phase 32B — Effects foundation:** establish the reusable effects registry, parameter contract, preview samples and render-test pattern around the existing Clone Row and Impact Frame effects. [Source checkpoint implemented](phase-32-effects-foundation.md); container and playback acceptance remain pending.
-- **Phase 32C–D — Social animation pack:** add one effect at a time, beginning with low-risk overlays. [Live Cursor is deployed](phase-32-live-cursor.md), [Letter Dive is implemented in source](phase-32-letter-dive.md), and Comment Drop and Voice Note follow.
-- **Phase 32E — Camera and transition pack:** add and evaluate Rack Focus, Dolly Zoom, Paper Tear and other shot-aware transitions, with masking or segmentation kept behind explicit quality gates where required.
+- **Phase 32C–E — Social animation pack:** add one effect at a time, beginning with low-risk overlays. [Live Cursor is deployed](phase-32-live-cursor.md), [Letter Dive](phase-32-letter-dive.md) and [Comment Drop](phase-32-comment-drop.md) are implemented in source, and Voice Note follows.
+- **Phase 32F — Camera and transition pack:** add and evaluate Rack Focus, Dolly Zoom, Paper Tear and other shot-aware transitions, with masking or segmentation kept behind explicit quality gates where required.
 
 Each effect must remain selectable by name and bounded parameters, preserve original footage, produce a reviewable preview and pass a real-footage playback check before it is treated as accepted.
 
@@ -65,7 +65,7 @@ This is the complete named set recovered from the earlier planning discussion. I
 | Clone Row | Medium | Native bounded first version already implemented; move behind the shared Phase 32B contract |
 | Post Wall | Medium | Phase 32C candidate |
 | Letter Dive | Easy | Registry v3 source checkpoint implemented |
-| Comment Drop | Easy | Existing comment-card capability is partial; formalise as a reusable Phase 32C effect |
+| Comment Drop | Easy | Registry v4 source checkpoint implemented by reusing the comment-card renderer |
 | Sketch Words | Medium | Phase 32C candidate |
 | Rack Focus | Easy | Phase 32E candidate; test against real footage |
 | Voice Note | Easy | Phase 32C candidate |

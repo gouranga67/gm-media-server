@@ -8,7 +8,7 @@ from app.effect_registry import effect_definition
 
 
 class VisualBeat(TreatmentWindow):
-    preset: Literal["impact_frame", "clone_row", "live_cursor", "letter_dive"]
+    preset: Literal["impact_frame", "clone_row", "live_cursor", "letter_dive", "comment_drop"]
     intensity: Literal["subtle", "standard", "strong"] = "standard"
     position: Literal["upper", "center", "lower"] = "center"
     cursor_start_x: float | None = Field(default=None, ge=.08, le=.92)
@@ -17,15 +17,16 @@ class VisualBeat(TreatmentWindow):
     cursor_end_y: float | None = Field(default=None, ge=.1, le=.82)
     click: bool | None = None
     letter_text: str | None = Field(default=None, min_length=1, max_length=18)
+    comment_text: str | None = Field(default=None, min_length=1, max_length=48)
 
-    @field_validator("letter_text")
+    @field_validator("letter_text", "comment_text")
     @classmethod
     def safe_letter_text(cls, value):
         if value is None:
             return value
         value = value.strip()
         if not value or any(character in value for character in "{}\\") or any(ord(character) < 32 for character in value):
-            raise ValueError("letter_dive requires short plain text without subtitle commands")
+            raise ValueError("native text effects require short plain text without subtitle commands")
         return value
 
     @model_validator(mode="after")
@@ -51,6 +52,10 @@ class VisualBeat(TreatmentWindow):
             raise ValueError("letter_dive requires source-backed text")
         if self.preset != "letter_dive" and self.letter_text is not None:
             raise ValueError(f"{self.preset} does not accept letter text")
+        if self.preset == "comment_drop" and self.comment_text is None:
+            raise ValueError("comment_drop requires source-backed text")
+        if self.preset != "comment_drop" and self.comment_text is not None:
+            raise ValueError(f"{self.preset} does not accept comment text")
         return self
 
     @model_serializer(mode="wrap")
@@ -60,7 +65,7 @@ class VisualBeat(TreatmentWindow):
             data.pop("intensity", None)
         if data.get("position") == "center":
             data.pop("position", None)
-        for name in ("cursor_start_x", "cursor_start_y", "cursor_end_x", "cursor_end_y", "click", "letter_text"):
+        for name in ("cursor_start_x", "cursor_start_y", "cursor_end_x", "cursor_end_y", "click", "letter_text", "comment_text"):
             if data.get(name) is None:
                 data.pop(name, None)
         return data

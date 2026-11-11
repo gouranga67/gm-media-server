@@ -32,6 +32,7 @@ class VisualBeatTests(unittest.TestCase):
     def test_strict_bounded_schema_and_no_empty_legacy_hash_change(self):
         for value in (dict(start=0,end=.5,preset='impact_frame'),dict(start=0,end=3,preset='clone_row'),
                       dict(start=0,end=1,preset='live_cursor'),dict(start=0,end=1,preset='letter_dive'),
+                      dict(start=0,end=1.5,preset='comment_drop'),
                       dict(start=0,end=1,preset='arbitrary_js')):
             with self.assertRaises(ValidationError): VisualBeat(**value)
         self.assertNotIn('visual_beats',FinishingTools().model_dump(mode='json'))
@@ -56,6 +57,12 @@ class VisualBeatTests(unittest.TestCase):
             VisualBeat(start=0,end=1,preset='letter_dive',letter_text=r'{\move}')
         with self.assertRaisesRegex(ValidationError,'does not accept letter text'):
             VisualBeat(start=0,end=.2,preset='impact_frame',letter_text='NO')
+        comment=VisualBeat(start=0,end=2,preset='comment_drop',position='lower',comment_text='  Real reaction  ')
+        self.assertEqual(comment.model_dump(mode='json')['comment_text'],'Real reaction')
+        with self.assertRaisesRegex(ValidationError,'plain text'):
+            VisualBeat(start=0,end=2,preset='comment_drop',comment_text=r'{\fad}')
+        with self.assertRaisesRegex(ValidationError,'does not accept comment text'):
+            VisualBeat(start=0,end=1.4,preset='letter_dive',letter_text='YES',comment_text='NO')
         for recipe in ('talking_head','montage'):
             schema=schema_for_recipe(recipe)['properties']['finishing']['anyOf'][1]
             beat=schema['properties']['visual_beats']['items']
@@ -65,9 +72,9 @@ class VisualBeatTests(unittest.TestCase):
     def test_registry_is_versioned_complete_and_matches_the_schema(self):
         registry=public_effect_registry()
         self.assertEqual(registry['version'],EFFECT_REGISTRY_VERSION)
-        self.assertEqual(registry['version'],3)
-        self.assertEqual({item['preset'] for item in registry['effects']},{'impact_frame','clone_row','live_cursor','letter_dive'})
-        self.assertEqual({item.preset for item in EFFECT_DEFINITIONS},{'impact_frame','clone_row','live_cursor','letter_dive'})
+        self.assertEqual(registry['version'],4)
+        self.assertEqual({item['preset'] for item in registry['effects']},{'impact_frame','clone_row','live_cursor','letter_dive','comment_drop'})
+        self.assertEqual({item.preset for item in EFFECT_DEFINITIONS},{'impact_frame','clone_row','live_cursor','letter_dive','comment_drop'})
         for item in registry['effects']:
             self.assertLessEqual(item['minimum_duration_seconds'],item['default_duration_seconds'])
             self.assertLessEqual(item['default_duration_seconds'],item['maximum_duration_seconds'])
@@ -83,6 +90,9 @@ class VisualBeatTests(unittest.TestCase):
         letters=next(item for item in registry['effects'] if item['preset']=='letter_dive')
         text=next(item for item in letters['parameters'] if item['key']=='letter_text')
         self.assertEqual(text,{'key':'letter_text','label':'Text','type':'text','default':'','minimum_length':1,'maximum_length':18})
+        comment=next(item for item in registry['effects'] if item['preset']=='comment_drop')
+        text=next(item for item in comment['parameters'] if item['key']=='comment_text')
+        self.assertEqual(text,{'key':'comment_text','label':'Comment','type':'text','default':'','minimum_length':1,'maximum_length':48})
 
     def test_registered_parameters_reach_only_the_bounded_filter_values(self):
         plan=fixture()
@@ -120,6 +130,14 @@ class VisualBeatTests(unittest.TestCase):
         self.assertNotEqual(letters[0].split(',')[1],letters[1].split(',')[1])
         self.assertTrue(any(line.startswith('Dialogue: 0,') for line in ass.splitlines()))
 
+    def test_comment_drop_reuses_the_caption_aware_comment_card(self):
+        tools=FinishingTools(visual_beats=[dict(start=.2,end=2.2,preset='comment_drop',intensity='standard',position='lower',comment_text='Real reaction')])
+        ass=render_ass([dict(start=0,end=2.5,text='Caption wins.',position='lower_safe')],width=180,height=320,treatments=tools)
+        self.assertIn('Real reaction',ass)
+        self.assertIn(r'\move(',ass)
+        for layer in (-3,-2,-1,0):
+            self.assertTrue(any(line.startswith(f'Dialogue: {layer},') for line in ass.splitlines()))
+
     def test_duration_overlap_budget_removal_and_retiming(self):
         plan=fixture()
         validate_finishing(plan,[])
@@ -132,6 +150,13 @@ class VisualBeatTests(unittest.TestCase):
         changed=apply_timeline_adjustments(plan,[dict(clip_index=0,source_in=.4)])
         self.assertAlmostEqual(changed.finishing.visual_beats[0].start,.4)
         self.assertEqual(plan.finishing.visual_beats[0].start,.8)
+        collision=fixture()
+        collision.finishing=FinishingTools(
+            callouts=[dict(start=.5,end=1.5,text='Existing card')],
+            visual_beats=[dict(start=1,end=2,preset='comment_drop',comment_text='New card')],
+        )
+        with self.assertRaisesRegex(ValueError,'cannot overlap another text callout'):
+            validate_finishing(collision,[])
 
     def test_remove_effects_and_effect_lock_include_native_beats(self):
         plan=fixture().model_dump(mode='json')

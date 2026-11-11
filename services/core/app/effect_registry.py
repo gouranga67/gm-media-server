@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 
-EFFECT_REGISTRY_VERSION = 3
+EFFECT_REGISTRY_VERSION = 4
 
 
 @dataclass(frozen=True)
@@ -96,6 +96,7 @@ CURSOR_END_X = EffectParameter("cursor_end_x", "End horizontal", "number", 0.75,
 CURSOR_END_Y = EffectParameter("cursor_end_y", "End vertical", "number", 0.4, minimum=0.1, maximum=0.82)
 CURSOR_CLICK = EffectParameter("click", "Click pulse", "boolean", True)
 LETTER_TEXT = EffectParameter("letter_text", "Text", "text", "", minimum_length=1, maximum_length=18)
+COMMENT_TEXT = EffectParameter("comment_text", "Comment", "text", "", minimum_length=1, maximum_length=48)
 
 
 EFFECT_DEFINITIONS = (
@@ -142,6 +143,17 @@ EFFECT_DEFINITIONS = (
         maximum_duration_seconds=2.5,
         default_duration_seconds=1.4,
         parameters=(INTENSITY, POSITION, LETTER_TEXT),
+    ),
+    EffectDefinition(
+        preset="comment_drop",
+        label="Comment drop",
+        summary="A short source-backed comment card enters in a safe caption-aware band.",
+        category="typography",
+        version=1,
+        minimum_duration_seconds=1.0,
+        maximum_duration_seconds=4.0,
+        default_duration_seconds=2.2,
+        parameters=(INTENSITY, POSITION, COMMENT_TEXT),
     ),
 )
 

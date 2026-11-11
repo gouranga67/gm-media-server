@@ -86,6 +86,7 @@ function FinishingForm({
   const [cursorEndY, setCursorEndY] = useState("0.4");
   const [cursorClick, setCursorClick] = useState(true);
   const [letterText, setLetterText] = useState("");
+  const [commentText, setCommentText] = useState("");
   const [pointerShape, setPointerShape] = useState<"arrow" | "circle">(
     "circle",
   );
@@ -157,6 +158,9 @@ function FinishingForm({
     setCursorClick(Boolean(value("click", 1)));
     setLetterText(String(
       definition?.parameters.find((parameter) => parameter.key === "letter_text")?.default ?? "",
+    ));
+    setCommentText(String(
+      definition?.parameters.find((parameter) => parameter.key === "comment_text")?.default ?? "",
     ));
     setEnd(
       String(
@@ -349,6 +353,7 @@ function FinishingForm({
             }
           : {}),
         ...(visualBeat === "letter_dive" ? { letter_text: letterText.trim() } : {}),
+        ...(visualBeat === "comment_drop" ? { comment_text: commentText.trim() } : {}),
       };
       next = {
         ...next,
@@ -722,6 +727,24 @@ function FinishingForm({
                     />
                     <span className="mt-1 block leading-5 text-[#666862]">
                       Use a genuine word or short phrase from the footage. Letters drop in individually; dialogue captions remain above it.
+                    </span>
+                  </label>
+                ) : null}
+                {visualBeat === "comment_drop" ? (
+                  <label className="block text-xs">
+                    Short source-backed comment
+                    <input
+                      className={control}
+                      type="text"
+                      required
+                      minLength={1}
+                      maxLength={effectDefinition?.parameters.find((parameter) => parameter.key === "comment_text")?.maximum_length ?? 48}
+                      value={commentText}
+                      onChange={(event) => setCommentText(event.currentTarget.value)}
+                      placeholder="A comment supported by the footage"
+                    />
+                    <span className="mt-1 block leading-5 text-[#666862]">
+                      Uses the existing caption-aware comment card. Strength changes its entrance; it never replaces dialogue captions.
                     </span>
                   </label>
                 ) : null}

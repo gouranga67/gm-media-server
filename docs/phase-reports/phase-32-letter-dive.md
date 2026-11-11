@@ -43,4 +43,4 @@ The complete eight-gate source suite passes, including Python compilation, 113 b
 
 ## Next slice
 
-Add **Comment Drop** as the next low-risk social overlay. It should formalise the existing comment-card capability as a named registry effect rather than duplicate its renderer. Voice Note can follow. Shot-aware Rack Focus, Dolly Zoom and Paper Tear remain a later pack with separate footage-quality gates.
+Add **Comment Drop** as the next low-risk social overlay. [Its source checkpoint is implemented here](phase-32-comment-drop.md), formalising the existing comment-card capability as a named registry effect rather than duplicating its renderer. Voice Note follows. Shot-aware Rack Focus, Dolly Zoom and Paper Tear remain a later pack with separate footage-quality gates.
