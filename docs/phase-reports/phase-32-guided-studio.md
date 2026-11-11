@@ -51,7 +51,7 @@ After deployment:
 
 - **Phase 32B — Effects foundation:** establish the reusable effects registry, parameter contract, preview samples and render-test pattern around the existing Clone Row and Impact Frame effects. [Source checkpoint implemented](phase-32-effects-foundation.md); container and playback acceptance remain pending.
 - **Phase 32C–H — Social animation pack:** add one effect at a time, beginning with low-risk overlays. [Live Cursor](phase-32-live-cursor.md), [Letter Dive](phase-32-letter-dive.md), [Comment Drop](phase-32-comment-drop.md), [Voice Note](phase-32-voice-note.md), [Post Wall](phase-32-post-wall.md) and [Sketch Words](phase-32-sketch-words.md) now have bounded registry implementations.
-- **Phase 32I — Camera and transition pack:** add and evaluate Rack Focus, Dolly Zoom, Paper Tear and other shot-aware transitions, with masking or segmentation kept behind explicit quality gates where required.
+- **Phase 32I onward — Camera and transition pack:** [Rack Focus](phase-32-rack-focus.md) begins the pack as an explicitly simulated, bounded focus window. Dolly Zoom, Paper Tear and other shot-aware transitions follow, with masking or segmentation kept behind explicit quality gates where required.
 
 Each effect must remain selectable by name and bounded parameters, preserve original footage, produce a reviewable preview and pass a real-footage playback check before it is treated as accepted.
 
@@ -67,7 +67,7 @@ This is the complete named set recovered from the earlier planning discussion. I
 | Letter Dive | Easy | Registry v3 source checkpoint implemented |
 | Comment Drop | Easy | Registry v4 source checkpoint implemented by reusing the comment-card renderer |
 | Sketch Words | Medium | Registry v7 source checkpoint implemented |
-| Rack Focus | Easy | Phase 32E candidate; test against real footage |
+| Rack Focus | Easy | Registry v8 simulated-focus source checkpoint implemented; real-footage gate pending |
 | Voice Note | Easy | Registry v5 source checkpoint implemented |
 | Impact Frame | Easy | Native bounded first version already implemented; move behind the shared Phase 32B contract |
 | Dolly Zoom | Medium | Phase 32E candidate; source framing and crop limits required |

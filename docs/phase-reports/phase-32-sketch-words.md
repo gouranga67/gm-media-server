@@ -43,4 +43,4 @@ The complete eight-gate source suite passes, including Python compilation, 117 b
 
 ## Next slice
 
-Begin the shot-aware camera and transition pack. Rack Focus should be the first prototype, followed by Paper Tear and Dolly Zoom, with real-footage quality gates and conservative agent eligibility for each.
+Begin the shot-aware camera and transition pack with **Rack Focus**. [Its source checkpoint is implemented here](phase-32-rack-focus.md). Paper Tear and Dolly Zoom follow with their own real-footage quality gates and conservative agent eligibility.

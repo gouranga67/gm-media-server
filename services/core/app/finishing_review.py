@@ -80,6 +80,9 @@ def treatment_timeline(context, plan):
                 detail += f"; {len(cue.post_texts)} source-backed cards: " + " / ".join(cue.post_texts)
             elif cue.preset == "sketch_words":
                 detail += f"; {cue.position} position; source-backed sketch text: {cue.sketch_text}"
+            elif cue.preset == "rack_focus":
+                detail += (f"; simulated focus window {cue.focus_start_x:.2f},{cue.focus_start_y:.2f} to "
+                           f"{cue.focus_end_x:.2f},{cue.focus_end_y:.2f}; no depth detection or subject tracking")
             else:
                 detail += f"; {cue.position} position"
             add("graphic", cue.preset.replace("_", " ").capitalize(), cue.start, cue.end,

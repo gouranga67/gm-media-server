@@ -8,7 +8,7 @@ from app.effect_registry import effect_definition
 
 
 class VisualBeat(TreatmentWindow):
-    preset: Literal["impact_frame", "clone_row", "live_cursor", "letter_dive", "comment_drop", "voice_note", "post_wall", "sketch_words"]
+    preset: Literal["impact_frame", "clone_row", "live_cursor", "letter_dive", "comment_drop", "voice_note", "post_wall", "sketch_words", "rack_focus"]
     intensity: Literal["subtle", "standard", "strong"] = "standard"
     position: Literal["upper", "center", "lower"] = "center"
     cursor_start_x: float | None = Field(default=None, ge=.08, le=.92)
@@ -20,6 +20,10 @@ class VisualBeat(TreatmentWindow):
     comment_text: str | None = Field(default=None, min_length=1, max_length=48)
     post_texts: list[str] | None = Field(default=None, min_length=2, max_length=3)
     sketch_text: str | None = Field(default=None, min_length=1, max_length=24)
+    focus_start_x: float | None = Field(default=None, ge=.3, le=.7)
+    focus_start_y: float | None = Field(default=None, ge=.18, le=.82)
+    focus_end_x: float | None = Field(default=None, ge=.3, le=.7)
+    focus_end_y: float | None = Field(default=None, ge=.18, le=.82)
 
     @field_validator("letter_text", "comment_text", "sketch_text")
     @classmethod
@@ -82,6 +86,15 @@ class VisualBeat(TreatmentWindow):
                 raise ValueError("sketch_words accepts at most three words")
         elif self.sketch_text is not None:
             raise ValueError(f"{self.preset} does not accept sketch text")
+        focus_values = (self.focus_start_x, self.focus_start_y, self.focus_end_x, self.focus_end_y)
+        if self.preset == "rack_focus":
+            if any(value is None for value in focus_values):
+                raise ValueError("rack_focus requires bounded start and end coordinates")
+            distance = ((self.focus_end_x - self.focus_start_x) ** 2 + (self.focus_end_y - self.focus_start_y) ** 2) ** .5
+            if distance < .08:
+                raise ValueError("rack_focus points must identify a visible focus move")
+        elif any(value is not None for value in focus_values):
+            raise ValueError(f"{self.preset} does not accept focus coordinates")
         return self
 
     @model_serializer(mode="wrap")
@@ -91,7 +104,7 @@ class VisualBeat(TreatmentWindow):
             data.pop("intensity", None)
         if data.get("position") == "center":
             data.pop("position", None)
-        for name in ("cursor_start_x", "cursor_start_y", "cursor_end_x", "cursor_end_y", "click", "letter_text", "comment_text", "post_texts", "sketch_text"):
+        for name in ("cursor_start_x", "cursor_start_y", "cursor_end_x", "cursor_end_y", "click", "letter_text", "comment_text", "post_texts", "sketch_text", "focus_start_x", "focus_start_y", "focus_end_x", "focus_end_y"):
             if data.get(name) is None:
                 data.pop(name, None)
         return data
@@ -136,6 +149,41 @@ def append_visual_beats(graph, plan, *, width, height):
             parts.append(f"[clone{i}a][clone{i}b][clone{i}c]hstack=inputs=3,setpts=PTS+{cue.start:.3f}/TB[clonerow{i}]")
             parts.append(f"[beatbed{i}]drawbox=x=0:y=0:w=iw:h=ih:color=black@{shade:g}:t=fill:enable='{active}'[clonebed{i}]")
             parts.append(f"[clonebed{i}][clonerow{i}]overlay=x=(W-w)/2:y={y}:eof_action=pass:repeatlast=0:enable='{active}'[{target}]")
+        elif cue.preset == "rack_focus":
+            # Honest simulated rack focus: a sharp source window moves over a
+            # softly blurred copy. There is no depth estimation or tracking.
+            blur, width_ratio, height_ratio = {
+                "subtle": (4, .66, .40),
+                "standard": (8, .58, .34),
+                "strong": (12, .50, .30),
+            }[cue.intensity]
+            patch_w = max(2, round(width * width_ratio) // 2 * 2)
+            patch_h = max(2, round(height * height_ratio) // 2 * 2)
+            duration = cue.end - cue.start
+            progress = f"min(max((t-{cue.start:.3f})/{duration:.3f}\\,0)\\,1)"
+            centre_x = f"({cue.focus_start_x:.4f}+({cue.focus_end_x-cue.focus_start_x:.4f})*{progress})"
+            centre_y = f"({cue.focus_start_y:.4f}+({cue.focus_end_y-cue.focus_start_y:.4f})*{progress})"
+            crop_x = f"iw*{centre_x}-ow/2"
+            crop_y = f"ih*{centre_y}-oh/2"
+            overlay_x = f"W*{centre_x}-w/2"
+            overlay_y = f"H*{centre_y}-h/2"
+            ramp = min(.18, duration / 5)
+            parts.append(f"[{base}]split=3[focusbed{i}][focusblurinput{i}][focussharp{i}]")
+            parts.append(
+                f"[focusblurinput{i}]gblur=sigma={blur}:steps=2,format=yuva420p,"
+                f"fade=t=in:st={cue.start:.3f}:d={ramp:.3f}:alpha=1,"
+                f"fade=t=out:st={cue.end-ramp:.3f}:d={ramp:.3f}:alpha=1[focusblur{i}]"
+            )
+            parts.append(
+                f"[focusbed{i}][focusblur{i}]overlay=x=0:y=0:eof_action=pass:repeatlast=0:enable='{active}'[focussoft{i}]"
+            )
+            parts.append(
+                f"[focussharp{i}]crop=w={patch_w}:h={patch_h}:x='{crop_x}':y='{crop_y}'[focuspatch{i}]"
+            )
+            parts.append(
+                f"[focussoft{i}][focuspatch{i}]overlay=x='{overlay_x}':y='{overlay_y}':"
+                f"eof_action=pass:repeatlast=0:enable='{active}'[{target}]"
+            )
         else:
             # Typography/pointer effects are ASS treatments below dialogue captions.
             parts.append(f"[{base}]null[{target}]")

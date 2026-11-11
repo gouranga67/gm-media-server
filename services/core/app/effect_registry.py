@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 
-EFFECT_REGISTRY_VERSION = 7
+EFFECT_REGISTRY_VERSION = 8
 
 
 @dataclass(frozen=True)
@@ -111,6 +111,10 @@ POST_TEXTS = EffectParameter(
     minimum_items=2, maximum_items=3, item_maximum_length=42,
 )
 SKETCH_TEXT = EffectParameter("sketch_text", "Words", "text", "", minimum_length=1, maximum_length=24)
+FOCUS_START_X = EffectParameter("focus_start_x", "Start horizontal", "number", 0.35, minimum=0.3, maximum=0.7)
+FOCUS_START_Y = EffectParameter("focus_start_y", "Start vertical", "number", 0.35, minimum=0.18, maximum=0.82)
+FOCUS_END_X = EffectParameter("focus_end_x", "End horizontal", "number", 0.65, minimum=0.3, maximum=0.7)
+FOCUS_END_Y = EffectParameter("focus_end_y", "End vertical", "number", 0.55, minimum=0.18, maximum=0.82)
 
 
 EFFECT_DEFINITIONS = (
@@ -201,6 +205,17 @@ EFFECT_DEFINITIONS = (
         maximum_duration_seconds=3.0,
         default_duration_seconds=1.6,
         parameters=(INTENSITY, POSITION, SKETCH_TEXT),
+    ),
+    EffectDefinition(
+        preset="rack_focus",
+        label="Rack focus",
+        summary="A simulated sharp focus window moves across a softly blurred stable shot; no depth detection.",
+        category="camera",
+        version=1,
+        minimum_duration_seconds=1.0,
+        maximum_duration_seconds=4.0,
+        default_duration_seconds=2.0,
+        parameters=(INTENSITY, FOCUS_START_X, FOCUS_START_Y, FOCUS_END_X, FOCUS_END_Y),
     ),
 )
 

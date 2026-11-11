@@ -89,6 +89,10 @@ function FinishingForm({
   const [commentText, setCommentText] = useState("");
   const [postTexts, setPostTexts] = useState(["", "", ""]);
   const [sketchText, setSketchText] = useState("");
+  const [focusStartX, setFocusStartX] = useState("0.35");
+  const [focusStartY, setFocusStartY] = useState("0.35");
+  const [focusEndX, setFocusEndX] = useState("0.65");
+  const [focusEndY, setFocusEndY] = useState("0.55");
   const [pointerShape, setPointerShape] = useState<"arrow" | "circle">(
     "circle",
   );
@@ -138,6 +142,9 @@ function FinishingForm({
   const cursorParameters = effectDefinition?.parameters.filter(
     (parameter) => parameter.type === "number",
   ) ?? [];
+  const focusParameters = effectDefinition?.parameters.filter(
+    (parameter) => parameter.key.startsWith("focus_") && parameter.type === "number",
+  ) ?? [];
   function selectEffect(preset: VisualEffectPreset) {
     const definition = inspection?.effect_registry.effects.find(
       (effect) => effect.preset === preset,
@@ -169,6 +176,10 @@ function FinishingForm({
     setSketchText(String(
       definition?.parameters.find((parameter) => parameter.key === "sketch_text")?.default ?? "",
     ));
+    setFocusStartX(String(value("focus_start_x", 0.35)));
+    setFocusStartY(String(value("focus_start_y", 0.35)));
+    setFocusEndX(String(value("focus_end_x", 0.65)));
+    setFocusEndY(String(value("focus_end_y", 0.55)));
     setEnd(
       String(
         Number(start) +
@@ -363,6 +374,14 @@ function FinishingForm({
         ...(visualBeat === "comment_drop" ? { comment_text: commentText.trim() } : {}),
         ...(visualBeat === "post_wall" ? { post_texts: postTexts.map((text) => text.trim()).filter(Boolean) } : {}),
         ...(visualBeat === "sketch_words" ? { sketch_text: sketchText.trim() } : {}),
+        ...(visualBeat === "rack_focus"
+          ? {
+              focus_start_x: Number(focusStartX),
+              focus_start_y: Number(focusStartY),
+              focus_end_x: Number(focusEndX),
+              focus_end_y: Number(focusEndY),
+            }
+          : {}),
       };
       next = {
         ...next,
@@ -719,6 +738,32 @@ function FinishingForm({
                       <input type="checkbox" checked={cursorClick} onChange={(event) => setCursorClick(event.currentTarget.checked)} />
                       Show a click pulse at the destination
                     </label>
+                  </div>
+                ) : null}
+                {visualBeat === "rack_focus" ? (
+                  <div className="space-y-3 rounded-md border border-[#D7D9D3] p-3">
+                    <p className="text-xs leading-5 text-[#666862]">
+                      Coordinates are fractions of the frame. A sharp window moves from the first point to the second while the surrounding picture softens. This is a simulated focus pull: it does not detect depth or track a subject, so use a stable shot with clear targets.
+                    </p>
+                    <div className="grid grid-cols-2 gap-3">
+                      {focusParameters.map((parameter) => {
+                        const state = parameter.key === "focus_start_x"
+                          ? [focusStartX, setFocusStartX] as const
+                          : parameter.key === "focus_start_y"
+                            ? [focusStartY, setFocusStartY] as const
+                            : parameter.key === "focus_end_x"
+                              ? [focusEndX, setFocusEndX] as const
+                              : parameter.key === "focus_end_y"
+                                ? [focusEndY, setFocusEndY] as const
+                                : undefined;
+                        return state ? (
+                          <label className="text-xs" key={parameter.key}>
+                            {parameter.label}
+                            <input className={control} min={parameter.minimum} max={parameter.maximum} step="0.01" type="number" required value={state[0]} onChange={(event) => state[1](event.currentTarget.value)} />
+                          </label>
+                        ) : null;
+                      })}
+                    </div>
                   </div>
                 ) : null}
                 {visualBeat === "letter_dive" ? (

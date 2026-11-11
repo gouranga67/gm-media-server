@@ -36,6 +36,7 @@ class VisualBeatTests(unittest.TestCase):
                       dict(start=0,end=.5,preset='voice_note'),
                       dict(start=0,end=2,preset='post_wall'),
                       dict(start=0,end=1.5,preset='sketch_words'),
+                      dict(start=0,end=2,preset='rack_focus'),
                       dict(start=0,end=1,preset='arbitrary_js')):
             with self.assertRaises(ValidationError): VisualBeat(**value)
         self.assertNotIn('visual_beats',FinishingTools().model_dump(mode='json'))
@@ -82,6 +83,15 @@ class VisualBeatTests(unittest.TestCase):
             VisualBeat(start=0,end=1.6,preset='sketch_words',sketch_text=r'{\clip}')
         with self.assertRaisesRegex(ValidationError,'does not accept sketch text'):
             VisualBeat(start=0,end=3,preset='post_wall',post_texts=['One','Two'],sketch_text='NO')
+        focus=VisualBeat(start=0,end=2,preset='rack_focus',intensity='strong',
+            focus_start_x=.3,focus_start_y=.2,focus_end_x=.7,focus_end_y=.8)
+        self.assertEqual(focus.model_dump(mode='json')['focus_end_x'],.7)
+        with self.assertRaisesRegex(ValidationError,'visible focus move'):
+            VisualBeat(start=0,end=2,preset='rack_focus',focus_start_x=.5,focus_start_y=.5,focus_end_x=.51,focus_end_y=.51)
+        with self.assertRaises(ValidationError):
+            VisualBeat(start=0,end=2,preset='rack_focus',focus_start_x=.1,focus_start_y=.5,focus_end_x=.6,focus_end_y=.5)
+        with self.assertRaisesRegex(ValidationError,'does not accept focus coordinates'):
+            VisualBeat(start=0,end=1.6,preset='sketch_words',sketch_text='REAL',focus_start_x=.3)
         for recipe in ('talking_head','montage'):
             schema=schema_for_recipe(recipe)['properties']['finishing']['anyOf'][1]
             beat=schema['properties']['visual_beats']['items']
@@ -91,8 +101,8 @@ class VisualBeatTests(unittest.TestCase):
     def test_registry_is_versioned_complete_and_matches_the_schema(self):
         registry=public_effect_registry()
         self.assertEqual(registry['version'],EFFECT_REGISTRY_VERSION)
-        self.assertEqual(registry['version'],7)
-        expected={'impact_frame','clone_row','live_cursor','letter_dive','comment_drop','voice_note','post_wall','sketch_words'}
+        self.assertEqual(registry['version'],8)
+        expected={'impact_frame','clone_row','live_cursor','letter_dive','comment_drop','voice_note','post_wall','sketch_words','rack_focus'}
         self.assertEqual({item['preset'] for item in registry['effects']},expected)
         self.assertEqual({item.preset for item in EFFECT_DEFINITIONS},expected)
         for item in registry['effects']:
@@ -125,6 +135,11 @@ class VisualBeatTests(unittest.TestCase):
         parameters={item['key']:item for item in sketch['parameters']}
         self.assertEqual(set(parameters),{'intensity','position','sketch_text'})
         self.assertEqual(parameters['sketch_text'],{'key':'sketch_text','label':'Words','type':'text','default':'','minimum_length':1,'maximum_length':24})
+        focus=next(item for item in registry['effects'] if item['preset']=='rack_focus')
+        parameters={item['key']:item for item in focus['parameters']}
+        self.assertEqual(set(parameters),{'intensity','focus_start_x','focus_start_y','focus_end_x','focus_end_y'})
+        self.assertEqual((parameters['focus_start_x']['minimum'],parameters['focus_start_x']['maximum'],parameters['focus_start_x']['default']),(.3,.7,.35))
+        self.assertEqual((parameters['focus_end_y']['minimum'],parameters['focus_end_y']['maximum'],parameters['focus_end_y']['default']),(.18,.82,.55))
 
     def test_registered_parameters_reach_only_the_bounded_filter_values(self):
         plan=fixture()
@@ -140,6 +155,17 @@ class VisualBeatTests(unittest.TestCase):
         self.assertNotIn('subtle',graph)
         self.assertNotIn('lower',graph)
         self.assertIn('[beatbase2]null[beatbase3]',graph)
+
+    def test_rack_focus_builds_only_a_bounded_simulated_focus_graph(self):
+        plan=fixture()
+        plan.finishing.visual_beats=[VisualBeat(start=.4,end=2.4,preset='rack_focus',intensity='strong',
+            focus_start_x=.3,focus_start_y=.2,focus_end_x=.7,focus_end_y=.8)]
+        graph=append_visual_beats('[picture]null[vout]',plan,width=180,height=320)
+        self.assertIn('[beatbase0]split=3[focusbed0][focusblurinput0][focussharp0]',graph)
+        self.assertIn('gblur=sigma=12:steps=2',graph)
+        self.assertIn("crop=w=90:h=96",graph)
+        self.assertIn(r"min(max((t-0.400)/2.000\,0)\,1)",graph)
+        self.assertNotIn('depth',graph)
 
     def test_live_cursor_is_an_ass_vector_below_caption_dialogue(self):
         tools=FinishingTools(visual_beats=[dict(start=.2,end=1.2,preset='live_cursor',intensity='strong',
@@ -307,3 +333,35 @@ class VisualBeatRenderTests(unittest.TestCase):
                     samples=pcm[round(t*8000):round((t+.1)*8000)]
                     self.assertGreater(sum(abs(v) for v in samples)/len(samples),500,'speech tone must stay continuous')
                 self.assertIsNone(rendered_audio_packet_error(output,60))
+
+    def test_simulated_rack_focus_keeps_the_window_sharp_and_audio_continuous(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);source=root/'focus-source.mp4';captions=root/'captions.ass';output=root/'focus-output.mp4'
+            self.ff('-f','lavfi','-i','testsrc2=s=180x320:r=30:d=2.5',
+                '-f','lavfi','-i','sine=frequency=440:sample_rate=48000:duration=2.5',
+                '-c:v','libx264','-pix_fmt','yuv420p','-c:a','aac',str(source))
+            tools=FinishingTools(visual_beats=[dict(start=.2,end=2.2,preset='rack_focus',intensity='strong',
+                focus_start_x=.35,focus_start_y=.35,focus_end_x=.65,focus_end_y=.65)])
+            plan=TalkingHeadEditPlan(schema_version='1.5',recipe='talking_head',
+                clips=[dict(asset_id=uuid4(),source_in=0,source_out=2.5,crop='center_fill')],
+                caption_style='clean_blue_v1',audio_preset='spoken_voice_v1',end_card='none',
+                editorial_summary='Simulated focus verification.',finishing=tools)
+            captions.write_text(render_ass([],width=180,height=320,treatments=tools))
+            _render_video([(source,0,2.5)],plan,captions,output,60,width=180,height=320)
+            def frame(path,t):
+                return self.ff('-ss',str(t),'-i',str(path),'-frames:v','1','-f','rawvideo','-pix_fmt','rgb24','pipe:1')
+            original,rendered=frame(source,1.2),frame(output,1.2)
+            def mean_error(box):
+                x0,y0,x1,y1=box;values=[]
+                for y in range(y0,y1):
+                    for x in range(x0,x1):
+                        at=(y*180+x)*3
+                        values.extend(abs(original[at+c]-rendered[at+c]) for c in range(3))
+                return sum(values)/len(values)
+            inside=mean_error((60,130,120,190));outside=mean_error((0,10,35,90))
+            self.assertLess(inside,outside*.75,'the moving focus window should retain more source detail than the blurred bed')
+            pcm=array.array('h',self.ff('-i',str(output),'-vn','-ac','1','-ar','8000','-f','s16le','pipe:1'))
+            for t in (.1,.8,1.6,2.3):
+                samples=pcm[round(t*8000):round((t+.1)*8000)]
+                self.assertGreater(sum(abs(v) for v in samples)/len(samples),500)
+            self.assertIsNone(rendered_audio_packet_error(output,60))

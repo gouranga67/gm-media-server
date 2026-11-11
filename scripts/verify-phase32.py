@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read-only Phase 32H effect-registry check; no render or model request."""
+"""Read-only Phase 32I effect-registry check; no render or model request."""
 
 import json
 from pathlib import Path
@@ -11,8 +11,8 @@ def main():
     request = runpy.run_path(str(Path(__file__).with_name("verify-phase14.py")))["request"]
     registry = request("effects/registry")
     effects = {effect.get("preset"): effect for effect in registry.get("effects", [])}
-    if registry.get("version") != 7 or set(effects) != {"impact_frame", "clone_row", "live_cursor", "letter_dive", "comment_drop", "voice_note", "post_wall", "sketch_words"}:
-        raise RuntimeError("deploy the Phase 32H native effects registry")
+    if registry.get("version") != 8 or set(effects) != {"impact_frame", "clone_row", "live_cursor", "letter_dive", "comment_drop", "voice_note", "post_wall", "sketch_words", "rack_focus"}:
+        raise RuntimeError("deploy the Phase 32I native effects registry")
     expected = {
         "impact_frame": (0.1, 0.25, {"intensity"}),
         "clone_row": (0.1, 2.5, {"intensity", "position"}),
@@ -22,6 +22,7 @@ def main():
         "voice_note": (1.0, 5.0, {"intensity", "position"}),
         "post_wall": (1.2, 5.0, {"intensity", "post_texts"}),
         "sketch_words": (0.8, 3.0, {"intensity", "position", "sketch_text"}),
+        "rack_focus": (1.0, 4.0, {"intensity", "focus_start_x", "focus_start_y", "focus_end_x", "focus_end_y"}),
     }
     for preset, (minimum, maximum, parameter_keys) in expected.items():
         effect = effects[preset]
@@ -63,6 +64,14 @@ def main():
     sketch_text = {parameter["key"]: parameter for parameter in effects["sketch_words"]["parameters"]}["sketch_text"]
     if sketch_text.get("type") != "text" or sketch_text.get("minimum_length") != 1 or sketch_text.get("maximum_length") != 24:
         raise RuntimeError("the Sketch Words text contract is incomplete")
+    focus = {parameter["key"]: parameter for parameter in effects["rack_focus"]["parameters"]}
+    expected_focus = {
+        "focus_start_x": (0.3, 0.7, 0.35), "focus_start_y": (0.18, 0.82, 0.35),
+        "focus_end_x": (0.3, 0.7, 0.65), "focus_end_y": (0.18, 0.82, 0.55),
+    }
+    for key, (minimum, maximum, default) in expected_focus.items():
+        if focus[key].get("type") != "number" or (focus[key].get("minimum"), focus[key].get("maximum"), focus[key].get("default")) != (minimum, maximum, default):
+            raise RuntimeError(f"the Rack Focus {key} contract is incomplete")
     print(json.dumps({
         "status": "passed",
         "registry_version": registry["version"],
@@ -72,12 +81,12 @@ def main():
         "model_calls": 0,
         "note": "Synthetic and real-footage playback remain separate acceptance checks.",
     }, indent=2))
-    print("PASS  Sketch Words registry contract is deployed; no editing work started.")
+    print("PASS  Rack Focus registry contract is deployed; no editing work started.")
 
 
 if __name__ == "__main__":
     try:
         main()
     except Exception as error:
-        print(f"Phase 32H verification failed: {error}", file=sys.stderr)
+        print(f"Phase 32I verification failed: {error}", file=sys.stderr)
         raise SystemExit(1)

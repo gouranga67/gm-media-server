@@ -801,6 +801,7 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
         "Use voice_note only when presenting a real recorded-speech moment as a voice message is editorially useful. Its waveform is decorative and does not measure amplitude; never imply another speaker, sender or message source. "
         "Use post_wall for two or three short source-backed phrases of at most 42 plain-text characters each. Treat them as graphic idea cards, never as proof of real social posts; do not invent usernames, attribution, likes, shares, comments or audience reactions. "
         "Use sketch_words for one to three genuine source-backed words, at most 24 plain-text characters total. Never turn an unsupported implication into a slogan, fact, quote or product claim. "
+        "Use rack_focus only on a stable shot when visual evidence supports two clear focus targets. It is a simulated moving sharp window over blur, not optical depth detection or subject tracking; do not use it on fast motion, a face close-up or an uncertain target. "
         "Pointers are fixed arrows/circles at normalized frame coordinates: use only if the shown object location is clear; "
         "they do not track moving objects. Music regions briefly reduce/mute only the selected music, then restore it, "
         "for a real reaction; never mute or stretch dialogue. Use sparingly around evidence-backed moments, not to meet a quota. "
