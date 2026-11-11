@@ -43,4 +43,4 @@ The complete eight-gate source suite passes, including Python compilation, 116 b
 
 ## Next slice
 
-Add **Sketch Words** as the remaining low-risk social/typography candidate, then begin the shot-aware camera and transition pack with separate footage-quality gates.
+Add **Sketch Words** as the remaining low-risk social/typography candidate. [Its source checkpoint is implemented here](phase-32-sketch-words.md). Then begin the shot-aware camera and transition pack with separate footage-quality gates.

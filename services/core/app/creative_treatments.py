@@ -192,6 +192,55 @@ def treatment_events(tools, width, height, captions=(), caption_position="lower_
             path = f"m {-2 * radius} {-radius * 0.25:.1f} l {-radius} {-radius * 0.25:.1f} {-radius} {-radius * 0.6:.1f} 0 0 {-radius} {radius * 0.6:.1f} {-radius} {radius * 0.25:.1f} {-2 * radius} {radius * 0.25:.1f}"
         event(cue, tags + "\\p1", path)
     for cue in tools.visual_beats:
+        if cue.preset == "sketch_words":
+            requested = {"upper": "upper", "center": "middle", "lower": "lower_safe"}[cue.position]
+            position = free_caption_band(cue.start, cue.end, requested)
+            if position is None:
+                continue
+            unit = min(width, height) / 540
+            words = cue.sketch_text.upper().split()
+            size = max(14, round({"subtle": 38, "standard": 46, "strong": 54}[cue.intensity] * unit))
+            max_width = width * .78
+            while size > 12:
+                word_widths = [text_width(word, "DejaVu Sans", size, bold=True) for word in words]
+                space_width = text_width(" ", "DejaVu Sans", size, bold=True)
+                if sum(word_widths) + space_width * (len(words) - 1) <= max_width:
+                    break
+                size -= 1
+            word_widths = [text_width(word, "DejaVu Sans", size, bold=True) for word in words]
+            space_width = text_width(" ", "DejaVu Sans", size, bold=True)
+            total_width = sum(word_widths) + space_width * (len(words) - 1)
+            left = (width - total_width) / 2
+            final_y = round(height * {"upper": .22, "middle": .45, "lower_safe": .70}[position])
+            travel = round(height * {"subtle": .02, "standard": .04, "strong": .06}[cue.intensity])
+            entrance_ms = {"subtle": 140, "standard": 190, "strong": 240}[cue.intensity]
+            stagger_span = min((cue.end - cue.start) * .32, .48)
+            step = stagger_span / max(1, len(words) - 1)
+            accent = str((brand_kit or {}).get("accent_color") or "#F4C95D")
+            red, green, blue = (int(accent[i:i+2], 16) for i in (1, 3, 5))
+            colour = f"&H{blue:02X}{green:02X}{red:02X}&"
+            rotations = (-2, 1, -1)
+            for index, word in enumerate(words):
+                word_width = word_widths[index]
+                centre_x = round(left + word_width / 2)
+                word_cue = cue.model_copy(update={"start": cue.start + index * step})
+                base = (
+                    f"\\an5\\fnDejaVu Sans\\fs{size}\\b1\\i1\\frz{rotations[index]}"
+                    f"\\move({centre_x},{final_y + travel},{centre_x},{final_y},0,{entrance_ms})"
+                    f"\\fad(35,90)\\fscx82\\fscy82\\t(0,{entrance_ms},\\fscx100\\fscy100)"
+                )
+                outline = {"subtle": 1.0, "standard": 1.5, "strong": 2.2}[cue.intensity]
+                event(word_cue, base + f"\\1a&HFF&\\3c{colour}\\bord{outline:g}\\shad0", word, -2)
+                event(word_cue, base + "\\1c&HFFFFFF&\\3c&H201A16&\\bord1.1\\shad1", word, -1)
+                stroke_cue = word_cue.model_copy(update={"start": min(word_cue.end - .1, word_cue.start + entrance_ms / 2000)})
+                stroke_width = max(4, round(word_width * .92))
+                stroke_height = max(2, round({"subtle": 3, "standard": 5, "strong": 7}[cue.intensity] * unit))
+                stroke = f"m 0 0 l {stroke_width} 1 {stroke_width} {stroke_height} 0 {stroke_height + 1}"
+                stroke_x = round(left + word_width * .04)
+                stroke_y = round(final_y + size * .62)
+                event(stroke_cue, f"\\an7\\p1\\bord0\\shad0\\1c{colour}\\pos({stroke_x},{stroke_y})\\frz{rotations[index]}\\fscx12\\t(0,{entrance_ms},\\fscx100)\\fad(20,90)", stroke, -2)
+                left += word_width + space_width
+            continue
         if cue.preset == "post_wall":
             occupied = occupied_caption_bands(cue.start, cue.end)
             if len(occupied) > 1:

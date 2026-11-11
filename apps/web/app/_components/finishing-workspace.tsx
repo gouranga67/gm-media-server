@@ -88,6 +88,7 @@ function FinishingForm({
   const [letterText, setLetterText] = useState("");
   const [commentText, setCommentText] = useState("");
   const [postTexts, setPostTexts] = useState(["", "", ""]);
+  const [sketchText, setSketchText] = useState("");
   const [pointerShape, setPointerShape] = useState<"arrow" | "circle">(
     "circle",
   );
@@ -165,6 +166,9 @@ function FinishingForm({
     ));
     const postDefaults = definition?.parameters.find((parameter) => parameter.key === "post_texts")?.default;
     setPostTexts(Array.isArray(postDefaults) ? [postDefaults[0] ?? "", postDefaults[1] ?? "", postDefaults[2] ?? ""] : ["", "", ""]);
+    setSketchText(String(
+      definition?.parameters.find((parameter) => parameter.key === "sketch_text")?.default ?? "",
+    ));
     setEnd(
       String(
         Number(start) +
@@ -358,6 +362,7 @@ function FinishingForm({
         ...(visualBeat === "letter_dive" ? { letter_text: letterText.trim() } : {}),
         ...(visualBeat === "comment_drop" ? { comment_text: commentText.trim() } : {}),
         ...(visualBeat === "post_wall" ? { post_texts: postTexts.map((text) => text.trim()).filter(Boolean) } : {}),
+        ...(visualBeat === "sketch_words" ? { sketch_text: sketchText.trim() } : {}),
       };
       next = {
         ...next,
@@ -782,6 +787,24 @@ function FinishingForm({
                       Builds a staggered wall of two or three cards. Use real phrases or faithful summaries only; no usernames, likes, shares or invented social posts.
                     </p>
                   </fieldset>
+                ) : null}
+                {visualBeat === "sketch_words" ? (
+                  <label className="block text-xs">
+                    One to three source-backed words
+                    <input
+                      className={control}
+                      type="text"
+                      required
+                      minLength={1}
+                      maxLength={effectDefinition?.parameters.find((parameter) => parameter.key === "sketch_text")?.maximum_length ?? 24}
+                      value={sketchText}
+                      onChange={(event) => setSketchText(event.currentTarget.value)}
+                      placeholder="Words supported by the footage"
+                    />
+                    <span className="mt-1 block leading-5 text-[#666862]">
+                      Words draw on separately with marker-like lettering and accent strokes. Use genuine wording only; dialogue captions remain above the sketch.
+                    </span>
+                  </label>
                 ) : null}
               </div>
             ) : null}

@@ -163,14 +163,15 @@ globalThis.fetch = async (url, options = {}) => {
     if (alternativeFailure) return {ok:false,status:409,json:async()=>({detail:"This alternative could not be queued. Your original is unchanged."})};
     payload={id:"alternative",version:3,status:"pending"};
   }
-  else if (route === `jobs/${jobId}/finishing-tools`) payload = { version: 2, settings: { motions:[],colours:[],audio_regions:[],caption_regions:[],layers:[],music_start_seconds:0,voice_denoise:false,audio_joins:[] }, effect_registry:{version:6,effects:[
+  else if (route === `jobs/${jobId}/finishing-tools`) payload = { version: 2, settings: { motions:[],colours:[],audio_regions:[],caption_regions:[],layers:[],music_start_seconds:0,voice_denoise:false,audio_joins:[] }, effect_registry:{version:7,effects:[
     {preset:"impact_frame",label:"Impact frame",summary:"A single accent border for a meaningful visual beat.",category:"accent",version:1,minimum_duration_seconds:.1,maximum_duration_seconds:.25,default_duration_seconds:.2,parameters:[{key:"intensity",label:"Strength",type:"enum",values:["subtle","standard","strong"],default:"standard"}],preserves_dialogue:true,captions_above_effect:true,requires_segmentation:false},
     {preset:"clone_row",label:"Clone row",summary:"Three live copies of the complete recorded shot; no person cutout.",category:"layout",version:1,minimum_duration_seconds:.1,maximum_duration_seconds:2.5,default_duration_seconds:2,parameters:[{key:"intensity",label:"Strength",type:"enum",values:["subtle","standard","strong"],default:"standard"},{key:"position",label:"Position",type:"enum",values:["upper","center","lower"],default:"center"}],preserves_dialogue:true,captions_above_effect:true,requires_segmentation:false},
     {preset:"live_cursor",label:"Live cursor",summary:"A pointer moves between two safe frame positions with an optional click pulse.",category:"pointer",version:1,minimum_duration_seconds:.4,maximum_duration_seconds:4,default_duration_seconds:1.5,parameters:[{key:"intensity",label:"Strength",type:"enum",values:["subtle","standard","strong"],default:"standard"},{key:"cursor_start_x",label:"Start horizontal",type:"number",minimum:.08,maximum:.92,default:.25},{key:"cursor_start_y",label:"Start vertical",type:"number",minimum:.1,maximum:.82,default:.4},{key:"cursor_end_x",label:"End horizontal",type:"number",minimum:.08,maximum:.92,default:.75},{key:"cursor_end_y",label:"End vertical",type:"number",minimum:.1,maximum:.82,default:.4},{key:"click",label:"Click pulse",type:"boolean",default:true}],preserves_dialogue:true,captions_above_effect:true,requires_segmentation:false},
     {preset:"letter_dive",label:"Letter dive",summary:"A short source-backed word or phrase drops in one letter at a time.",category:"typography",version:1,minimum_duration_seconds:.6,maximum_duration_seconds:2.5,default_duration_seconds:1.4,parameters:[{key:"intensity",label:"Strength",type:"enum",values:["subtle","standard","strong"],default:"standard"},{key:"position",label:"Position",type:"enum",values:["upper","center","lower"],default:"center"},{key:"letter_text",label:"Text",type:"text",minimum_length:1,maximum_length:18,default:""}],preserves_dialogue:true,captions_above_effect:true,requires_segmentation:false},
     {preset:"comment_drop",label:"Comment drop",summary:"A short source-backed comment card enters in a safe caption-aware band.",category:"typography",version:1,minimum_duration_seconds:1,maximum_duration_seconds:4,default_duration_seconds:2.2,parameters:[{key:"intensity",label:"Strength",type:"enum",values:["subtle","standard","strong"],default:"standard"},{key:"position",label:"Position",type:"enum",values:["upper","center","lower"],default:"center"},{key:"comment_text",label:"Comment",type:"text",minimum_length:1,maximum_length:48,default:""}],preserves_dialogue:true,captions_above_effect:true,requires_segmentation:false},
     {preset:"voice_note",label:"Voice note",summary:"A voice-message card animates over the real recorded speech without changing its audio.",category:"social",version:1,minimum_duration_seconds:1,maximum_duration_seconds:5,default_duration_seconds:2.6,parameters:[{key:"intensity",label:"Strength",type:"enum",values:["subtle","standard","strong"],default:"standard"},{key:"position",label:"Position",type:"enum",values:["upper","center","lower"],default:"center"}],preserves_dialogue:true,captions_above_effect:true,requires_segmentation:false},
-    {preset:"post_wall",label:"Post wall",summary:"Two or three source-backed idea cards build into a staggered wall without fake social metadata.",category:"social",version:1,minimum_duration_seconds:1.2,maximum_duration_seconds:5,default_duration_seconds:3,parameters:[{key:"intensity",label:"Strength",type:"enum",values:["subtle","standard","strong"],default:"standard"},{key:"post_texts",label:"Source-backed cards",type:"text_list",default:[],minimum_items:2,maximum_items:3,item_maximum_length:42}],preserves_dialogue:true,captions_above_effect:true,requires_segmentation:false}
+    {preset:"post_wall",label:"Post wall",summary:"Two or three source-backed idea cards build into a staggered wall without fake social metadata.",category:"social",version:1,minimum_duration_seconds:1.2,maximum_duration_seconds:5,default_duration_seconds:3,parameters:[{key:"intensity",label:"Strength",type:"enum",values:["subtle","standard","strong"],default:"standard"},{key:"post_texts",label:"Source-backed cards",type:"text_list",default:[],minimum_items:2,maximum_items:3,item_maximum_length:42}],preserves_dialogue:true,captions_above_effect:true,requires_segmentation:false},
+    {preset:"sketch_words",label:"Sketch words",summary:"One to three source-backed words draw on with marker-like lettering and accent strokes.",category:"typography",version:1,minimum_duration_seconds:.8,maximum_duration_seconds:3,default_duration_seconds:1.6,parameters:[{key:"intensity",label:"Strength",type:"enum",values:["subtle","standard","strong"],default:"standard"},{key:"position",label:"Position",type:"enum",values:["upper","center","lower"],default:"center"},{key:"sketch_text",label:"Words",type:"text",minimum_length:1,maximum_length:24,default:""}],preserves_dialogue:true,captions_above_effect:true,requires_segmentation:false}
   ]}, sources:[{ asset_id:serverId,name:"Review image",media_kind:"image",duration_seconds:0 }], product_tracking_candidates:Array.from({length:3},(_,clip_index)=>({clip_index,asset_id:serverId,duration_seconds:3,source_in:2,source_out:5,eligible:true,note:""})), stabilization_candidates:Array.from({length:6},(_,clip_index)=>({clip_index,asset_id:serverId,duration_seconds:clip_index===5?14:3,source_in:0,source_out:clip_index===5?14:3,eligible:clip_index!==5,note:clip_index===5?"Choose a 1–8 second shot":""})) };
   else if (route === "concepts/library-status") payload = { unique_sources: 3, catalogued_sources: 3, spoken_sources: 2, visually_indexed_sources: 3, still_processing: 0 };
   else if (route === "concepts" && (options.method ?? "GET") === "GET") payload = conceptHistory;
@@ -1494,7 +1495,7 @@ test("native visual effects are explicit local tools and never render on selecti
   assert.match(document.body.textContent,/Visual effect \/ animation/);
   await chooseOption("select", "visual_beat");
   assert.match(document.body.textContent,/single accent border for a meaningful visual beat/);
-  assert.match(document.body.textContent,/Registry v6/);
+  assert.match(document.body.textContent,/Registry v7/);
   const preset=document.querySelectorAll("select")[1];
   await act(async()=>{preset.value="clone_row";preset.dispatchEvent(new Event("change",{bubbles:true}));});
   assert.match(document.body.textContent,/no person cutout/);
@@ -1602,6 +1603,24 @@ test("Post Wall requires source-backed cards and queues no work before submit", 
   await act(async()=>document.querySelector("form").dispatchEvent(new Event("submit",{bubbles:true,cancelable:true})));
   const request=posts(`jobs/${jobId}/revisions`).at(-1).body;
   assert.deepEqual(request.finishing_settings.visual_beats,[{start:0,end:3,preset:"post_wall",intensity:"strong",post_texts:["Real footage","Local render","Review first"]}]);
+});
+
+test("Sketch Words requires genuine short wording and queues the bounded treatment", async () => {
+  const revisionCount=posts(`jobs/${jobId}/revisions`).length;
+  await act(async () => root.render(React.createElement(FinishingWorkspace, { jobId, version: 2, clips: [{ duration: 3, source_in: 0, source_out: 3 }], onUpdated: () => {} })));
+  await click(document.querySelector("summary"));
+  await waitFor(() => document.querySelector("select"));
+  await chooseOption("select", "visual_beat");
+  const preset=document.querySelectorAll("select")[1];
+  await act(async()=>{preset.value="sketch_words";preset.dispatchEvent(new Event("change",{bubbles:true}));});
+  assert.match(document.body.textContent,/marker-like lettering and accent strokes/);
+  await type('input[placeholder="Words supported by the footage"]',"KEEP IT REAL");
+  const strength=document.querySelectorAll("select")[2],position=document.querySelectorAll("select")[3];
+  await act(async()=>{strength.value="strong";strength.dispatchEvent(new Event("change",{bubbles:true}));position.value="lower";position.dispatchEvent(new Event("change",{bubbles:true}));});
+  assert.equal(posts(`jobs/${jobId}/revisions`).length,revisionCount);
+  await act(async()=>document.querySelector("form").dispatchEvent(new Event("submit",{bubbles:true,cancelable:true})));
+  const request=posts(`jobs/${jobId}/revisions`).at(-1).body;
+  assert.deepEqual(request.finishing_settings.visual_beats,[{start:0,end:1.6,preset:"sketch_words",intensity:"strong",position:"lower",sketch_text:"KEEP IT REAL"}]);
 });
 
 

@@ -4,7 +4,7 @@ Updated: 2026-11-11 (UTC)
 
 This is the working plan for turning the Lenovo into a private media-editing appliance. A phase is complete only when its exit checks pass. Discussion, generated files, and installed packages do not count as a completed phase by themselves.
 
-Current effects checkpoint: [Phase 32G — Post Wall](phase-reports/phase-32-post-wall.md). Registry version 6 adds a staggered wall of two or three source-backed idea cards alongside Voice Note, Comment Drop, Letter Dive, Live Cursor, Clone Row and Impact Frame. It excludes fake accounts and engagement metadata, protects dialogue captions and changes no audio timing. Source, container, deployment and playback acceptance are tracked separately.
+Current effects checkpoint: [Phase 32H — Sketch Words](phase-reports/phase-32-sketch-words.md). Registry version 7 adds a marker-like reveal for one to three source-backed words alongside Post Wall, Voice Note, Comment Drop, Letter Dive, Live Cursor, Clone Row and Impact Frame. It animates brand-accented sketch strokes, protects dialogue captions and changes no audio timing. Source, container, deployment and playback acceptance are tracked separately.
 
 Product-clarity checkpoint: [Phase 32A — Guided Studio home](phase-reports/phase-32-guided-studio.md). The Home screen now begins with an action-led launcher for the six main owner tasks and includes a compact six-step guide to the whole workflow. Existing live overview, onboarding, recent-job, budget and operations information remains available. Source verification is complete; deployment and phone/owner acceptance remain pending.
 

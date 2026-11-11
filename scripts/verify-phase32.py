@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read-only Phase 32G effect-registry check; no render or model request."""
+"""Read-only Phase 32H effect-registry check; no render or model request."""
 
 import json
 from pathlib import Path
@@ -11,8 +11,8 @@ def main():
     request = runpy.run_path(str(Path(__file__).with_name("verify-phase14.py")))["request"]
     registry = request("effects/registry")
     effects = {effect.get("preset"): effect for effect in registry.get("effects", [])}
-    if registry.get("version") != 6 or set(effects) != {"impact_frame", "clone_row", "live_cursor", "letter_dive", "comment_drop", "voice_note", "post_wall"}:
-        raise RuntimeError("deploy the Phase 32G native effects registry")
+    if registry.get("version") != 7 or set(effects) != {"impact_frame", "clone_row", "live_cursor", "letter_dive", "comment_drop", "voice_note", "post_wall", "sketch_words"}:
+        raise RuntimeError("deploy the Phase 32H native effects registry")
     expected = {
         "impact_frame": (0.1, 0.25, {"intensity"}),
         "clone_row": (0.1, 2.5, {"intensity", "position"}),
@@ -21,6 +21,7 @@ def main():
         "comment_drop": (1.0, 4.0, {"intensity", "position", "comment_text"}),
         "voice_note": (1.0, 5.0, {"intensity", "position"}),
         "post_wall": (1.2, 5.0, {"intensity", "post_texts"}),
+        "sketch_words": (0.8, 3.0, {"intensity", "position", "sketch_text"}),
     }
     for preset, (minimum, maximum, parameter_keys) in expected.items():
         effect = effects[preset]
@@ -59,6 +60,9 @@ def main():
     post_texts = {parameter["key"]: parameter for parameter in effects["post_wall"]["parameters"]}["post_texts"]
     if post_texts.get("type") != "text_list" or (post_texts.get("minimum_items"), post_texts.get("maximum_items"), post_texts.get("item_maximum_length")) != (2, 3, 42):
         raise RuntimeError("the Post Wall card contract is incomplete")
+    sketch_text = {parameter["key"]: parameter for parameter in effects["sketch_words"]["parameters"]}["sketch_text"]
+    if sketch_text.get("type") != "text" or sketch_text.get("minimum_length") != 1 or sketch_text.get("maximum_length") != 24:
+        raise RuntimeError("the Sketch Words text contract is incomplete")
     print(json.dumps({
         "status": "passed",
         "registry_version": registry["version"],
@@ -68,12 +72,12 @@ def main():
         "model_calls": 0,
         "note": "Synthetic and real-footage playback remain separate acceptance checks.",
     }, indent=2))
-    print("PASS  Post Wall registry contract is deployed; no editing work started.")
+    print("PASS  Sketch Words registry contract is deployed; no editing work started.")
 
 
 if __name__ == "__main__":
     try:
         main()
     except Exception as error:
-        print(f"Phase 32G verification failed: {error}", file=sys.stderr)
+        print(f"Phase 32H verification failed: {error}", file=sys.stderr)
         raise SystemExit(1)

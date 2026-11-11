@@ -8,7 +8,7 @@ from app.effect_registry import effect_definition
 
 
 class VisualBeat(TreatmentWindow):
-    preset: Literal["impact_frame", "clone_row", "live_cursor", "letter_dive", "comment_drop", "voice_note", "post_wall"]
+    preset: Literal["impact_frame", "clone_row", "live_cursor", "letter_dive", "comment_drop", "voice_note", "post_wall", "sketch_words"]
     intensity: Literal["subtle", "standard", "strong"] = "standard"
     position: Literal["upper", "center", "lower"] = "center"
     cursor_start_x: float | None = Field(default=None, ge=.08, le=.92)
@@ -19,8 +19,9 @@ class VisualBeat(TreatmentWindow):
     letter_text: str | None = Field(default=None, min_length=1, max_length=18)
     comment_text: str | None = Field(default=None, min_length=1, max_length=48)
     post_texts: list[str] | None = Field(default=None, min_length=2, max_length=3)
+    sketch_text: str | None = Field(default=None, min_length=1, max_length=24)
 
-    @field_validator("letter_text", "comment_text")
+    @field_validator("letter_text", "comment_text", "sketch_text")
     @classmethod
     def safe_letter_text(cls, value):
         if value is None:
@@ -74,6 +75,13 @@ class VisualBeat(TreatmentWindow):
             raise ValueError("post_wall requires two or three source-backed cards")
         if self.preset != "post_wall" and self.post_texts is not None:
             raise ValueError(f"{self.preset} does not accept post text")
+        if self.preset == "sketch_words":
+            if self.sketch_text is None:
+                raise ValueError("sketch_words requires source-backed words")
+            if len(self.sketch_text.split()) > 3:
+                raise ValueError("sketch_words accepts at most three words")
+        elif self.sketch_text is not None:
+            raise ValueError(f"{self.preset} does not accept sketch text")
         return self
 
     @model_serializer(mode="wrap")
@@ -83,7 +91,7 @@ class VisualBeat(TreatmentWindow):
             data.pop("intensity", None)
         if data.get("position") == "center":
             data.pop("position", None)
-        for name in ("cursor_start_x", "cursor_start_y", "cursor_end_x", "cursor_end_y", "click", "letter_text", "comment_text", "post_texts"):
+        for name in ("cursor_start_x", "cursor_start_y", "cursor_end_x", "cursor_end_y", "click", "letter_text", "comment_text", "post_texts", "sketch_text"):
             if data.get(name) is None:
                 data.pop(name, None)
         return data

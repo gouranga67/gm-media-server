@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 
-EFFECT_REGISTRY_VERSION = 6
+EFFECT_REGISTRY_VERSION = 7
 
 
 @dataclass(frozen=True)
@@ -110,6 +110,7 @@ POST_TEXTS = EffectParameter(
     "post_texts", "Source-backed cards", "text_list", (),
     minimum_items=2, maximum_items=3, item_maximum_length=42,
 )
+SKETCH_TEXT = EffectParameter("sketch_text", "Words", "text", "", minimum_length=1, maximum_length=24)
 
 
 EFFECT_DEFINITIONS = (
@@ -189,6 +190,17 @@ EFFECT_DEFINITIONS = (
         maximum_duration_seconds=5.0,
         default_duration_seconds=3.0,
         parameters=(INTENSITY, POST_TEXTS),
+    ),
+    EffectDefinition(
+        preset="sketch_words",
+        label="Sketch words",
+        summary="One to three source-backed words draw on with marker-like lettering and accent strokes.",
+        category="typography",
+        version=1,
+        minimum_duration_seconds=0.8,
+        maximum_duration_seconds=3.0,
+        default_duration_seconds=1.6,
+        parameters=(INTENSITY, POSITION, SKETCH_TEXT),
     ),
 )
 
