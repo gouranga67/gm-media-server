@@ -553,7 +553,10 @@ EDIT_PLAN_JSON_SCHEMA: dict[str, Any] = {
                     "source_in": {"type": "number", "minimum": 0},
                     "source_out": {"type": "number", "exclusiveMinimum": 0},
                     "crop": {"type": "string", "enum": ["center_fill"]},
-                    "transition": {"type": "string", "enum": ["cut", "dip_to_black"]},
+                    "transition": {
+                        "type": "string",
+                        "enum": ["cut", "dip_to_black", "cross_dissolve"],
+                    },
                     "visual_preset": {
                         "type": "string",
                         "enum": [
@@ -636,7 +639,10 @@ MONTAGE_EDIT_PLAN_JSON_SCHEMA: dict[str, Any] = {
                     "source_out": {"type": "number", "minimum": 0},
                     "duration": {"type": "number", "minimum": 0.5, "maximum": 8.0},
                     "crop": {"type": "string", "enum": ["center_fill"]},
-                    "transition": {"type": "string", "enum": ["cut", "dip_to_black"]},
+                    "transition": {
+                        "type": "string",
+                        "enum": ["cut", "dip_to_black", "cross_dissolve"],
+                    },
                     "visual_preset": {
                         "type": "string",
                         "enum": ["standard", "punch_in", "slow_push_in", "slow_pull_out", "rhythmic_punch"],
@@ -947,6 +953,22 @@ def _validate_broll(plan: EditPlan, assets: list[dict[str, Any]], duration: floa
         raise ValueError("B-roll may cover at most 60 percent of the main story")
 
 
+def _validate_composition(plan: EditPlan, direction: dict[str, Any]) -> None:
+    composition = direction.get("composition")
+    if not isinstance(composition, dict) or composition.get("mode") != "green_screen":
+        return
+    if isinstance(plan, MontageEditPlan):
+        raise ValueError("green-screen composition requires the talking-head recipe")
+    foreground = str(composition.get("foreground_asset_id") or "")
+    background = str(composition.get("background_asset_id") or "")
+    if not foreground or not background or foreground == background:
+        raise ValueError("green-screen composition needs distinct foreground and background sources")
+    if any(str(clip.asset_id) != foreground for clip in plan.clips):
+        raise ValueError("green-screen dialogue clips must use the selected foreground source")
+    if any(str(cue.asset_id) == background for cue in plan.broll):
+        raise ValueError("the green-screen background is a composition layer, not B-roll")
+
+
 def _validate_effect_cues(
     plan: EditPlan,
     total_duration: float,
@@ -1015,6 +1037,8 @@ def validate_edit_plan(
         )
         if protection:
             assert_revision_locks(plan.model_dump(mode="json"), protection["previous"], protection["locks"], assets)
+        from app.brief_contract import check_brief_contract
+        check_brief_contract(plan, (creative_direction or {}).get("_brief_contract"), assets)
         return plan
     plan = protect_spoken_boundaries(TalkingHeadEditPlan.model_validate(document), assets)
     if plan.post_copy and not allow_post_copy:
@@ -1087,6 +1111,7 @@ def validate_edit_plan(
     from app.blooper_focus import validate_blooper_scope
     validate_blooper_scope(plan, direction)
     _validate_broll(plan, assets, total_duration, direction)
+    _validate_composition(plan, direction)
     validate_finishing(plan, assets, music_tracks)
 
     for asset_id, asset_ranges in ranges.items():
@@ -1098,6 +1123,8 @@ def validate_edit_plan(
     policy = direction.get("editorial_policy") or {}
     from app.story_contract import check_story_contract
     check_story_contract(plan, direction.get("_selected_story_contract"), assets)
+    from app.brief_contract import check_brief_contract
+    check_brief_contract(plan, direction.get("_brief_contract"), assets)
     if enforce_story_quality:
         validate_story_content(plan, assets, policy)
         if policy.get("promotional") and not policy.get("bloopers_requested") and not policy.get("preserve_pauses_requested"):
@@ -1219,6 +1246,7 @@ def validate_montage_plan(
     from app.blooper_focus import validate_blooper_scope
     validate_blooper_scope(plan, direction)
     _validate_broll(plan, assets, total_duration, direction)
+    _validate_composition(plan, direction)
     validate_finishing(plan, assets, music_tracks)
     return plan
 

@@ -25,6 +25,31 @@ type Tool =
   | "visual_beat"
   | "pointer"
   | "music_pause";
+type TaskGroup = "story" | "picture" | "layers" | "sound";
+const taskGroups: readonly {
+  readonly id: TaskGroup;
+  readonly label: string;
+  readonly summary: string;
+  readonly tools: readonly Tool[];
+}[] = [
+  { id: "story", label: "Story & timing", summary: "Audio-picture joins", tools: ["join"] },
+  { id: "picture", label: "Picture", summary: "Framing, movement, colour", tools: ["motion", "colour"] },
+  { id: "layers", label: "Layers & graphics", summary: "Pictures, callouts, effects", tools: ["layer", "callout", "visual_beat", "pointer"] },
+  { id: "sound", label: "Sound & captions", summary: "Voice, music, subtitles", tools: ["audio", "captions", "music", "music_pause"] },
+];
+const toolLabels: Readonly<Record<Tool, string>> = {
+  motion: "Targeted camera move",
+  audio: "Phrase audio level",
+  captions: "Timed caption placement",
+  colour: "Selected clip colour",
+  layer: "Picture layer / green screen",
+  music: "Music excerpt",
+  join: "Independent audio / picture join",
+  callout: "Text callout / list counter",
+  visual_beat: "Visual effect / animation",
+  pointer: "Arrow / circle pointer",
+  music_pause: "Pause music, keep speech",
+};
 type EffectEligibility = {
   readonly status: "ready" | "review" | "blocked";
   readonly label: string;
@@ -85,6 +110,7 @@ export function FinishingWorkspace({
   return (
     <details
       className="rounded-md border border-[#D7D9D3] bg-white p-4"
+      id="finishing-workspace"
       onToggle={(event) => setOpen(event.currentTarget.open)}
     >
       <summary className="min-h-11 cursor-pointer content-center text-sm font-bold text-[#173F5F]">
@@ -151,6 +177,7 @@ function FinishingForm({
     "left" | "right" | "up" | "down"
   >("right");
   const [inspection, setInspection] = useState<FinishingInspection>();
+  const [taskGroup, setTaskGroup] = useState<TaskGroup>("picture");
   const [tool, setTool] = useState<Tool>("motion");
   const [clipIndex, setClipIndex] = useState(0);
   const [start, setStart] = useState("0");
@@ -562,28 +589,46 @@ function FinishingForm({
       ) : (
         <>
           <form className="space-y-4" onSubmit={submit}>
+            <fieldset>
+              <legend className="text-xs font-bold text-[#173F5F]">What do you want to adjust?</legend>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                {taskGroups.map((group) => (
+                  <button
+                    aria-pressed={taskGroup === group.id}
+                    className={`min-h-16 rounded-md border p-3 text-left ${taskGroup === group.id ? "border-[#173F5F] bg-[#EFF6FA]" : "border-[#D7D9D3] bg-white"}`}
+                    key={group.id}
+                    onClick={() => {
+                      setTaskGroup(group.id);
+                      const first = group.tools[0];
+                      setTool(first);
+                      if (first === "visual_beat") selectEffect(visualBeat);
+                    }}
+                    type="button"
+                  >
+                    <span className="block text-xs font-bold text-[#173F5F]">{group.label}</span>
+                    <span className="mt-1 block text-[11px] leading-4 text-[#666862]">{group.summary}</span>
+                  </button>
+                ))}
+              </div>
+            </fieldset>
             <label className="block text-xs font-bold">
-              Tool
+              Adjustment
               <select
                 className={control}
                 value={tool}
                 onChange={(e) => {
                   const selected = e.currentTarget.value as Tool;
                   setTool(selected);
+                  const parent = taskGroups.find((group) => group.tools.includes(selected));
+                  if (parent) setTaskGroup(parent.id);
                   if (selected === "visual_beat") selectEffect(visualBeat);
                 }}
               >
-                <option value="motion">Targeted camera move</option>
-                <option value="audio">Phrase audio level</option>
-                <option value="captions">Timed caption placement</option>
-                <option value="colour">Selected clip colour</option>
-                <option value="layer">Picture layer / green screen</option>
-                <option value="music">Music excerpt</option>
-                <option value="callout">Text callout / list counter</option>
-                <option value="visual_beat">Visual effect / animation</option>
-                <option value="pointer">Arrow / circle pointer</option>
-                <option value="music_pause">Pause music, keep speech</option>
-                <option value="join">Independent audio / picture join</option>
+                {taskGroups.map((group) => (
+                  <optgroup key={group.id} label={group.label}>
+                    {group.tools.map((value) => <option key={value} value={value}>{toolLabels[value]}</option>)}
+                  </optgroup>
+                ))}
               </select>
             </label>
             {tool === "motion" || tool === "colour" || tool === "join" ? (

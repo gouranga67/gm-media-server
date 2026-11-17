@@ -43,6 +43,7 @@ const groups = [
       ["Pilot acceptance", "/studio/pilot"],
     ],
   },
+  { label: "Guide", href: "/guide", links: [] },
 ] as const;
 
 export function StudioNav({ current = "/" }: { readonly current?: string }) {

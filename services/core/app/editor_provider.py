@@ -231,6 +231,7 @@ def _base_public_context(context: dict[str, Any], max_characters: int) -> dict[s
         if key.startswith("_"):
             public.pop(key)
     public.get("job", {}).pop("_selected_story_contract", None)
+    public.get("job", {}).pop("_brief_contract", None)
     public.get("job", {}).pop("_revision_protection", None)
     if public.get("job", {}).get("editorial_policy", {}).get("bloopers_requested"):
         public["learning_preferences"] = {"directives": [], "scope": "bloopers", "hosted_model_calls": 0}
@@ -631,6 +632,15 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
             "unrelated reactions into a mistake, force a connecting product story, or include every file. "
             "A selected concept's cited source order takes precedence over generic hook ranking.\n\n"
         )
+    composition = public.get("job", {}).get("composition") or {}
+    if composition.get("mode") == "green_screen":
+        source_instruction += (
+            "Green-screen composition is already configured by the user. Use only the asset marked "
+            "composition_role=foreground for dialogue clips. The asset marked composition_role=background "
+            "is a full-frame presentation layer rendered behind the keyed foreground; do not use it as a "
+            "dialogue clip, B-roll cue or substitute source. Preserve the foreground's recorded speech and "
+            "choose cuts exactly as you would for an ordinary talking-head edit.\n\n"
+        )
     take_instruction = (
         "Read take_quality as fallible evidence and compare repeated takes against the full transcript. "
         "Prefer complete clean takes over discarded starts and retake directions unless outtakes are requested. "
@@ -810,7 +820,8 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
         "An audio and visual effect may share a beat within 50ms; both count towards the effect limit. "
         "Library effects, callouts, pointers, visual_beats and music regions share that limit; camera moves and caption placement are separate. "
         "Respect use_when/avoid_when and energy. Keep effects shorter than important speech; do not reuse one gag throughout a reel. "
-        "Do not fabricate laughter or reactions. Use existing silent picture-layer freeze/reaction tools only when a user requests them. "
+        "Do not fabricate laughter or reactions. Picture-layer freeze/reaction treatments are human finishing tools; "
+        "do not claim to add or configure them in this edit plan. "
         if public.get("job", {}).get("effect_level", "off") != "off" else
         "Sounds and decorative graphics are disabled: leave finishing.callouts, finishing.pointers and finishing.music_regions empty. "
         "Leave finishing.visual_beats empty too. "
@@ -1067,8 +1078,13 @@ def create_edit_plan(
                 "usage": {},
             }
         planner = deterministic_montage_plan if recipe == "montage" else deterministic_plan
+        composition = context.get("job", {}).get("composition") or {}
+        planning_assets = assets
+        if composition.get("mode") == "green_screen":
+            foreground = str(composition.get("foreground_asset_id") or "")
+            planning_assets = [asset for asset in assets if str(asset.get("asset_id")) == foreground]
         return planner(
-            assets,
+            planning_assets,
             context.get("job", {}).get("target_duration_seconds"),
             context.get("job", {}).get("edit_style") or "clean",
             context.get("job", {}).get("music_mode") or "none",

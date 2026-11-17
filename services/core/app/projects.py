@@ -16,6 +16,8 @@ from app.schemas import (
     AssetAnalysisResponse,
     AssetCreate,
     AssetResponse,
+    BriefInterpretationRequest,
+    BriefInterpretationResponse,
     CatalogSearchResponse,
     CatalogStatusResponse,
     DuplicateAuditResponse,
@@ -26,6 +28,7 @@ from app.schemas import (
     EditorModelResponse,
     JobAssetAttach,
     JobAssetAttachResponse,
+    JobComposition,
     JobCreate,
     JobResponse,
     LibraryAssetResponse,
@@ -53,6 +56,14 @@ SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 CANONICAL_RECOMMENDATION = (
     "Recommended because it has the most job references; ties prefer the oldest verified original."
 )
+
+
+@router.post("/brief-interpretation", response_model=BriefInterpretationResponse)
+def brief_interpretation(payload: BriefInterpretationRequest) -> dict[str, Any]:
+    """Explain the local instruction contract without a model or database call."""
+    from app.editing_contract import interpret_brief
+
+    return interpret_brief(payload.brief)
 
 
 def _media_kind(mime_type: str) -> Literal["video", "image", "audio"]:
@@ -1151,6 +1162,75 @@ def attach_job_assets(job_id: UUID, payload: JobAssetAttach) -> dict[str, Any]:
         "asset_ids": payload.asset_ids,
         "attached_count": attached_count,
     }
+
+
+@router.put("/jobs/{job_id}/composition", response_model=JobComposition)
+def set_job_composition(job_id: UUID, payload: JobComposition) -> dict[str, Any]:
+    """Set draft roles or tune an existing green-screen composition."""
+
+    with connection() as database:
+        job = database.execute(
+            "SELECT id, status, recipe, composition FROM jobs WHERE id = %s FOR UPDATE",
+            (job_id,),
+        ).fetchone()
+        if job is None:
+            raise HTTPException(status_code=404, detail="job not found")
+        if job["status"] in {"uploading", "ingesting", "analyzing", "planning", "previewing", "revising", "exporting", "rendering"}:
+            raise HTTPException(
+                status_code=409,
+                detail="wait for the current job operation before changing composition",
+            )
+
+        current = JobComposition.model_validate(job.get("composition") or {})
+        if job["status"] != "draft" and (
+            current.mode != "green_screen"
+            or payload.mode != current.mode
+            or payload.foreground_asset_id != current.foreground_asset_id
+            or payload.background_asset_id != current.background_asset_id
+        ):
+            raise HTTPException(
+                status_code=409,
+                detail="source roles are fixed after editing starts; only green-screen key settings can change",
+            )
+
+        if payload.mode == "green_screen":
+            if job["recipe"] != "talking_head":
+                raise HTTPException(status_code=422, detail="green screen requires a talking-head job")
+            role_ids = [payload.foreground_asset_id, payload.background_asset_id]
+            rows = database.execute(
+                """
+                SELECT assets.id, assets.mime_type
+                FROM job_assets
+                JOIN assets ON assets.id = job_assets.asset_id
+                WHERE job_assets.job_id = %s AND assets.id = ANY(%s::uuid[])
+                """,
+                (job_id, role_ids),
+            ).fetchall()
+            inventory = {row["id"]: str(row.get("mime_type") or "") for row in rows}
+            if len(inventory) != 2:
+                raise HTTPException(
+                    status_code=409,
+                    detail="foreground and background must already be attached to this job",
+                )
+            if not inventory[payload.foreground_asset_id].startswith("video/"):
+                raise HTTPException(status_code=422, detail="green-screen foreground must be video")
+            if not inventory[payload.background_asset_id].startswith(("video/", "image/")):
+                raise HTTPException(status_code=422, detail="green-screen background must be video or an image")
+
+        document = payload.model_dump(mode="json")
+        database.execute(
+            "UPDATE jobs SET composition = %s, updated_at = now() WHERE id = %s",
+            (Jsonb(document), job_id),
+        )
+        database.execute(
+            "INSERT INTO job_events (job_id, event_type, payload) VALUES (%s, %s, %s)",
+            (
+                job_id,
+                "composition_updated" if job["status"] == "draft" else "composition_tuned",
+                Jsonb(document),
+            ),
+        )
+    return document
 
 
 @router.get("/jobs/{job_id}/assets", response_model=list[AssetResponse])

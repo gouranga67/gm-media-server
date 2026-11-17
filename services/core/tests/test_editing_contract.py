@@ -1,7 +1,7 @@
 import unittest
 from types import SimpleNamespace
 
-from app.editing_contract import editing_contract, contract_instructions, editing_receipt
+from app.editing_contract import editing_contract, contract_instructions, editing_receipt, interpret_brief
 from app.editor_provider import _model_content
 from app.finishing_tools import FinishingTools
 
@@ -40,6 +40,66 @@ class EditingContractTests(unittest.TestCase):
         prompt = contract_instructions(context)
         self.assertIn("not a quota or an advertisement template", prompt)
         self.assertIn("no minimum number of treatments", prompt)
+
+    def test_supplied_script_is_a_locked_contract(self):
+        context = self.context(
+            "Use this script exactly:\n"
+            "Welcome to Azura Agency.\n"
+            "We help creators turn attention into revenue.\n"
+            "Talk to us today."
+        )
+        contract = editing_contract(context)
+        self.assertEqual(contract["version"], "editing_contract_v2")
+        self.assertEqual(contract["instruction_mode"], "supplied_script")
+        self.assertEqual(contract["wording_fidelity"], "verbatim")
+        self.assertTrue(contract["sequence_locked"])
+        prompt = contract_instructions(context)
+        self.assertIn("wording and sequence as authoritative", prompt)
+        self.assertIn("without paraphrasing, reordering or silently dropping lines", prompt)
+        self.assertIn("explain the conflict", prompt)
+
+    def test_ordered_scenes_and_points_remain_in_order(self):
+        scenes = editing_contract(self.context(
+            "Scene 1: Introduce the founder\n"
+            "Scene 2: Explain the agency\n"
+            "Scene 3: End with the revenue result"
+        ))
+        self.assertEqual(scenes["instruction_mode"], "ordered_scenes")
+        self.assertEqual(scenes["required_item_count"], 3)
+        self.assertTrue(scenes["sequence_locked"])
+        self.assertIn("Include every supplied scene in that order", contract_instructions(self.context(
+            "Scene 1: Introduce the founder\nScene 2: Explain the agency"
+        )))
+
+        points_context = self.context(
+            "- Who we help\n"
+            "- What makes the agency different\n"
+            "- The result clients can expect"
+        )
+        points = editing_contract(points_context)
+        self.assertEqual(points["instruction_mode"], "ordered_points")
+        self.assertEqual(points["required_item_count"], 3)
+        self.assertIn("Do not silently omit or reorder a point", contract_instructions(points_context))
+
+    def test_ordinary_prose_is_not_mistaken_for_a_script_or_list(self):
+        contract = editing_contract(self.context(
+            "Make a reel about our 3 services and mention that the script is still being drafted."
+        ))
+        self.assertEqual(contract["instruction_mode"], "creative_brief")
+        self.assertEqual(contract["wording_fidelity"], "flexible")
+        self.assertFalse(contract["sequence_locked"])
+
+    def test_negated_script_direction_is_not_locked(self):
+        contract = editing_contract(self.context(
+            "Do not follow the supplied script. Find the strongest recorded explanation instead."
+        ))
+        self.assertEqual(contract["instruction_mode"], "creative_brief")
+
+    def test_unambiguous_platform_language_suggests_a_publishing_preset(self):
+        self.assertEqual(interpret_brief("Make this for TikTok")["suggested_publishing_preset"], "tiktok")
+        self.assertEqual(interpret_brief("A YouTube Short about our day")["suggested_publishing_preset"], "youtube_short")
+        self.assertEqual(interpret_brief("Not TikTok; make it for Instagram")["suggested_publishing_preset"], "instagram_reel")
+        self.assertEqual(interpret_brief("Use this on Instagram and TikTok")["suggested_publishing_preset"], "custom")
 
     def test_receipt_distinguishes_replay_from_model_planning(self):
         from app.edit_plan import TalkingHeadEditPlan

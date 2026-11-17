@@ -155,6 +155,11 @@ def build_editor_context(
                 "moments": story_moments,
             },
         }
+        composition = job.get("composition") if isinstance(job.get("composition"), dict) else {}
+        if str(row["id"]) == str(composition.get("foreground_asset_id") or ""):
+            asset["composition_role"] = "foreground"
+        elif str(row["id"]) == str(composition.get("background_asset_id") or ""):
+            asset["composition_role"] = "background"
         if row.get("display_name"):
             asset["library_name"] = row["display_name"]
         if row.get("media_role") in ("talking", "broll"):
@@ -269,6 +274,11 @@ def build_editor_context(
             "output_aspect": job.get("output_aspect") or "vertical",
             "brand_kit_id": str(job["brand_kit_id"]) if job.get("brand_kit_id") else None,
             "publishing_preset": job.get("publishing_preset") or "custom",
+            "composition": job.get("composition") or {
+                "mode": "auto",
+                "foreground_asset_id": None,
+                "background_asset_id": None,
+            },
             "cover_time_seconds": float(job.get("cover_time_seconds") or 0),
             "editorial_policy": policy,
         },

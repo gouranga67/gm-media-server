@@ -23,6 +23,8 @@ import { VisualFinishingControls } from "./visual-finishing-controls";
 import { TreatmentTimeline } from "./treatment-timeline";
 import { EditingReceipt } from "./editing-receipt";
 import { PreciseClipEditor } from "./precise-clip-editor";
+import { GreenScreenCompositionControls } from "./green-screen-composition-controls";
+import { TransitionBoundaryEditor } from "./transition-boundary-editor";
 import { EditFeedbackCard } from "@/app/_components/edit-feedback-card";
 import { RenderQualityCard } from "@/app/_components/render-quality-card";
 import { PublishingPanel } from "@/app/_components/publishing-panel";
@@ -42,6 +44,7 @@ import {
   type OutputAspect,
   type Recipe,
   type JobReview,
+  type JobComposition,
   type TargetDuration,
 } from "@/lib/media-api";
 
@@ -85,10 +88,12 @@ export function JobReviewControls({
   deliveryVariants,
   editorialTimeline,
   storyAssessment,
+  composition,
   initialCoverTime,
   initialFeedback,
   onUpdated,
   onSeek,
+  getPreviewVideo,
 }: {
   readonly jobId: string;
   readonly run: EditRun;
@@ -99,10 +104,12 @@ export function JobReviewControls({
   readonly deliveryVariants: readonly DeliveryVariant[];
   readonly editorialTimeline: readonly EditorialClip[];
   readonly storyAssessment: JobReview["story_assessment"] | undefined;
+  readonly composition?: JobComposition;
   readonly initialCoverTime: number;
   readonly initialFeedback: EditFeedback | null;
   readonly onUpdated: () => void;
   readonly onSeek?: (seconds: number) => void;
+  readonly getPreviewVideo?: () => HTMLVideoElement | null;
 }) {
   const [note, setNote] = useState("");
   const [submitting, setSubmitting] = useState<"revision" | "approval" | "caption">();
@@ -137,10 +144,30 @@ export function JobReviewControls({
   const [captionTiming, setCaptionTiming] = useState(
     run.caption_settings.timing_offset_seconds ?? 0,
   );
+  const [reviewToolsOpen, setReviewToolsOpen] = useState(false);
+  const [revisionOpen, setRevisionOpen] = useState(false);
+  const openTreatmentEditor = (kind: string) => {
+    setReviewToolsOpen(true);
+    const targetId = kind === "cut" || kind === "transition"
+      ? "transition-editor"
+      : "finishing-workspace";
+    window.requestAnimationFrame(() => {
+      const target = document.getElementById(targetId);
+      if (!target) return;
+      let ancestor: HTMLElement | null = target;
+      while (ancestor) {
+        if (ancestor.tagName === "DETAILS") {
+          (ancestor as HTMLDetailsElement).open = true;
+        }
+        ancestor = ancestor.parentElement;
+      }
+      target.scrollIntoView?.({ behavior: "smooth", block: "start" });
+    });
+  };
   const plannedEffects = Array.isArray(run.manifest.creative_effects)
     ? run.manifest.creative_effects as readonly Record<string, unknown>[]
     : [];
-  const creativeDirection = run.manifest.creative_direction as { effect_level?: string } | undefined;
+  const creativeDirection = run.manifest.creative_direction as { effect_level?: string; music_mode?: string } | undefined;
   const plannedBroll = Array.isArray(run.manifest.broll)
     ? run.manifest.broll as readonly Record<string, unknown>[] : [];
   const finishing = run.manifest.finishing as {
@@ -161,6 +188,7 @@ export function JobReviewControls({
     index > 0 && clip.transition === "dip_to_black").length;
   const dissolveCount = editorialTimeline.filter((clip, index) =>
     index > 0 && clip.transition === "cross_dissolve").length;
+  const cutCount = Math.max(0, editorialTimeline.length - 1 - transitionCount - dissolveCount);
 
   const removeEffects = async () => {
     setSubmitting("revision"); setError(undefined);
@@ -308,10 +336,6 @@ export function JobReviewControls({
     const deliverable = recipe === "montage" ? "montage" : "reel";
     return (
       <div className="space-y-4">
-      <PublishingPanel key={currentFinal.id} exportId={currentFinal.id} version={currentFinal.version} />
-      <EditingReceipt receipt={currentFinal.manifest.editing_receipt} />
-      <RenderQualityCard review={currentFinal.manifest.quality_review} storyContract={currentFinal.manifest.story_contract_review} storyFinishing={currentFinal.manifest.story_finishing} storySequence={currentFinal.manifest.story_sequence_review} />
-      <TreatmentTimeline report={(currentFinal.manifest.finishing as { treatment_timeline?: unknown } | undefined)?.treatment_timeline} onSeek={onSeek} />
       <section className="space-y-4 rounded-md border border-[#BFE3FF] bg-white p-5">
         <div>
           <p className="flex items-center gap-2 font-mono text-xs font-bold tracking-wide text-[#215B43] uppercase">
@@ -321,6 +345,7 @@ export function JobReviewControls({
           <p className="mt-2 text-sm leading-relaxed text-[#666862]">
             Version {currentFinal.version} · {dimensions} · non-synthetic media only
           </p>
+          <a className="mt-2 inline-block min-h-9 content-center text-xs font-bold text-[#173F5F] underline underline-offset-4" href="/guide#delivery">What is included in each download?</a>
         </div>
         <Button asChild className="h-14 w-full bg-[#173F5F] text-white hover:bg-[#12344F]">
           <a href={`${root}/package`}>
@@ -402,15 +427,31 @@ export function JobReviewControls({
         {error ? <p className="text-xs text-[#A23B2A]" role="alert">{error}</p> : null}
       </section>
       <details className="rounded-md border border-[#D7D9D3] bg-white p-4">
+        <summary className="min-h-11 cursor-pointer content-center text-sm font-bold text-[#173F5F]">Publishing, quality checks &amp; delivery details</summary>
+        <div className="mt-4 space-y-4 border-t border-[#E5E6E1] pt-4">
+          <PublishingPanel key={currentFinal.id} exportId={currentFinal.id} version={currentFinal.version} />
+          <EditingReceipt receipt={currentFinal.manifest.editing_receipt} />
+          <RenderQualityCard review={currentFinal.manifest.quality_review} storyContract={currentFinal.manifest.story_contract_review} storyFinishing={currentFinal.manifest.story_finishing} storySequence={currentFinal.manifest.story_sequence_review} />
+          <TreatmentTimeline report={(currentFinal.manifest.finishing as { treatment_timeline?: unknown } | undefined)?.treatment_timeline} onEdit={openTreatmentEditor} onSeek={onSeek} />
+        </div>
+      </details>
+      <details className="rounded-md border border-[#D7D9D3] bg-white p-4">
         <summary className="min-h-11 cursor-pointer content-center text-sm font-bold text-[#173F5F]">Make another version</summary>
         <p className="my-3 text-xs leading-5 text-[#666862]">A new preview keeps this delivery available. Review the new version before exporting again.</p>
         <HookAuditions key={`delivery-hooks-${run.version}`} jobId={jobId} version={run.version} onUpdated={onUpdated} />
         <AudioCleanupControls key={`delivery-audio-${run.version}`} jobId={jobId} version={run.version} report={finishing?.audio_cleanup} onUpdated={onUpdated} />
         <VisualFinishingControls key={`delivery-visual-${run.version}`} jobId={jobId} version={run.version} report={finishing?.visual_finishing} onUpdated={onUpdated} />
+        {composition?.mode === "green_screen" ? <GreenScreenCompositionControls composition={composition} getPreviewVideo={getPreviewVideo} jobId={jobId} key={`delivery-composition-${run.version}`} onUpdated={onUpdated} version={run.version} /> : null}
+        <TransitionBoundaryEditor clips={editorialTimeline} jobId={jobId} key={`delivery-transitions-${run.version}`} onSeek={onSeek} onUpdated={onUpdated} version={run.version} />
         <FinishingWorkspace key={`delivery-tools-${run.version}`} jobId={jobId} version={run.version} clips={editorialTimeline} onUpdated={onUpdated} />
         {editorialTimeline.map((clip) => <PreciseClipEditor key={`delivery-clip-${run.version}-${clip.clip_id}`} jobId={jobId} version={run.version} clip={clip} onUpdated={onUpdated} />)}
       </details>
-      <EditFeedbackCard editRunId={run.id} initialFeedback={initialFeedback} jobId={jobId} key={run.id} onSaved={onUpdated} version={run.version} />
+      <details className="rounded-md border border-[#D7D9D3] bg-white p-4">
+        <summary className="min-h-11 cursor-pointer content-center text-sm font-bold text-[#173F5F]">Teach future edits · optional</summary>
+        <div className="mt-4 border-t border-[#E5E6E1] pt-4">
+          <EditFeedbackCard editRunId={run.id} initialFeedback={initialFeedback} jobId={jobId} key={run.id} onSaved={onUpdated} version={run.version} />
+        </div>
+      </details>
       </div>
     );
   }
@@ -439,11 +480,69 @@ export function JobReviewControls({
         </section>
       ) : null}
 
+      <section className="rounded-md border border-[#BFD2DE] bg-white p-5 shadow-sm">
+        <p className="font-mono text-xs font-bold tracking-wide text-[#173F5F] uppercase">Approve version {run.version}</p>
+        <h2 className="mt-2 text-xl font-bold text-[#173F5F]">What would you like to do?</h2>
+        <p className="mt-2 text-sm leading-relaxed text-[#666862]">
+          Watch the preview once with sound. Approve it, describe a change, or open the detailed checks and quick fixes.
+        </p>
+        <a className="mt-2 inline-block min-h-9 content-center text-xs font-bold text-[#173F5F] underline underline-offset-4" href="/guide#review">
+          What should I check before approving?
+        </a>
+        <details className="mt-4 rounded-md border border-[#D7D9D3] bg-[#F7F7F5] px-3 py-2">
+          <summary className="min-h-11 cursor-pointer content-center text-xs font-bold text-[#173F5F]">Export options · cover frame</summary>
+          <label className="mt-2 block text-xs font-bold text-[#173F5F]" htmlFor="cover-frame-time">COVER FRAME · SECONDS INTO EDIT</label>
+          <Input className="mt-2 bg-white" id="cover-frame-time" min={0} onChange={(event) => setCoverTime(Math.max(0, Number(event.currentTarget.value)))} step={0.1} type="number" value={coverTime} />
+          <p className="mt-2 text-xs leading-relaxed text-[#666862]">Choose a clear moment for the exported cover. Leave the default when you do not need a specific frame.</p>
+        </details>
+        <Button
+          className="mt-4 h-14 w-full bg-[#173F5F] text-white hover:bg-[#12344F]"
+          disabled={submitting !== undefined}
+          onClick={() => void approve()}
+          type="button"
+        >
+          {submitting === "approval" ? <LoaderCircleIcon aria-hidden="true" className="animate-spin" /> : <CheckIcon aria-hidden="true" />}
+          Approve &amp; export
+        </Button>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          <Button asChild className="h-12" variant="outline"><a href="#request-changes" onClick={() => setRevisionOpen(true)}><SendIcon aria-hidden="true" />Ask editor for story change</a></Button>
+          <Button asChild className="h-12" variant="outline"><a href="#review-tools" onClick={() => setReviewToolsOpen(true)}>Make a small local fix</a></Button>
+        </div>
+      </section>
+
+      <section className="rounded-md border border-[#D7D9D3] bg-[#F7F7F5] p-4" aria-labelledby="treatment-summary-title">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="font-mono text-[10px] font-bold tracking-wide text-[#666862] uppercase" id="treatment-summary-title">What this preview uses</h2>
+          <span className="font-mono text-[10px] text-[#666862]">Version {run.version}</span>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-[#173F5F]">
+          <span className="rounded border border-[#D7D9D3] bg-white px-2 py-1.5">{editorialTimeline.length} clips</span>
+          <span className="rounded border border-[#D7D9D3] bg-white px-2 py-1.5">{cutCount} cuts{dissolveCount ? ` · ${dissolveCount} dissolve${dissolveCount === 1 ? "" : "s"}` : ""}{transitionCount ? ` · ${transitionCount} dip${transitionCount === 1 ? "" : "s"}` : ""}</span>
+          <span className="rounded border border-[#D7D9D3] bg-white px-2 py-1.5">{plannedBroll.length} supporting visuals</span>
+          {composition?.mode === "green_screen" ? <span className="rounded border border-[#BFD2DE] bg-[#EFF6FA] px-2 py-1.5 font-bold">Green screen</span> : null}
+          <span className="rounded border border-[#D7D9D3] bg-white px-2 py-1.5">{plannedEffects.length + localGraphics} sounds &amp; graphics</span>
+          <span className="rounded border border-[#D7D9D3] bg-white px-2 py-1.5">{creativeDirection?.music_mode && creativeDirection.music_mode !== "none" ? "Music" : "No music"}</span>
+          <span className="rounded border border-[#D7D9D3] bg-white px-2 py-1.5">Captions</span>
+        </div>
+      </section>
+
+      {composition?.mode === "green_screen" ? (
+        <GreenScreenCompositionControls composition={composition} getPreviewVideo={getPreviewVideo} jobId={jobId} key={`composition-${run.version}`} onUpdated={onUpdated} version={run.version} />
+      ) : null}
+
+      <details className="rounded-md border border-[#D7D9D3] bg-white" id="review-tools" onToggle={(event) => setReviewToolsOpen(event.currentTarget.open)} open={reviewToolsOpen}>
+        <summary className="min-h-16 cursor-pointer px-5 py-4 text-[#173F5F] marker:text-[#173F5F]">
+          <span className="ml-2 inline-flex max-w-[calc(100%-2rem)] flex-col align-middle">
+            <span className="text-sm font-bold">Small local fixes</span>
+            <span className="mt-1 text-xs font-normal leading-relaxed text-[#666862]">Story timing, picture, layers, sound and captions · zero AI tokens</span>
+          </span>
+        </summary>
+        <div className="space-y-5 border-t border-[#E5E6E1] p-4">
       <RenderQualityCard review={run.manifest.quality_review} storyContract={run.manifest.story_contract_review} storyFinishing={run.manifest.story_finishing} storySequence={run.manifest.story_sequence_review} />
       <EditingReceipt receipt={run.manifest.editing_receipt} />
       <AudioCleanupControls key={`audio-${run.version}`} jobId={jobId} version={run.version} report={finishing?.audio_cleanup} onUpdated={onUpdated} />
       <VisualFinishingControls key={`visual-${run.version}`} jobId={jobId} version={run.version} report={finishing?.visual_finishing} onUpdated={onUpdated} />
-      <TreatmentTimeline report={finishing?.treatment_timeline} onSeek={onSeek} />
+      <TreatmentTimeline report={finishing?.treatment_timeline} onEdit={openTreatmentEditor} onSeek={onSeek} />
       <section className="rounded-md border border-[#D7D9D3] bg-white p-5">
         {storyAssessment ? (
           <div className="mb-5 rounded-md border border-[#BFE3FF] bg-[#EFF6FA] p-4">
@@ -475,6 +574,7 @@ export function JobReviewControls({
           </div>
         ) : null}
         {storyAssessment?.review_mode !== "outtake_review" ? <HookAuditions key={`hooks-${run.version}`} jobId={jobId} version={run.version} onUpdated={onUpdated} /> : null}
+        <TransitionBoundaryEditor clips={editorialTimeline} jobId={jobId} key={`transitions-${run.version}`} onSeek={onSeek} onUpdated={onUpdated} version={run.version} />
         <FinishingWorkspace key={run.version} jobId={jobId} version={run.version} clips={editorialTimeline} onUpdated={onUpdated} />
         <div className="mb-5">
           <p className="font-mono text-xs font-bold tracking-wide text-[#173F5F] uppercase">Edit breakdown</p>
@@ -641,25 +741,18 @@ export function JobReviewControls({
             ))}
           </div>
         </div>
-        <p className="font-mono text-xs font-bold tracking-wide text-[#173F5F] uppercase">Approve version {run.version}</p>
-        <h2 className="mt-2 text-xl font-bold text-[#173F5F]">Happy with this edit?</h2>
-        <p className="mt-2 text-sm leading-relaxed text-[#666862]">
-          Approval freezes this edit plan and starts the full-quality local render.
-        </p>
-        <label className="mt-4 block text-xs font-bold text-[#173F5F]" htmlFor="cover-frame-time">COVER FRAME · SECONDS INTO EDIT</label>
-        <Input className="mt-2" id="cover-frame-time" min={0} onChange={(event) => setCoverTime(Math.max(0, Number(event.currentTarget.value)))} step={0.1} type="number" value={coverTime} />
-        <Button
-          className="mt-5 h-14 w-full bg-[#173F5F] text-white hover:bg-[#12344F]"
-          disabled={submitting !== undefined}
-          onClick={() => void approve()}
-          type="button"
-        >
-          {submitting === "approval" ? <LoaderCircleIcon aria-hidden="true" className="animate-spin" /> : <CheckIcon aria-hidden="true" />}
-          Approve &amp; export
-        </Button>
       </section>
+        </div>
+      </details>
 
-      <form className="rounded-md border border-[#D7D9D3] bg-white p-5" onSubmit={(event) => void submitRevision(event)}>
+      <details className="scroll-mt-4 rounded-md border border-[#D7D9D3] bg-white" id="request-changes" onToggle={(event) => setRevisionOpen(event.currentTarget.open)} open={revisionOpen}>
+        <summary className="min-h-16 cursor-pointer px-5 py-4 text-[#173F5F] marker:text-[#173F5F]">
+          <span className="ml-2 inline-flex max-w-[calc(100%-2rem)] flex-col align-middle">
+            <span className="text-sm font-bold">Request changes</span>
+            <span className="mt-1 text-xs font-normal leading-relaxed text-[#666862]">Describe one targeted adjustment or ask the editor to rebuild the story</span>
+          </span>
+        </summary>
+      <form className="border-t border-[#E5E6E1] p-5" onSubmit={(event) => void submitRevision(event)}>
         <p className="font-mono text-xs font-bold tracking-wide text-[#173F5F] uppercase">Request a revision</p>
         {revisionReport ? <div className="mt-4 rounded-md bg-[#EFF6FA] p-4 text-sm text-[#173F5F]" role="status">
           <p className="font-bold">What changed in version {run.version}</p>
@@ -697,7 +790,13 @@ export function JobReviewControls({
           Create revised preview
         </Button>
       </form>
-      <EditFeedbackCard editRunId={run.id} initialFeedback={initialFeedback} jobId={jobId} key={run.id} onSaved={onUpdated} version={run.version} />
+      </details>
+      <details className="rounded-md border border-[#D7D9D3] bg-white p-4">
+        <summary className="min-h-11 cursor-pointer content-center text-sm font-bold text-[#173F5F]">Teach future edits · optional</summary>
+        <div className="mt-4 border-t border-[#E5E6E1] pt-4">
+          <EditFeedbackCard editRunId={run.id} initialFeedback={initialFeedback} jobId={jobId} key={run.id} onSaved={onUpdated} version={run.version} />
+        </div>
+      </details>
     </div>
   );
 }

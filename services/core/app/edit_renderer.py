@@ -3,6 +3,11 @@ from app.duration_policy import duration_review
 from app.visual_finishing import source_crop_filter
 from app.stabilization import stabilization_filter
 from app.finishing_renderer import position_broll_cards
+from app.composition import (
+    append_green_screen_background,
+    composition_background_inputs,
+    selected_green_screen_background,
+)
 from app.finishing_tools import (
     apply_graph_finishing,
     finish_caption_events,
@@ -471,8 +476,11 @@ def _render_video(
     effect_sources: list[dict[str, Any]] | None = None,
     broll_sources: list[dict[str, Any]] | None = None,
     picture_layers: list[dict[str, Any]] | None = None,
+    composition_background: dict[str, Any] | None = None,
+    composition_settings: dict[str, Any] | None = None,
     safe_speech_joins: bool = False,
 ) -> str:
+    total_duration = sum(float(clip.source_out - clip.source_in) for clip in plan.clips)
     common = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-y"]
     for source, source_in, source_out in sources:
         common.extend(
@@ -480,16 +488,18 @@ def _render_video(
         )
     if music_source is not None:
         common.extend(["-stream_loop", "-1", *(["-ss", f"{plan.finishing.music_start_seconds:.3f}"] if plan.finishing and plan.finishing.music_start_seconds else []), "-i", str(music_source)])
+    common.extend(composition_background_inputs(composition_background, duration=total_duration))
+    composition_inputs = 1 if composition_background is not None else 0
     effects = effect_sources or []
     common.extend(effect_input_arguments(effects))
     overlays = broll_sources or []
     common.extend(broll_input_arguments(overlays))
     layers = picture_layers or []
     common.extend(picture_layer_inputs(layers))
-    joins = audio_join_sources(plan,[source[0] for source in sources],len(sources)+(1 if music_source else 0)+len(effects)+len(overlays)+len(layers))
+    joins = audio_join_sources(plan,[source[0] for source in sources],len(sources)+(1 if music_source else 0)+composition_inputs+len(effects)+len(overlays)+len(layers))
     common.extend(audio_join_inputs(joins))
-    if overlays or layers:
-        common.extend(["-t", f"{sum(float(clip.source_out - clip.source_in) for clip in plan.clips):.3f}"])
+    if overlays or layers or composition_background is not None:
+        common.extend(["-t", f"{total_duration:.3f}"])
     probe_cache: dict[Path, str | None] = {}
     hdr_modes: list[str | None] = []
     for source, _, _ in sources:
@@ -499,7 +509,7 @@ def _render_video(
     common.extend(
         [
             "-filter_complex",
-            normalize_render_audio(append_picture_layers(append_effect_filters(append_broll_filters(_ffmpeg_filter(
+            normalize_render_audio(append_picture_layers(append_effect_filters(append_broll_filters(append_green_screen_background(_ffmpeg_filter(
                 plan,
                 captions_path,
                 width=width,
@@ -507,8 +517,9 @@ def _render_video(
                 frames_per_second=frames_per_second,
                 music_input_index=len(sources) if music_source is not None else None,
                 hdr_modes=hdr_modes, join_sources=joins, safe_speech_joins=safe_speech_joins,
-            ), overlays, width=width, height=height, fps=frames_per_second), effects, width=width, height=height,
-                total_duration=sum(float(clip.source_out - clip.source_in) for clip in plan.clips)), layers, width=width, height=height, fps=frames_per_second)),
+            ), composition_background, width=width, height=height, fps=frames_per_second,
+                duration=total_duration, composition=composition_settings), overlays, width=width, height=height, fps=frames_per_second), effects, width=width, height=height,
+                total_duration=total_duration), layers, width=width, height=height, fps=frames_per_second)),
             "-map",
             "[vout]",
             "-map",
@@ -635,11 +646,20 @@ def render_edit_preview(
         for clip in plan.clips
     ]
     music_source, music_metadata = _selected_music(context, plan, settings)
+    composition_background = selected_green_screen_background(
+        context,
+        settings,
+        len(sources) + (1 if music_source is not None else 0),
+    )
+    composition_inputs = 1 if composition_background is not None else 0
     effect_sources = selected_effects(
-        context, plan, settings, len(sources) + (1 if music_source is not None else 0)
+        context,
+        plan,
+        settings,
+        len(sources) + (1 if music_source is not None else 0) + composition_inputs,
     )
     broll_sources = selected_broll(context, plan, settings,
-        len(sources) + (1 if music_source is not None else 0) + len(effect_sources))
+        len(sources) + (1 if music_source is not None else 0) + composition_inputs + len(effect_sources))
     project_id = str(context["job"]["project_id"])
     job_id = str(context["job"]["id"])
     output_directory = settings.media_root / "exports" / project_id / job_id / f"v{version}"
@@ -679,7 +699,9 @@ def render_edit_preview(
         music_source=music_source,
         effect_sources=effect_sources,
         broll_sources=broll_sources,
-        picture_layers=selected_picture_layers(context,plan,settings,len(sources)+(1 if music_source else 0)+len(effect_sources)+len(broll_sources)),
+        picture_layers=selected_picture_layers(context,plan,settings,len(sources)+(1 if music_source else 0)+composition_inputs+len(effect_sources)+len(broll_sources)),
+        composition_background=composition_background,
+        composition_settings=context.get("job", {}).get("composition"),
         safe_speech_joins=bool(context.get("speech_precision")),
     )
 
@@ -714,6 +736,7 @@ def render_edit_preview(
             "desired_feeling": context["job"].get("desired_feeling"),
             "ending_instruction": context["job"].get("ending_instruction"),
             "cover_time_seconds": context["job"].get("cover_time_seconds"),
+            "composition": context["job"].get("composition"),
         },
         "story_assessment": context.get("story_spine", {}).get("engagement_assessment", {}),
         "music": music_metadata,
@@ -861,11 +884,20 @@ def render_final_delivery(
         for clip in plan.clips
     ]
     music_source, music_metadata = _selected_music(context, plan, settings)
+    composition_background = selected_green_screen_background(
+        context,
+        settings,
+        len(sources) + (1 if music_source is not None else 0),
+    )
+    composition_inputs = 1 if composition_background is not None else 0
     effect_sources = selected_effects(
-        context, plan, settings, len(sources) + (1 if music_source is not None else 0)
+        context,
+        plan,
+        settings,
+        len(sources) + (1 if music_source is not None else 0) + composition_inputs,
     )
     broll_sources = selected_broll(context, plan, settings,
-        len(sources) + (1 if music_source is not None else 0) + len(effect_sources))
+        len(sources) + (1 if music_source is not None else 0) + composition_inputs + len(effect_sources))
     project_id = str(context["job"]["project_id"])
     job_id = str(context["job"]["id"])
     output_directory = settings.media_root / "deliveries" / project_id / job_id / f"v{version}"
@@ -915,7 +947,9 @@ def render_final_delivery(
         music_source=music_source,
         effect_sources=effect_sources,
         broll_sources=broll_sources,
-        picture_layers=selected_picture_layers(context,plan,settings,len(sources)+(1 if music_source else 0)+len(effect_sources)+len(broll_sources)),
+        picture_layers=selected_picture_layers(context,plan,settings,len(sources)+(1 if music_source else 0)+composition_inputs+len(effect_sources)+len(broll_sources)),
+        composition_background=composition_background,
+        composition_settings=context.get("job", {}).get("composition"),
     )
     technical_probe = probe_media(video_path, settings.analysis_command_timeout_seconds)
     video_stream = next(
@@ -997,6 +1031,7 @@ def render_final_delivery(
             "desired_feeling": context["job"].get("desired_feeling"),
             "ending_instruction": context["job"].get("ending_instruction"),
             "cover_time_seconds": context["job"].get("cover_time_seconds"),
+            "composition": context["job"].get("composition"),
         },
         "story_assessment": context.get("story_spine", {}).get("engagement_assessment", {}),
         "music": music_metadata,

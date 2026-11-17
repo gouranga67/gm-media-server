@@ -973,6 +973,9 @@ def process_one_edit(state: WorkerState) -> bool:
             with connection() as database:
                 persist_assembly(database, context)
             context = build_editor_context(run["job_id"], include_internal_paths=True)
+        if not run.get("edit_plan_id") and not run.get("based_on_run_id"):
+            from app.editing_contract import brief_contract
+            context["job"]["_brief_contract"] = brief_contract(context["project"]["brief"])
         prepare_run_speech_precision(context, run)
         if not run.get("edit_plan_id") and not run.get("based_on_run_id"):
             from app.story_contract import selected_story_contract
@@ -1399,6 +1402,10 @@ def process_one_edit(state: WorkerState) -> bool:
 
         from app.story_contract import check_story_contract
         context["story_contract_review"] = check_story_contract(plan, context["job"].get("_selected_story_contract"), context["assets"])
+        from app.brief_contract import check_brief_contract
+        context["brief_contract_review"] = check_brief_contract(
+            plan, context["job"].get("_brief_contract"), context["assets"], enforce=False
+        )
         from app.story_sequence import story_sequence_review
         context["story_sequence_review"] = story_sequence_review(plan, context["assets"],
             bloopers=bool((context["job"].get("editorial_policy") or {}).get("bloopers_requested")))

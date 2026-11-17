@@ -23,11 +23,18 @@ const PACING: Record<string, string> = {
   tight_dialogue: "Tighter dialogue with complete phrases",
   music_led: "Music and pictures, with complete speech where useful",
 };
+const INSTRUCTION_HANDLING: Record<string, string> = {
+  supplied_script: "The supplied script and its order were treated as authoritative.",
+  ordered_scenes: "Every supplied scene was kept in the requested order.",
+  ordered_points: "Every supplied point was kept in the requested order.",
+  creative_brief: "The brief guided the edit while the AI chose source-backed structure.",
+};
 
 export function EditingReceipt({ receipt }: { receipt: unknown }) {
   const data = record(receipt);
   if (data.version !== 1 && data.version !== 2) return null;
   const contract = record(data.planning_contract);
+  const briefReview = record(data.brief_contract_review);
   const audio = record(data.audio_processing);
   const effectReceipt = record(data.effect_decisions);
   const effectItems = records(effectReceipt.items);
@@ -42,6 +49,18 @@ export function EditingReceipt({ receipt }: { receipt: unknown }) {
       <summary className="cursor-pointer font-bold">How this edit was made</summary>
       <div className="mt-3 space-y-3 leading-relaxed">
         <p>{SOURCES[String(data.plan_source)] ?? "The original planning route was not recorded."}</p>
+        {INSTRUCTION_HANDLING[String(contract.instruction_mode)] ? (
+          <p>Instruction handling: {INSTRUCTION_HANDLING[String(contract.instruction_mode)]}</p>
+        ) : null}
+        {briefReview.status === "checked" ? (
+          <p className="rounded-md border border-[#9CCDB1] bg-[#E8F4ED] p-3 text-xs font-bold text-[#315B40]">
+            Transcript check passed: the selected speech preserves the supplied script or ordered points.
+          </p>
+        ) : briefReview.status === "attention" ? (
+          <p className="rounded-md border border-[#E6D8A8] bg-[#FFF8DE] p-3 text-xs leading-5 text-[#6B5510]">
+            Some scene meaning could not be verified from transcript evidence. Check the preview against your brief before approval.
+          </p>
+        ) : null}
         {PACING[String(contract.audio_pacing)] && <p>Audio direction: {PACING[String(contract.audio_pacing)]}.
           {contract.creative_quotas === false && " Zooms, transitions and effects were optional."}</p>}
         {data.version === 2 && effectItems.length > 0 ? (

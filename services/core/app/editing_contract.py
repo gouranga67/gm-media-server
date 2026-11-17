@@ -1,10 +1,135 @@
 """One explicit editorial priority order; no model calls or saved-plan mutation."""
 
+import re
+
 from app.brief_direction import read_brief, instruction_text, _positive
 from app.effect_registry import EFFECT_REGISTRY_VERSION, EFFECT_DEFINITIONS
 
 
-VERSION = "editing_contract_v1"
+VERSION = "editing_contract_v2"
+
+
+_SCRIPT_DIRECTIVE = re.compile(
+    r"\b(?:use|follow|read|keep|preserve|say|speak)\b[^.;!?\n]{0,45}"
+    r"\b(?:this|the|my|following|supplied|provided)\b[^.;!?\n]{0,20}\bscript\b"
+    r"|\bscript\b[^.;!?\n]{0,35}\b(?:exactly|verbatim|word[ -]for[ -]word|as written)\b",
+    re.IGNORECASE,
+)
+_SCRIPT_HEADING = re.compile(
+    r"^\s*(?:voiceover\s+|spoken\s+|recorded\s+)?script\s*:\s*(?:\S.*)?$",
+    re.IGNORECASE,
+)
+_SCENE_ITEM = re.compile(
+    r"^\s*(?:scene|shot|beat)\s*(?:#\s*)?(\d{1,3})\s*(?:[.):-]|\s+-)\s*(\S.*)$",
+    re.IGNORECASE,
+)
+_NUMBERED_ITEM = re.compile(r"^\s*(\d{1,3})[.)]\s+(\S.*)$")
+_BULLET_ITEM = re.compile(r"^\s*[-*•]\s+(\S.*)$")
+AI_DECISIONS = ["timing", "framing", "captions", "music", "effects", "supporting_pictures"]
+_PUBLISHING_PRESETS = (
+    ("instagram_reel", r"\binstagram\b"),
+    ("tiktok", r"\btik[ -]?tok\b"),
+    ("youtube_short", r"\byoutube\s+shorts?\b|\bshorts?\s+for\s+youtube\b"),
+    ("linkedin_landscape", r"\blinked[ -]?in\b"),
+    ("facebook_square", r"\bfacebook\b"),
+)
+
+
+def _positive_match(text, pattern):
+    """Use the existing clause-aware negation rule with a compiled expression."""
+    return _positive(text.lower().replace("’", "'"), pattern.pattern)
+
+
+def _suggested_publishing_preset(brief):
+    text = str(brief or "").lower().replace("’", "'")
+    matches = [preset for preset, pattern in _PUBLISHING_PRESETS if _positive(text, pattern)]
+    return matches[0] if len(matches) == 1 else "custom"
+
+
+def _instruction_structure(brief):
+    """Conservatively identify user-authored structure without an AI request.
+
+    This deliberately needs visible formatting or an explicit script directive.
+    Ordinary prose containing numbers or the word ``script`` remains a free brief.
+    """
+    lines = [line.strip() for line in str(brief or "").splitlines() if line.strip()]
+    scene_items = [match.group(2) for line in lines if (match := _SCENE_ITEM.match(line))]
+    numbered_items = [match.group(2) for line in lines if (match := _NUMBERED_ITEM.match(line))]
+    bullet_items = [match.group(1) for line in lines if (match := _BULLET_ITEM.match(line))]
+    has_script_heading = any(_SCRIPT_HEADING.match(line) for line in lines)
+    has_script_directive = _positive_match(str(brief or ""), _SCRIPT_DIRECTIVE)
+
+    if has_script_heading or has_script_directive:
+        return {
+            "instruction_mode": "supplied_script",
+            "wording_fidelity": "verbatim",
+            "sequence_locked": True,
+            "required_item_count": max(1, len(scene_items), len(numbered_items), len(bullet_items)),
+            "interpretation": "Follow the supplied script and its order.",
+        }
+    if len(scene_items) >= 2:
+        return {
+            "instruction_mode": "ordered_scenes",
+            "wording_fidelity": "meaning",
+            "sequence_locked": True,
+            "required_item_count": len(scene_items),
+            "interpretation": f"Follow all {len(scene_items)} supplied scenes in order.",
+        }
+    ordered_items = numbered_items if len(numbered_items) >= 2 else bullet_items
+    if len(ordered_items) >= 2:
+        return {
+            "instruction_mode": "ordered_points",
+            "wording_fidelity": "meaning",
+            "sequence_locked": True,
+            "required_item_count": len(ordered_items),
+            "interpretation": f"Include all {len(ordered_items)} supplied points in order.",
+        }
+    return {
+        "instruction_mode": "creative_brief",
+        "wording_fidelity": "flexible",
+        "sequence_locked": False,
+        "required_item_count": 0,
+        "interpretation": "Use the brief as creative direction.",
+    }
+
+
+def interpret_brief(brief):
+    """Return the local, user-visible reading of a brief."""
+    return {
+        **_instruction_structure(brief),
+        "ai_may_decide": list(AI_DECISIONS),
+        "suggested_publishing_preset": _suggested_publishing_preset(brief),
+    }
+
+
+def _required_items(brief, mode):
+    """Extract only visibly supplied structure; never invent missing items."""
+    raw_lines = [line.strip() for line in str(brief or "").splitlines() if line.strip()]
+    if mode == "ordered_scenes":
+        return [match.group(2).strip() for line in raw_lines if (match := _SCENE_ITEM.match(line))]
+    if mode == "ordered_points":
+        numbered = [match.group(2).strip() for line in raw_lines if (match := _NUMBERED_ITEM.match(line))]
+        if len(numbered) >= 2:
+            return numbered
+        return [match.group(1).strip() for line in raw_lines if (match := _BULLET_ITEM.match(line))]
+    if mode != "supplied_script":
+        return []
+
+    for index, line in enumerate(raw_lines):
+        heading = _SCRIPT_HEADING.match(line)
+        directive = _SCRIPT_DIRECTIVE.search(line)
+        if not heading and not directive:
+            continue
+        inline = line.split(":", 1)[1].strip() if ":" in line else ""
+        items = ([inline] if inline else []) + raw_lines[index + 1 :]
+        return [item for item in items if item]
+    return []
+
+
+def brief_contract(brief):
+    """Return the internal contract, including text needed for local validation."""
+    public = interpret_brief(brief)
+    return {**public, "required_items": _required_items(brief, public["instruction_mode"])}
 
 
 def editing_contract(context):
@@ -12,6 +137,7 @@ def editing_contract(context):
     brief = str((context.get("project") or {}).get("brief") or job.get("brief") or "")
     direction = read_brief({**job, "brief": brief})
     text = instruction_text({**job, "brief": brief})
+    structure = interpret_brief(brief)
     purpose = (job.get("editorial_policy") or {}).get("intent") or direction["purpose"]
     # Audio pacing is independent of the visual style. Ordinary stories keep
     # complete exchanges; explicitly promotional/tight edits can trim pauses.
@@ -32,7 +158,17 @@ def editing_contract(context):
         "visual_style": job.get("edit_style") or "clean",
         "creative_quotas": False,
         "preserve_natural_audio": connected,
-        "priority": ["source_fidelity", "explicit_brief", "complete_audio", "story", "optional_treatment"],
+        **structure,
+        "priority": [
+            "rights_privacy_safety",
+            "source_fidelity",
+            "explicit_exclusions",
+            "supplied_script_or_order",
+            "explicit_brief",
+            "complete_audio",
+            "story",
+            "optional_treatment",
+        ],
     }
 
 
@@ -53,9 +189,30 @@ def contract_instructions(context):
             "understandable passages; avoid rapid on/off fragments of conversation. "
         ),
     }[contract["audio_pacing"]]
+    structure = {
+        "supplied_script": (
+            "The brief contains a supplied script. Treat its wording and sequence as authoritative. Match it to "
+            "recorded source speech without paraphrasing, reordering or silently dropping lines. If the recorded "
+            "sources or hard duration limit cannot support the complete script, explain the conflict in "
+            "editorial_summary instead of inventing words or pretending the script was followed. "
+        ),
+        "ordered_scenes": (
+            "The brief contains an ordered scene plan. Include every supplied scene in that order. You may choose "
+            "source-backed timing, framing and treatment inside each scene, but do not merge, omit or reorder scenes "
+            "without an explicit later instruction. "
+        ),
+        "ordered_points": (
+            "The brief contains ordered points. Include every supplied point in that order, preserving its meaning "
+            "and complete recorded explanation. Do not silently omit or reorder a point to reach a preferred length. "
+        ),
+        "creative_brief": "Use the brief as creative direction while preserving every explicit requirement. ",
+    }[contract["instruction_mode"]]
     return (
-        "Editorial priority: source fidelity and the user's explicit brief, then complete audible passages, "
-        "then story continuity, then optional creative treatment. Never invent or change recorded words. "
+        "Editorial priority: rights, privacy and safety; recorded source truth; explicit exclusions; supplied "
+        "script or requested order; then the rest of the user's brief, complete audible passages, story continuity "
+        "and optional creative treatment. "
+        + structure
+        + "Never invent or change recorded words. "
         "Story-role labels describe the selected material; they are not a quota or an advertisement template. "
         + audio +
         "Visual pacing is separate from audio pacing. High impact suggests opportunities for picture changes, "
@@ -181,6 +338,7 @@ def editing_receipt(context, plan, provider):
             "local_controls" if provider.startswith("local_") else "unrecorded"
         ),
         "planning_contract": context.get("planning_contract"),
+        "brief_contract_review": context.get("brief_contract_review"),
         "local_repairs": list(dict.fromkeys(context.get("local_plan_repairs") or [])),
         "local_story_changes": (context.get("story_finishing") or {}).get("changes") or [],
         "audio_processing": {

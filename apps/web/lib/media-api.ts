@@ -39,6 +39,17 @@ export type ReasoningEffort = "low" | "medium" | "high";
 export type OutputAspect = "vertical" | "landscape" | "square";
 export type TargetPlatform = "all_social" | "facebook" | "instagram" | "linkedin" | "tiktok" | "youtube";
 export type PublishingPreset = "custom" | "instagram_reel" | "tiktok" | "youtube_short" | "linkedin_landscape" | "facebook_square";
+export type JobCompositionMode = "auto" | "standard" | "green_screen";
+
+export type JobComposition = {
+  readonly mode: JobCompositionMode;
+  readonly foreground_asset_id: string | null;
+  readonly background_asset_id: string | null;
+  readonly chroma_key_color: string;
+  readonly chroma_similarity: number;
+  readonly chroma_blend: number;
+  readonly spill_suppression: number;
+};
 
 export type Project = {
   readonly id: string;
@@ -48,6 +59,16 @@ export type Project = {
   readonly ai_copy_allowed: boolean;
   readonly created_at: string;
   readonly updated_at: string;
+};
+
+export type BriefInterpretation = {
+  readonly instruction_mode: "supplied_script" | "ordered_scenes" | "ordered_points" | "creative_brief";
+  readonly wording_fidelity: "verbatim" | "meaning" | "flexible";
+  readonly sequence_locked: boolean;
+  readonly required_item_count: number;
+  readonly interpretation: string;
+  readonly ai_may_decide: readonly string[];
+  readonly suggested_publishing_preset: PublishingPreset;
 };
 
 export type MediaJob = {
@@ -79,6 +100,7 @@ export type MediaJob = {
   readonly creative_profile_id: string | null;
   readonly brand_kit_id: string | null;
   readonly publishing_preset: PublishingPreset;
+  readonly composition: JobComposition;
   readonly cover_time_seconds: number;
   readonly created_at: string;
   readonly updated_at: string;
@@ -773,6 +795,13 @@ export function createProject(input: {
   });
 }
 
+export function interpretBrief(brief: string) {
+  return apiRequest<BriefInterpretation>("brief-interpretation", {
+    method: "POST",
+    body: JSON.stringify({ brief }),
+  });
+}
+
 export function createMediaJob(
   projectId: string,
   input: {
@@ -830,6 +859,13 @@ export function createMediaJob(
       brand_kit_id: input.brandKitId ?? null,
       publishing_preset: input.publishingPreset ?? "custom",
     }),
+  });
+}
+
+export function setJobComposition(jobId: string, composition: JobComposition) {
+  return apiRequest<JobComposition>(`jobs/${jobId}/composition`, {
+    method: "PUT",
+    body: JSON.stringify(composition),
   });
 }
 

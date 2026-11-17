@@ -10,7 +10,7 @@ import { Window } from "happy-dom";
 const require = createRequire(import.meta.url);
 const repo = path.resolve(import.meta.dirname, "..");
 const dom = new Window({ url: "http://localhost/jobs/new" });
-for (const name of ["window", "document", "navigator", "HTMLElement", "HTMLInputElement", "HTMLTextAreaElement", "File", "FormData", "MutationObserver", "Node", "NodeFilter", "CustomEvent", "Event", "HTMLSelectElement", "HTMLButtonElement"]) {
+for (const name of ["window", "document", "navigator", "HTMLElement", "HTMLInputElement", "HTMLTextAreaElement", "HTMLCanvasElement", "HTMLVideoElement", "File", "FormData", "MutationObserver", "Node", "NodeFilter", "CustomEvent", "Event", "HTMLSelectElement", "HTMLButtonElement"]) {
   Object.defineProperty(globalThis, name, { configurable: true, value: name === "window" ? dom : dom[name] });
 }
 globalThis.getComputedStyle = dom.getComputedStyle.bind(dom);
@@ -76,10 +76,12 @@ const { EditingReceipt } = require(path.join(repo, "apps/web/app/_components/edi
 const { TreatmentTimeline } = require(path.join(repo, "apps/web/app/_components/treatment-timeline.tsx"));
 const { AssemblyReadiness } = require(path.join(repo, "apps/web/app/_components/assembly-readiness.tsx"));
 const { NewJobForm } = require(path.join(repo, "apps/web/app/_components/new-job-form.tsx"));
+const { StudioNav } = require(path.join(repo, "apps/web/app/_components/studio-nav.tsx"));
 const { ConceptDesk } = require(path.join(repo, "apps/web/app/_components/concept-desk.tsx"));
 const { MediaLibrary } = require(path.join(repo, "apps/web/app/_components/media-library.tsx"));
 const { LearningLabPanel } = require(path.join(repo, "apps/web/app/_components/learning-lab.tsx"));
 const { PreciseClipEditor } = require(path.join(repo, "apps/web/app/_components/precise-clip-editor.tsx"));
+const { TransitionBoundaryEditor } = require(path.join(repo, "apps/web/app/_components/transition-boundary-editor.tsx"));
 const { FinishingWorkspace } = require(path.join(repo, "apps/web/app/_components/finishing-workspace.tsx"));
 const { AudioCleanupControls } = require(path.join(repo, "apps/web/app/_components/audio-cleanup-controls.tsx"));
 const { VisualFinishingControls } = require(path.join(repo, "apps/web/app/_components/visual-finishing-controls.tsx"));
@@ -290,6 +292,11 @@ globalThis.fetch = async (url, options = {}) => {
     payload = { updated: body.asset_ids.length, action: body.action };
   }
   else if (/^library\/assets\/[^/?]+$/.test(route)) payload = { asset: managedAssets.find((item) => item.id === route.split("/").at(-1)), collections: folderList.filter(folder=>folderMembers.get(folder.id)?.has(route.split("/").at(-1))), evidence: [], visual_frames: [] };
+  else if (route === "brief-interpretation") {
+    const text=String(body.brief||"").toLowerCase();
+    const presets=[text.includes("instagram")&&"instagram_reel",text.includes("tiktok")&&"tiktok",text.includes("youtube short")&&"youtube_short",text.includes("linkedin")&&"linkedin_landscape",text.includes("facebook")&&"facebook_square"].filter(Boolean);
+    payload={instruction_mode:"creative_brief",wording_fidelity:"flexible",sequence_locked:false,required_item_count:0,interpretation:"Use the brief as creative direction.",ai_may_decide:["timing","framing","captions","music","effects","supporting_pictures"],suggested_publishing_preset:presets.length===1?presets[0]:"custom"};
+  }
   else if (route === "projects") payload = { ...body, id: body.id };
   else if (/^projects\/[^/]+\/jobs$/.test(route)) { assemblySettings={assembly_mode:body.assembly_mode ?? body.recipe,pacing_mode:body.pacing_mode ?? "manual",edit_style:body.edit_style,reel_intent:body.reel_intent}; payload = { ...body, id: jobId }; }
   else if (route === `jobs/${jobId}/duration`) {
@@ -312,6 +319,7 @@ globalThis.fetch = async (url, options = {}) => {
   else if (/^assets\/[^/?]+$/.test(route)) payload = { id: route.split("/")[1], status: "ready" };
   else if (route.startsWith("assets/library")) payload = [serverAsset];
   else if (route === `jobs/${jobId}/assets`) payload = { job_id: jobId, attached_count: body.asset_ids.length };
+  else if (route === `jobs/${jobId}/composition`) payload = body;
   else if (route === `jobs/${jobId}/preview`) { payload = { id: "preview", status: "pending" }; if (previewFixture) previewFixture.latest_run=payload; }
   else if (route === "catalog/visual/status") payload = { assets_pending: 0, assets_failed: 0, assets_ready: 1, frames_total: 1 };
   else if (["system", "client-diagnostics"].includes(route)) payload = {};
@@ -376,15 +384,30 @@ const clip = (name = "close-up.mp4") => new File(["synthetic upload fixture"], n
 const posts = (suffix) => calls.filter((call) => call.method === "POST"
   && (call.route === suffix.replace(/^\//, "") || call.route.endsWith(suffix)));
 
-test("one job combines selected server footage and a device upload, with an explicit edit start", async () => {
+test("the persistent guide is visible in navigation and at the first editing decision", async () => {
+  await act(async () => root.render(React.createElement(StudioNav, { current: "/guide" })));
+  const guideNav = document.querySelector('a[href="/guide"]');
+  assert.ok(guideNav);
+  assert.equal(guideNav.getAttribute("aria-current"), "page");
+
+  await act(async () => root.render(React.createElement(NewJobForm, { key: "guide-entry" })));
+  await waitFor(() => document.querySelector('a[href="/guide#first-edit"]'));
+  assert.match(document.body.textContent, /First edit\?.*Read the 60-second guide/s);
+  assert.equal(posts("projects").length, 0);
+  assert.equal(posts("/jobs").length, 0);
+});
+
+test("one job combines server footage and a device upload, then continues as soon as transfer completes", async () => {
   await act(async () => root.render(React.createElement(NewJobForm)));
   await waitFor(() => document.querySelector(`input[aria-label="Use ${serverAsset.source_name}"]`));
   await click(document.querySelector(`input[aria-label="Use ${serverAsset.source_name}"]`));
   await selectFiles('input[aria-label="Add files from this device"]', [clip()]);
-  assert.match(document.body.textContent, /1 from server \+ 1 from this device/);
+  assert.match(document.body.textContent, /1 server \+ 1 new/);
   await type("#project-name", "Mixed source reel");
   await type("#project-brief", "Keep my voice and show product close-ups.");
-  await act(async () => document.querySelector("form").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+  await click(button("Continue to direction"));
+  await click(button("Review job"));
+  await click(button("Create job & upload"));
   await waitFor(() => transfers.length === 1);
   assert.equal(posts("projects").length, 1);
   assert.equal(posts("/jobs").length, 1);
@@ -397,10 +420,45 @@ test("one job combines selected server footage and a device upload, with an expl
   assert.equal(uploadRequests[0].body.source_name, "close-up.mp4");
   assert.equal(posts("/preview").length, 0);
   await act(async () => transfers[0].callbacks.onSuccess());
-  await waitFor(() => button("Start editing") && !button("Start editing").disabled);
-  await click(button("Start editing"));
+  await waitFor(() => button("Continue to editing") && !button("Continue to editing").disabled);
+  assert.match(document.querySelector('[aria-label="Upload handoff"]').textContent, /Uploads complete.*Continue now/s);
+  await click(button("Continue to editing"));
+  const compositionCalls = calls.filter((call) => call.method === "PUT" && call.route === `jobs/${jobId}/composition`);
+  assert.equal(compositionCalls.length, 1);
+  assert.deepEqual(compositionCalls[0].body, { mode: "auto", foreground_asset_id: null, background_asset_id: null,
+    chroma_key_color:"#00FF00",chroma_similarity:.12,chroma_blend:.08,spill_suppression:.15 });
   assert.equal(posts("/preview").length, 1);
   assert.deepEqual(navigation, [`/jobs/${jobId}`]);
+});
+
+test("green screen assigns uploaded or library media before preview and freezes both source roles", async () => {
+  await act(async () => root.render(React.createElement(NewJobForm)));
+  await waitFor(() => document.querySelector(`input[aria-label="Use ${serverAsset.source_name}"]`));
+  await click(document.querySelector(`input[aria-label="Use ${serverAsset.source_name}"]`));
+  const background = new File(["background fixture"], "office-background.jpg", { type: "image/jpeg" });
+  await selectFiles('input[aria-label="Add files from this device"]', [background]);
+  await click(document.querySelector('input[name="composition-mode"][value="green_screen"]'));
+  assert.match(document.body.textContent, /Green-screen sources assigned/);
+  await click(button("Continue to direction"));
+  await click(button("Review job"));
+  await click(button("Create job & upload"));
+  await waitFor(() => transfers.length === 1);
+  const registeredBackground = posts("/assets").find((call) => call.route.startsWith("projects/"));
+  assert.ok(registeredBackground);
+  await act(async () => transfers[0].callbacks.onSuccess());
+  await waitFor(() => !button("Continue to editing").disabled);
+  await click(button("Continue to editing"));
+  const composition = calls.find((call) => call.method === "PUT" && call.route === `jobs/${jobId}/composition`);
+  assert.deepEqual(composition.body, {
+    mode: "green_screen",
+    foreground_asset_id: serverId,
+    background_asset_id: registeredBackground.body.id,
+    chroma_key_color: "#00FF00",
+    chroma_similarity: .12,
+    chroma_blend: .08,
+    spill_suppression: .15,
+  });
+  assert.equal(posts("/preview").length, 1);
 });
 
 test("library upload waits for submission, creates no job, resumes, and refreshes after analysis", async () => {
@@ -478,7 +536,9 @@ test("blooper purpose is separate from format and waits for explicit job submiss
   await click(document.querySelector(`input[aria-label="Use ${serverAsset.source_name}"]`));
   await type("#project-name", "Soap ad outtakes");
   await type("#project-brief", "Keep the lost line and real reaction.");
-  await act(async () => document.querySelector("form").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
+  await click(button("Continue to direction"));
+  await click(button("Review job"));
+  await click(button("Create job"));
   await waitFor(() => posts("/jobs").length === 1);
   assert.equal(posts("/jobs")[0].body.reel_intent, "bloopers");
   assert.equal(posts("/jobs")[0].body.recipe, "talking_head");
@@ -505,6 +565,25 @@ test("library separates B-roll and talking footage, preserves search, and keeps 
   assert.equal(document.querySelector('input[aria-label="Select Product introduction"]'), null);
   await click(button("Add media"));
   assert.equal(document.getElementById("library-import").hidden, false);
+});
+
+test("library preview leads with the media and new-edit action while advanced details stay collapsed", async () => {
+  await mountBrowser();
+  await click(document.querySelector('button[title="Details for Product introduction"]'));
+  await waitFor(() => document.querySelector('[aria-label="Selected original details"]'));
+  const inspector = document.querySelector('[aria-label="Selected original details"]');
+  assert.match(inspector.textContent, /Media preview/);
+  const useLink = [...inspector.querySelectorAll("a")].find((item) => item.textContent.includes("Use this media in a new edit"));
+  assert.ok(useLink);
+  assert.equal(useLink.getAttribute("href"), "/jobs/new");
+  const editSummary = [...inspector.querySelectorAll("summary")].find((item) => item.textContent.includes("Edit name & labels"));
+  const momentsSummary = [...inspector.querySelectorAll("summary")].find((item) => item.textContent.includes("Find moments in this media"));
+  assert.ok(editSummary);
+  assert.ok(momentsSummary);
+  assert.equal(editSummary.parentElement.open, false);
+  await click(editSummary);
+  assert.equal(editSummary.parentElement.open, true);
+  assert.ok(inspector.querySelector('select[aria-label="Media category"]'));
 });
 
 test("batch names preserve original filenames and role changes move only the displayed selection", async () => {
@@ -578,10 +657,15 @@ test("new-job picker shows readable names and filters footage roles without drop
   try {
     await act(async () => root.render(React.createElement(NewJobForm)));
     await waitFor(() => document.body.textContent.includes("Finished product close-up"));
+    const mediaGrid=document.querySelector('[aria-label="Server media library"]');
+    assert.ok(mediaGrid.className.includes("sm:grid-cols-2"));
+    const moreFilters=[...document.querySelectorAll("summary")].find((element)=>element.textContent.includes("More filters · role, project & folder"));
+    assert.ok(moreFilters);
+    assert.equal(moreFilters.closest("details").open,false);
     await click(document.querySelector(`input[aria-label="Use ${serverAsset.source_name}"]`));
     await chooseOption('#library-purpose', 'talking');
     assert.equal(document.querySelector(`input[aria-label="Use ${serverAsset.source_name}"]`), null);
-    assert.match(document.body.textContent, /1 from server \+ 0 from this device/);
+    assert.match(document.body.textContent, /1 server \+ 0 new/);
     await chooseOption('#library-purpose', 'broll');
     await waitFor(() => document.querySelector(`input[aria-label="Use ${serverAsset.source_name}"]`));
     assert.equal(document.querySelector(`input[aria-label="Use ${serverAsset.source_name}"]`).checked, true);
@@ -831,6 +915,27 @@ test("precise edits wait for submit and carry the inspected version and clip han
  const body=posts(`jobs/${jobId}/revisions`)[0].body;
  assert.equal(body.base_version,2);assert.equal(body.clip_adjustments[0].clip_id,toolClip.clip_id);
  assert.equal(body.clip_adjustments[0].source_in,.12);assert.equal(body.note,"");
+});
+test("transition editor previews the boundary and queues only one explicit picture change",async()=>{
+ const clips=[
+  {...toolClip,clip_index:0,clip_id:"clip-one",source_name:"Opening",duration:4,transition:"cut"},
+  {...toolClip,clip_index:1,clip_id:"clip-two",source_name:"Explanation",source_in:4,source_out:7,duration:3,transition:"cut"},
+  {...toolClip,clip_index:2,clip_id:"clip-three",source_name:"Payoff",source_in:7,source_out:9,duration:2,transition:"cross_dissolve"},
+ ];
+ let sought;
+ await act(async()=>root.render(React.createElement(TransitionBoundaryEditor,{jobId,version:7,clips,onSeek:value=>{sought=value;},onUpdated:()=>{readyEvents+=1;}})));
+ const details=document.querySelector("details");
+ await act(async()=>{details.open=true;details.dispatchEvent(new Event("toggle"));});
+ await click(button("Preview"));
+ assert.equal(sought,3);
+ await click([...document.querySelectorAll('button[aria-pressed]')].find(item=>item.textContent.trim()==="Dissolve"));
+ assert.equal(posts(`jobs/${jobId}/revisions`).length,0);
+ await click(button("Create transition preview"));
+ await waitFor(()=>readyEvents===1);
+ const body=posts(`jobs/${jobId}/revisions`)[0].body;
+ assert.equal(body.base_version,7);
+ assert.equal(body.note,"");
+ assert.deepEqual(body.clip_adjustments,[{clip_index:1,clip_id:"clip-two",action:"keep",transition:"cross_dissolve"}]);
 });
 test("finishing choices make no request until explicit submission and preserve local-only revision",async()=>{
  await act(async()=>root.render(React.createElement(FinishingWorkspace,{jobId,version:2,clips:[toolClip],onUpdated:()=>{readyEvents+=1;}})));
@@ -1088,7 +1193,13 @@ test("brief starters are visible editable instructions and never submit or chang
   await act(async () => root.render(React.createElement(NewJobForm)));
   await waitFor(() => document.getElementById("assembly-mode"));
   const headings=[...document.querySelectorAll("h2")].map((element) => element.textContent);
-  assert.ok(headings.indexOf("Source media") < headings.indexOf("Describe your edit"));
+  assert.ok(headings.indexOf("Add source media") < headings.indexOf("Describe the result"));
+  assert.equal(document.querySelector('[aria-current="step"]').textContent.includes("Choose media"),true);
+  assert.ok(button("Continue to direction"));
+  const presentationSummary=[...document.querySelectorAll("summary")].find((element)=>element.textContent.includes("Optional presentation"));
+  assert.ok(presentationSummary);
+  assert.equal(presentationSummary.closest("details").open,false);
+  assert.ok(presentationSummary.textContent.includes("Recommended defaults · Vertical 9:16 · Follow the story · up to 90s · AI follows your brief"));
   assert.equal(document.querySelector('input[name="recipe"]'),null);
   await type("#project-brief","Keep my existing thought.");
   await click(button("Recorded bloopers"));
@@ -1102,28 +1213,49 @@ test("brief starters are visible editable instructions and never submit or chang
   assert.equal(posts("/preview").length,0);
 });
 
-test("negated montage brief is accepted in automatic mode and waits for interpretation before editing", async () => {
+test("an unambiguous platform in the brief applies its preset but never overrides manual presentation choices", async () => {
+  await act(async () => root.render(React.createElement(NewJobForm,{key:"auto-platform"})));
+  await waitFor(() => document.getElementById("publishing-preset"));
+  await type("#project-brief","Make this introduction for TikTok.");
+  await waitFor(() => document.getElementById("publishing-preset").value === "tiktok");
+  assert.equal(document.querySelector('input[name="output-aspect"][value="vertical"]').checked,true);
+  assert.ok(document.body.textContent.includes("TikTok setup applied from your brief"));
+  assert.equal(posts("projects").length,0);
+
+  await act(async () => root.render(React.createElement(NewJobForm,{key:"manual-platform"})));
+  await waitFor(() => document.querySelector('input[name="output-aspect"][value="landscape"]'));
+  await click(document.querySelector('input[name="output-aspect"][value="landscape"]'));
+  await type("#project-brief","Make this introduction for TikTok.");
+  await waitFor(() => document.body.textContent.includes("manually adjusted presentation settings were kept"));
+  assert.equal(document.getElementById("publishing-preset").value,"custom");
+  assert.equal(document.querySelector('input[name="output-aspect"][value="landscape"]').checked,true);
+  assert.equal(posts("projects").length,0);
+});
+
+test("automatic assembly queues immediately instead of blocking on source interpretation", async () => {
   assemblyError="No usable recorded video speech was found.";
   await act(async () => root.render(React.createElement(NewJobForm)));
   await waitFor(() => document.querySelector(`input[aria-label="Use ${serverAsset.source_name}"]`));
   await click(document.querySelector(`input[aria-label="Use ${serverAsset.source_name}"]`));
-  await type("#project-name","Keep my explanation");
   await type("#project-brief","Do not make a montage. Keep my whole explanation.");
-  await act(async () => document.querySelector("form").dispatchEvent(new Event("submit", {bubbles:true,cancelable:true})));
-  await waitFor(() => document.body.textContent.includes("No usable recorded"));
+  assert.equal(document.getElementById("project-name").required,false);
+  assert.ok(document.body.textContent.includes("GM Studio will save this as Do not make a montage. Keep my whole"));
+  await click(button("Continue to direction"));
+  await click(button("Review job"));
+  await click(button("Create job"));
+  await waitFor(() => document.querySelector('[aria-label="Upload handoff"]'));
+  assert.match(document.querySelector('[aria-label="Upload handoff"]').textContent, /Uploads complete.*Continue now/s);
+  assert.equal(document.body.textContent.includes("No usable recorded"), false);
+  assert.equal(calls.some((call) => call.route === `jobs/${jobId}/assembly`), false);
+  assert.equal(posts("projects")[0].body.name,"Do not make a montage. Keep my whole");
   assert.equal(posts("/jobs")[0].body.assembly_mode,"auto");
   assert.equal(posts("/jobs")[0].body.pacing_mode,"auto");
-  assert.equal(button("Start editing").disabled,true);
+  assert.equal(button("Continue to editing").disabled,false);
   assert.equal(posts("/preview").length,0);
-  await chooseOption("#ready-assembly","montage");
-  await chooseOption("#ready-pacing","calm");
-  assert.equal(calls.filter((call) => call.method === "PUT").length,0);
-  await click(button("Apply overrides"));
-  await waitFor(() => !button("Start editing").disabled);
-  assert.equal(calls.filter((call) => call.method === "PUT").length,1);
-  assert.equal(document.getElementById("assembly-mode").value,"montage");
-  assert.equal(document.querySelector('input[name="edit-style"][value="calm"]').checked,true);
-  assert.equal(posts("/preview").length,0);
+  await click(button("Continue to editing"));
+  assert.equal(calls.filter((call) => call.method === "PUT" && call.route === `jobs/${jobId}/composition`).length,1);
+  assert.equal(posts("/preview").length,1);
+  assert.deepEqual(navigation,[`/jobs/${jobId}`]);
 });
 
 test("saved presentation profile never changes explicit assembly or purpose", async () => {
@@ -1164,22 +1296,52 @@ test("reopening an unstarted draft shows its interpretation and requires an expl
   assert.equal(posts("/preview").length,0);
   assert.equal(posts("/jobs").length,0);
   await click(button("Start editing"));
-  await waitFor(() => document.body.textContent.includes("Your edit is queued"));
+  await waitFor(() => document.body.textContent.includes("Preparing your sources"));
   assert.equal(posts("/preview").length,1);
   assert.equal(posts("/jobs").length,0);
 });
 
 test("progress distinguishes the queue from planning and rendering without estimating completion", async () => {
   const timestamp = new Date(Date.now()-30_000).toISOString();
-  for (const [status,title,stage] of [["pending","Your edit is queued","Queued"],["planning","Planning your edit","Planning"],["rendering","Rendering your preview","Rendering"]]) {
-    await act(async () => root.render(React.createElement(EditProgress,{run:{status,updated_at:timestamp,started_at:timestamp},checkedAt:Date.now(),connectionError:false})));
+  for (const [status,title,stage] of [["pending","Preparing your sources","Source checks"],["planning","Building your edit","Building edit"],["rendering","Rendering your preview","Building edit"]]) {
+    await act(async () => root.render(React.createElement(EditProgress,{key:status,run:{status,updated_at:timestamp,started_at:timestamp},checkedAt:Date.now(),connectionError:false,events:[]})));
     assert.equal(document.querySelector("h1").textContent,title);
     assert.equal(document.querySelector('[aria-current="step"]').textContent.includes(stage),true);
     assert.equal(document.querySelectorAll('ol[aria-label="Edit progress"] li').length,4);
+    assert.equal(document.body.textContent.includes("You can safely close this page"),true);
     assert.equal(document.body.textContent.includes("Worker checked in"),status!=="pending");
+    assert.equal(document.querySelector("details").open,false);
+    await click(document.querySelector("summary"));
+    assert.equal(document.querySelector("details").open,true);
     assert.equal(document.querySelector('[role="progressbar"]'),null);
   }
   assert.equal(posts("/preview").length,0);
+});
+
+test("processing details contain the recent job timeline while primary guidance stays focused", async () => {
+  const timestamp = new Date(Date.now()-30_000).toISOString();
+  const events=[{id:1,event_type:"preview_requested",created_at:timestamp,payload:{}}];
+  await act(async () => root.render(React.createElement(EditProgress,{run:{status:"planning",updated_at:timestamp,started_at:timestamp},checkedAt:Date.now(),connectionError:false,events})));
+  const details=document.querySelector("details");
+  assert.equal(details.open,false);
+  assert.equal(details.textContent.includes("Job timeline"),true);
+  assert.equal(details.textContent.includes("preview requested"),true);
+  await click(details.querySelector("summary"));
+  assert.equal(details.open,true);
+});
+
+test("an active job keeps the processing page to status, diagnostics and two useful exits", async () => {
+  const timestamp = new Date(Date.now()-30_000).toISOString();
+  const run={id:"planning-run",version:1,status:"planning",updated_at:timestamp,started_at:timestamp,provider:"chatgpt_plan",manifest:{}};
+  previewFixture={job:{id:jobId,recipe:"talking_head",status:"planning",output_aspect:"vertical"},latest_run:run,final_export:null,delivery_variants:[],versions:[run],original_prompt:"Keep this prompt available after processing.",events:[{id:1,event_type:"preview_requested",created_at:timestamp,payload:{}}]};
+  await act(async () => root.render(React.createElement(JobPreview,{key:"focused-processing",jobId})));
+  await waitFor(() => document.body.textContent.includes("Building your edit"));
+  const footerLinks=[...document.querySelectorAll("footer a")];
+  assert.deepEqual(footerLinks.map((link)=>link.textContent.trim()),["View all jobs","Start another edit"]);
+  assert.deepEqual(footerLinks.map((link)=>link.getAttribute("href")),["/jobs","/jobs/new"]);
+  assert.equal(document.body.textContent.includes("Original prompt"),false);
+  assert.equal(document.body.textContent.includes("Using ChatGPT plan"),false);
+  assert.equal(document.querySelector("details").textContent.includes("Job timeline"),true);
 });
 
 test("progress distinguishes a stale worker heartbeat from a lost status connection", async () => {
@@ -1219,33 +1381,148 @@ test("recorded story outline shows actual passages and timing without model work
 });
 
 
-test("treatment review filters saved cues and seeks only after an explicit jump", async () => {
+test("edit map filters saved cues and inspects before explicit preview or editing", async () => {
   const seeks=[];
+  const edits=[];
   const framing={kind:"framing",label:"Camera anchor",start:2.5,end:4,detail:"A planned move, not tracking.",clip_index:0};
   const captions={kind:"captions",label:"Upper captions",start:5,end:7,detail:"Saved caption region."};
-  await act(async()=>root.render(React.createElement(TreatmentTimeline,{report:{events:[null,{},framing,captions,{...framing,start:NaN}],event_count:2},onSeek:seconds=>seeks.push(seconds)})));
-  assert.equal(document.querySelectorAll('ol li').length,2);
+  await act(async()=>root.render(React.createElement(TreatmentTimeline,{report:{events:[null,{},framing,captions,{...framing,start:NaN}],event_count:2,duration_seconds:8},onSeek:seconds=>seeks.push(seconds),onEdit:kind=>edits.push(kind)})));
+  const details=document.querySelector("details");
+  await act(async()=>{details.open=true;details.dispatchEvent(new Event("toggle"));});
+  assert.match(document.body.textContent,/Edit map.*2 saved treatments across 0:08/s);
+  assert.equal(document.querySelectorAll('[role="listitem"]').length,2);
+  assert.equal(document.querySelectorAll('button[aria-label^="Inspect"]').length,2);
   assert.deepEqual(seeks,[]);
+  assert.deepEqual(edits,[]);
   assert.equal(calls.length,0);
-  const filter=document.querySelector('select[aria-label="Treatment kind"]');
-  await act(async()=>{filter.value="captions";filter.dispatchEvent(new window.Event("change",{bubbles:true}));});
-  assert.equal(document.querySelectorAll('ol li').length,1);
+  await click(button("Captions · 1"));
+  assert.equal(document.querySelectorAll('[role="listitem"]').length,1);
   assert.equal(document.body.textContent.includes("Upper captions"),true);
   assert.deepEqual(seeks,[]);
-  await click(button("5.0–7.0s · Jump in preview"));
+  await click(button("Preview"));
   assert.deepEqual(seeks,[5]);
+  assert.deepEqual(edits,[]);
+  await click(button("Open Sound & captions"));
+  assert.deepEqual(edits,["captions"]);
   assert.equal(calls.length,0);
   await act(async()=>root.render(React.createElement(TreatmentTimeline,{report:{events:[framing]}})));
-  assert.equal(document.querySelectorAll('ol li').length,1);
   assert.equal(document.body.textContent.includes("Camera anchor"),true);
-  assert.equal(document.querySelector('select').value,"all");
-  assert.equal(document.querySelectorAll('button').length,0);
+  assert.equal(document.querySelectorAll('button[aria-label^="Inspect"]').length,1);
+  assert.equal(button("Preview").disabled,true);
+});
+
+test("edit map opens the matching local editor without creating work", async () => {
+  const treatment={kind:"captions",label:"Lower captions",start:1,end:3,detail:"Saved lower-safe caption region."};
+  const run={id:"ready",version:2,status:"ready",caption_settings:{},manifest:{
+    finishing:{treatment_timeline:{events:[treatment],event_count:1,duration_seconds:8}},
+  }};
+  await act(async()=>root.render(React.createElement(JobReviewControls,{jobId,run,finalExport:null,
+    outputAspect:"vertical",recipe:"talking_head",targetDuration:30,deliveryVariants:[],editorialTimeline:[],
+    initialCoverTime:1,initialFeedback:null,onUpdated:()=>{}})));
+  await click(document.querySelector('a[href="#review-tools"]'));
+  const editMap=[...document.querySelectorAll("summary")].find((item)=>item.textContent.includes("Edit map"));
+  assert.ok(editMap);
+  await click(editMap);
+  await click(button("Open Sound & captions"));
+  await waitFor(()=>document.getElementById("finishing-workspace").open);
+  assert.equal(document.getElementById("review-tools").open,true);
+  assert.equal(posts(`jobs/${jobId}/revisions`).length,0);
 });
 
 test("legacy previews need no treatment report", async () => {
   await act(async()=>root.render(React.createElement(TreatmentTimeline,{report:undefined})));
   assert.equal(document.body.textContent,"");
   assert.equal(calls.length,0);
+});
+
+test("review leads with the three human decisions and keeps precise controls collapsed", async () => {
+  const run={id:"ready",version:2,status:"ready",caption_settings:{},manifest:{}};
+  await act(async()=>root.render(React.createElement(JobReviewControls,{jobId,run,finalExport:null,
+    outputAspect:"vertical",recipe:"talking_head",targetDuration:30,deliveryVariants:[],editorialTimeline:[],
+    initialCoverTime:1,initialFeedback:null,onUpdated:()=>{}})));
+  assert.ok(document.body.textContent.includes("What would you like to do?"));
+  assert.ok(document.querySelector('a[href="/guide#review"]'));
+  assert.ok(button("Approve & export"));
+  const revision=document.getElementById("request-changes");
+  assert.ok(revision);
+  assert.equal(revision.open,false);
+  await click(document.querySelector('a[href="#request-changes"]'));
+  assert.equal(revision.open,true);
+  const tools=document.getElementById("review-tools");
+  assert.ok(tools);
+  assert.equal(tools.open,false);
+  await click(document.querySelector('a[href="#review-tools"]'));
+  assert.equal(tools.open,true);
+  const feedback=[...document.querySelectorAll("summary")].find((element)=>element.textContent.includes("Teach future edits · optional"));
+  assert.ok(feedback);
+  assert.equal(feedback.closest("details").open,false);
+  assert.equal(posts("approvals").length,0);
+  assert.equal(posts("revisions").length,0);
+});
+
+test("green-screen review tunes the saved key only after explicit preview submission", async () => {
+  let updates=0;
+  let previewPaused=false;
+  const run={id:"ready",version:2,status:"ready",caption_settings:{},manifest:{}};
+  const composition={mode:"green_screen",foreground_asset_id:"presenter",background_asset_id:"background",
+    chroma_key_color:"#00FF00",chroma_similarity:.12,chroma_blend:.08,spill_suppression:.15};
+  const originalContext=dom.HTMLCanvasElement.prototype.getContext;
+  dom.HTMLCanvasElement.prototype.getContext=function(){return {
+    drawImage(){},
+    getImageData(_x,_y,width,height){
+      const data=new Uint8ClampedArray(width*height*4);
+      for(let index=0;index<data.length;index+=4){data[index]=0;data[index+1]=170;data[index+2]=98;data[index+3]=255;}
+      return {data};
+    },
+  };};
+  const previewVideo={readyState:4,videoWidth:100,videoHeight:50,currentTime:14,pause(){previewPaused=true;}};
+  await act(async()=>root.render(React.createElement(JobReviewControls,{jobId,run,finalExport:null,
+    outputAspect:"vertical",recipe:"talking_head",targetDuration:30,deliveryVariants:[],editorialTimeline:[],
+    composition,initialCoverTime:1,initialFeedback:null,getPreviewVideo:()=>previewVideo,onUpdated:()=>{updates+=1;}})));
+  assert.ok(document.body.textContent.includes("Green-screen composition"));
+  assert.ok(document.body.textContent.includes("What this preview uses"));
+  assert.equal(calls.filter((call)=>call.method==="PUT"&&call.route===`jobs/${jobId}/composition`).length,0);
+  const summary=[...document.querySelectorAll("summary")].find((item)=>item.textContent.includes("Adjust key and create a local preview"));
+  await click(summary);
+  await waitFor(()=>document.querySelector('input[aria-label="Green-screen key colour"]'));
+  await click(button("Pick colour from current frame"));
+  await waitFor(()=>document.querySelector('canvas[aria-label^="Paused preview frame"]'));
+  assert.equal(previewPaused,true);
+  const canvas=document.querySelector('canvas[aria-label^="Paused preview frame"]');
+  canvas.getBoundingClientRect=()=>({left:0,top:0,width:100,height:50,right:100,bottom:50,x:0,y:0,toJSON(){}});
+  const pointer=new Event("pointerdown",{bubbles:true});
+  Object.defineProperties(pointer,{clientX:{value:20},clientY:{value:10}});
+  await act(async()=>canvas.dispatchEvent(pointer));
+  assert.ok(document.body.textContent.includes("#00AA62"));
+  await click(button("Use this colour"));
+  assert.equal(posts(`jobs/${jobId}/revisions`).length,0);
+  const compositionForm=button("Create composition preview").closest("form");
+  await act(async()=>compositionForm.dispatchEvent(new Event("submit",{bubbles:true,cancelable:true})));
+  await waitFor(()=>updates===1);
+  const saved=calls.find((call)=>call.method==="PUT"&&call.route===`jobs/${jobId}/composition`);
+  assert.equal(saved.body.chroma_key_color,"#00AA62");
+  assert.equal(saved.body.foreground_asset_id,"presenter");
+  const revision=posts(`jobs/${jobId}/revisions`)[0].body;
+  assert.equal(revision.base_version,2);
+  assert.ok(revision.finishing_settings);
+  dom.HTMLCanvasElement.prototype.getContext=originalContext;
+});
+
+test("finishing workspace reveals task groups before individual controls", async () => {
+  await act(async()=>root.render(React.createElement(FinishingWorkspace,{jobId,version:2,clips:[toolClip],onUpdated:()=>{}})));
+  const details=document.querySelector("details");
+  await act(async()=>{details.open=true;details.dispatchEvent(new Event("toggle"));});
+  await waitFor(()=>document.body.textContent.includes("Layers & graphics"));
+  const taskButton=(label)=>[...document.querySelectorAll("button")].find((item)=>item.textContent.includes(label));
+  assert.ok(taskButton("Story & timing"));
+  assert.ok(taskButton("Picture"));
+  assert.ok(taskButton("Sound & captions"));
+  await click(taskButton("Layers & graphics"));
+  const adjustment=[...document.querySelectorAll("select")].find((item)=>item.closest("label")?.textContent.includes("Adjustment"));
+  assert.ok(adjustment);
+  assert.equal(adjustment.value,"layer");
+  assert.equal(adjustment.querySelector('optgroup[label="Layers & graphics"]').children.length,4);
+  assert.equal(posts(`jobs/${jobId}/revisions`).length,0);
 });
 
 test("review recognises generated graphics and removes them only on request", async () => {
@@ -2327,7 +2604,7 @@ test('Create pages past 500 sources and keeps exact selections across pages and 
   folderList=[{id:serverId,name:'Products',parent_id:null,asset_count:0},{id:jobId,name:'Cream B-roll',parent_id:serverId,asset_count:1}];
   folderMembers.set(jobId,new Set([pickerAssets[619].id]));
   window.sessionStorage.setItem('gm-studio:media-basket:v1',JSON.stringify([pickerAssets[619].id]));
-  await openPicker();await waitFor(()=>document.body.textContent.includes('1 from server + 0 from this device'));
+  await openPicker();await waitFor(()=>document.body.textContent.includes('1 server + 0 new'));
   assert.equal(document.querySelectorAll('[aria-label="Server media library"] input').length,60);
   assert.equal(calls.some(call=>call.route.startsWith('assets/library')),false);
   assert(calls.some(call=>call.route.startsWith('library/selection?') && call.route.includes(pickerAssets[619].id)));
@@ -2336,7 +2613,7 @@ test('Create pages past 500 sources and keeps exact selections across pages and 
   await click(document.querySelector('input[aria-label="Use clip-060.mp4"]'));
   await chooseOption('#library-folder',jobId);await waitFor(()=>document.querySelector('input[aria-label="Use clip-619.mp4"]'));
   assert.equal(document.querySelector('input[aria-label="Use clip-619.mp4"]').checked,true);
-  assert.match(document.body.textContent,/3 from server \+ 0 from this device/);
+  assert.match(document.body.textContent,/3 server \+ 0 new/);
   assert.match(document.querySelector('#library-folder').textContent,/Products \/ Cream B-roll/);
   await chooseOption('#library-folder','');await waitFor(()=>document.querySelector('input[aria-label="Use clip-000.mp4"]'));
   assert.equal(document.querySelector('input[aria-label="Use clip-000.mp4"]').checked,true);
@@ -2359,7 +2636,7 @@ test('failed source page preserves selected footage and refresh retries its offs
   pickerFixture();await openPicker();await click(document.querySelector('input[aria-label="Use clip-000.mp4"]'));
   pickerFailure=true;await click(button('Next media page'));
   await waitFor(()=>document.body.textContent.includes('Media page temporarily unavailable'));
-  assert.match(document.body.textContent,/1 from server \+ 0 from this device/);
+  assert.match(document.body.textContent,/1 server \+ 0 new/);
   assert.equal(document.querySelector('[aria-label="Server media library"]'),null);
   pickerFailure=false;await click(button('Refresh server media'));
   await waitFor(()=>document.querySelector('input[aria-label="Use clip-060.mp4"]'));
@@ -2380,11 +2657,11 @@ test('unavailable carried selections block job creation until the owner removes 
   pickerFixture(2);const missing='99999999-9999-4999-8999-999999999999';
   window.sessionStorage.setItem('gm-studio:media-basket:v1',JSON.stringify([pickerAssets[0].id,missing]));
   await openPicker();await waitFor(()=>document.body.textContent.includes('1 selected originals are unavailable'));
-  assert.equal(button('Create job').disabled,true);await type('#project-name','A selected-source check');
+  assert.equal(button('Continue to direction').disabled,true);await type('#project-name','A selected-source check');
   assert.equal(posts('/jobs').length,0);assert.equal(posts('projects').length,0);
   await click(document.querySelector(`[aria-label="Remove selected original ${missing}"]`));
-  await waitFor(()=>!button('Create job').disabled);
-  await click(button('Create job'));await waitFor(()=>posts(`jobs/${jobId}/assets`).length===1);
+  await waitFor(()=>!button('Continue to direction').disabled);
+  await click(button('Continue to direction'));await click(button('Review job'));await click(button('Create job'));await waitFor(()=>posts(`jobs/${jobId}/assets`).length===1);
   assert.deepEqual(posts(`jobs/${jobId}/assets`)[0].body.asset_ids,[pickerAssets[0].id]);
 });
 
@@ -2392,13 +2669,13 @@ test('selection lookup failures retain the basket and more than 100 sources requ
   pickerFixture(101);selectionFailure=true;
   window.sessionStorage.setItem('gm-studio:media-basket:v1',JSON.stringify(pickerAssets.map(asset=>asset.id)));
   await openPicker();await waitFor(()=>document.body.textContent.includes('Selection details could not be loaded'));
-  assert.equal(button('Create job').disabled,true);
+  assert.equal(button('Continue to direction').disabled,true);
   assert.equal(JSON.parse(window.sessionStorage.getItem('gm-studio:media-basket:v1')).length,101);
   const lookups=calls.filter(call=>call.route.startsWith('library/selection?'));
   assert.equal(lookups.length,2);assert(lookups.every(call=>new URLSearchParams(call.route.split('?')[1]).getAll('asset_ids').length<=100));
   selectionFailure=false;await click(button('Refresh server media'));
-  await waitFor(()=>document.body.textContent.includes('101 from server + 0 from this device'));
-  assert.equal(button('Create job').disabled,true);
+  await waitFor(()=>document.body.textContent.includes('101 server + 0 new'));
+  assert.equal(button('Continue to direction').disabled,true);
   await click(button('Clear server selection'));await waitFor(()=>!document.querySelector('[aria-label="Selected server media"]'));
   assert.equal(JSON.parse(window.sessionStorage.getItem('gm-studio:media-basket:v1')).length,0);
   assert.equal(posts('/jobs').length,0);
@@ -2406,7 +2683,7 @@ test('selection lookup failures retain the basket and more than 100 sources requ
 
 
 test("Editing receipt distinguishes model planning, local processing and saved-plan replay", async () => {
-  const receipt = {version:2,plan_source:"model_plan",planning_contract:{audio_pacing:"connected_passages",creative_quotas:false},local_repairs:["removed_unrequested_music"],local_story_changes:["Shortened measured waiting."],audio_processing:{balanced_sources:1,compressed_sources:2,denoised_sources:0},effect_decisions:{version:1,registry_version:11,note:"This records the returned plan and local validation rules, not hidden model reasoning or a quality score.",items:[
+  const receipt = {version:2,plan_source:"model_plan",planning_contract:{audio_pacing:"connected_passages",creative_quotas:false,instruction_mode:"supplied_script"},brief_contract_review:{status:"checked"},local_repairs:["removed_unrequested_music"],local_story_changes:["Shortened measured waiting."],audio_processing:{balanced_sources:1,compressed_sources:2,denoised_sources:0},effect_decisions:{version:1,registry_version:11,note:"This records the returned plan and local validation rules, not hidden model reasoning or a quality score.",items:[
     {preset:"clone_row",label:"Clone row",decision:"selected",eligibility:"eligible",reason:"Selected in the AI plan and retained after validation.",evidence:["0.50–1.50s · strong strength"]},
     {preset:"paper_tear",label:"Paper tear",decision:"rejected",eligibility:"eligible",reason:"Removed because the shared effect budget was already full.",evidence:["Local shared-effect budget check"]},
     {preset:"dolly_zoom",label:"Dolly zoom",decision:"skipped",eligibility:"ineligible",reason:"No complete stable video clip remained.",evidence:[]},
@@ -2415,6 +2692,8 @@ test("Editing receipt distinguishes model planning, local processing and saved-p
   assert.match(document.body.textContent,/AI planned this edit/);
   assert.match(document.body.textContent,/Complete conversations/);
   assert.match(document.body.textContent,/effects were optional/);
+  assert.match(document.body.textContent,/supplied script and its order were treated as authoritative/);
+  assert.match(document.body.textContent,/Transcript check passed/);
   assert.match(document.body.textContent,/Effect decisions · 1 selected · 1 rejected · 1 skipped/);
   assert.match(document.body.textContent,/Clone row.*Selected in the AI plan.*0.50–1.50s/s);
   assert.match(document.body.textContent,/Paper tear.*shared effect budget/s);

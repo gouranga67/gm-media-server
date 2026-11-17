@@ -5,7 +5,6 @@ import { Component, type DragEvent, type ErrorInfo, type FormEvent, type ReactNo
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { DurationFields } from "./duration-fields";
-import { AssemblyReadiness } from "./assembly-readiness";
 import { StudioNav } from "./studio-nav";
 import { useJobLibrary } from "./use-job-library";
 import { writeMediaBasket } from "@/lib/media-basket";
@@ -15,6 +14,7 @@ import type { Upload } from "tus-js-client";
 import {
   ArrowRightIcon,
   AudioLinesIcon,
+  BookOpenIcon,
   CheckIcon,
   CircleAlertIcon,
   FolderIcon,
@@ -45,16 +45,19 @@ import {
   getMusicTracks,
   getSystemInformation,
   getVisualIndexStatus,
+  interpretBrief,
   libraryAssetThumbnailUrl,
   mediaTypeForFile,
   registerAsset,
   requestPreview,
+  setJobComposition,
   visualIndexFrameUrl,
   type Asset,
   type CatalogSearchResult,
   type CreativeProfile,
   type CreativeAsset,
   type BrandKit,
+  type BriefInterpretation,
   type PublishingPreset,
   type EditStyle,
   type EffectLevel,
@@ -70,6 +73,7 @@ import {
   type TargetDuration,
   type DurationMode,
   type TargetPlatform,
+  type JobCompositionMode,
   type VisualIndexStatus,
 } from "@/lib/media-api";
 import { startResumableUpload } from "@/lib/resumable-upload";
@@ -80,6 +84,7 @@ const READY_POLL_ATTEMPTS = 45;
 const READY_POLL_INTERVAL_MS = 1_000;
 
 type ServerStatus = "checking" | "online" | "offline";
+type CreateStep = 1 | 2 | 3;
 type UploadPhase =
   | "queued"
   | "registering"
@@ -186,6 +191,25 @@ const PLATFORM_OPTIONS: ReadonlyArray<{
 
 function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Something went wrong";
+}
+
+function suggestedProjectName(brief: string, sourceName?: string): string {
+  const lines = brief.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const firstUsefulLine = lines.find((line) => !/^(?:voiceover\s+|spoken\s+|recorded\s+)?script\s*:?$/i.test(line));
+  const fromBrief = (firstUsefulLine ?? "")
+    .replace(/^\s*(?:[-*•]|\d+[.)]|(?:scene|shot|beat)\s*#?\d+\s*[:.)-])\s*/i, "")
+    .replace(/^\s*(?:make|create|turn|edit)\s+(?:(?:a|an|the|this|these|my|our)\s+)?/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (fromBrief) {
+    const shortened = fromBrief.split(" ").slice(0, 8).join(" ").replace(/[.,:;!?-]+$/, "");
+    return `${shortened.charAt(0).toUpperCase()}${shortened.slice(1)}`.slice(0, 80);
+  }
+  const fromSource = String(sourceName || "").replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").trim();
+  if (fromSource && !/^(?:vid|img|dsc|pxl)[ -]?\d+$/i.test(fromSource)) {
+    return `${fromSource.charAt(0).toUpperCase()}${fromSource.slice(1)} edit`.slice(0, 80);
+  }
+  return "New media edit";
 }
 
 function viewportSnapshot() {
@@ -337,7 +361,7 @@ function phaseLabel(entry: UploadEntry): string {
     case "paused":
       return `Paused at ${percent}%`;
     case "processing":
-      return "Verifying on server";
+      return "Uploaded · final checks continue on server";
     case "ready":
       return "Ready";
     case "error":
@@ -577,12 +601,12 @@ function LibraryAssetRow({
   return (
     <label
       className={cn(
-        "flex min-h-20 items-center gap-3 rounded-md bg-white p-3",
+        "relative flex min-h-28 items-start gap-3 rounded-md bg-white p-3 sm:block",
         selected ? "border-2 border-[#173F5F]" : "border border-[#D7D9D3]",
         disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer",
       )}
     >
-      <span className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-sm bg-[#E9EDF0] text-[#173F5F]">
+      <span className="flex h-20 w-24 shrink-0 items-center justify-center overflow-hidden rounded-sm bg-[#E9EDF0] text-[#173F5F] sm:aspect-video sm:h-auto sm:w-full">
         {asset.thumbnail_available ? (
           <img
             alt=""
@@ -594,7 +618,7 @@ function LibraryAssetRow({
           <FileTypeIcon mediaType={asset.mime_type} />
         )}
       </span>
-      <span className="min-w-0 flex-1">
+      <span className="min-w-0 flex-1 pr-8 sm:mt-3 sm:block">
         <span className="block truncate font-mono text-xs font-bold text-[#20211F]">{asset.display_name || asset.source_name}</span>
         <span className="block truncate text-xs text-[#666862]">{libraryRoleLabel(asset)}{asset.display_name && asset.display_name !== asset.source_name ? ` · ${asset.source_name}` : ""}</span>
         <span className="mt-1 block truncate font-mono text-[10px] text-[#666862]">
@@ -635,7 +659,7 @@ function LibraryAssetRow({
       <input
         aria-label={`Use ${asset.source_name}`}
         checked={selected}
-        className="size-5 shrink-0 accent-[#173F5F]"
+        className="absolute top-4 right-4 size-5 shrink-0 accent-[#173F5F]"
         disabled={disabled}
         onChange={() => onChange(asset)}
         type="checkbox"
@@ -646,13 +670,15 @@ function LibraryAssetRow({
 
 function NewJobFormContent() {
   const router = useRouter();
+  const [createStep, setCreateStep] = useState<CreateStep>(1);
+  const [mediaSourceTab, setMediaSourceTab] = useState<"upload" | "library">("upload");
   const [name, setName] = useState("");
   const [brief, setBrief] = useState("");
+  const [briefInterpretation, setBriefInterpretation] = useState<BriefInterpretation>();
   const [privacyMode, setPrivacyMode] = useState<PrivacyMode>("hybrid");
   const [aiCopyAllowed, setAiCopyAllowed] = useState(false);
   const [assemblyMode, setAssemblyMode] = useState<AssemblyMode>("auto");
   const [pacingMode, setPacingMode] = useState<PacingMode>("auto");
-  const [assemblyReady, setAssemblyReady] = useState(false);
   const [reelIntent, setReelIntent] = useState<"auto" | "story" | "promotion" | "bloopers">("auto");
   const [targetDuration, setTargetDuration] = useState<TargetDuration>(45);
   const [durationMode, setDurationMode] = useState<DurationMode>("follow_story");
@@ -676,6 +702,10 @@ function NewJobFormContent() {
   const [brandKits, setBrandKits] = useState<readonly BrandKit[]>([]);
   const [brandKitId, setBrandKitId] = useState<string | null>(null);
   const [publishingPreset, setPublishingPreset] = useState<PublishingPreset>("custom");
+  const [compositionMode, setCompositionMode] = useState<JobCompositionMode>("auto");
+  const [foregroundAssetId, setForegroundAssetId] = useState<string | null>(null);
+  const [backgroundAssetId, setBackgroundAssetId] = useState<string | null>(null);
+  const [presentationCustomized, setPresentationCustomized] = useState(false);
   const [musicTracks, setMusicTracks] = useState<readonly MusicTrack[]>([]);
   const [creativeAssets, setCreativeAssets] = useState<readonly CreativeAsset[]>([]);
   const [entries, setEntries] = useState<UploadEntry[]>([]);
@@ -704,6 +734,16 @@ function NewJobFormContent() {
   const jobRequestIdRef = useRef<string | undefined>(undefined);
   const mountedRef = useRef(true);
 
+  const applyPublishingPreset = (preset: PublishingPreset, customized: boolean) => {
+    if (customized) setPresentationCustomized(true);
+    setPublishingPreset(preset);
+    if (preset === "instagram_reel") { setTargetPlatform("instagram"); setOutputAspect("vertical"); setTargetDuration(30); }
+    if (preset === "tiktok") { setTargetPlatform("tiktok"); setOutputAspect("vertical"); setTargetDuration(30); }
+    if (preset === "youtube_short") { setTargetPlatform("youtube"); setOutputAspect("vertical"); setTargetDuration(45); }
+    if (preset === "linkedin_landscape") { setTargetPlatform("linkedin"); setOutputAspect("landscape"); setTargetDuration(30); }
+    if (preset === "facebook_square") { setTargetPlatform("facebook"); setOutputAspect("square"); setTargetDuration(30); }
+  };
+
   useEffect(() => {
     mountedRef.current = true;
     let cancelled = false;
@@ -727,6 +767,35 @@ function NewJobFormContent() {
       mountedRef.current = false;
     };
   }, []);
+
+  useEffect(() => {
+    const text = brief.trim();
+    if (!text) {
+      setBriefInterpretation(undefined);
+      return;
+    }
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void interpretBrief(text)
+        .then((interpretation) => {
+          if (!cancelled) setBriefInterpretation(interpretation);
+        })
+        .catch(() => {
+          if (!cancelled) setBriefInterpretation(undefined);
+        });
+    }, 450);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [brief]);
+
+  useEffect(() => {
+    const suggestion = briefInterpretation?.suggested_publishing_preset;
+    if (!presentationCustomized && suggestion && suggestion !== "custom" && suggestion !== publishingPreset) {
+      applyPublishingPreset(suggestion, false);
+    }
+  }, [briefInterpretation, presentationCustomized, publishingPreset]);
 
   useEffect(() => {
     let cancelled = false;
@@ -809,9 +878,46 @@ function NewJobFormContent() {
   }, []);
 
   const totalItems = entries.length + selectedLibraryAssets.length;
+  const compositionSources = [
+    ...selectedLibraryAssets.map((asset) => ({
+      id: asset.id,
+      label: asset.display_name || asset.source_name,
+      mediaType: asset.mime_type,
+      origin: "Server library",
+    })),
+    ...entries.map((entry) => ({
+      id: entry.assetRequestId,
+      label: entry.file.name,
+      mediaType: entry.mediaType,
+      origin: "This device",
+    })),
+  ];
+  const foregroundCandidates = compositionSources.filter((source) => source.mediaType.startsWith("video/"));
+  const backgroundCandidates = compositionSources.filter(
+    (source) => source.mediaType.startsWith("video/") || source.mediaType.startsWith("image/"),
+  );
+  const compositionReady = compositionMode !== "green_screen"
+    || (
+      foregroundAssetId !== null
+      && backgroundAssetId !== null
+      && foregroundAssetId !== backgroundAssetId
+      && foregroundCandidates.some((source) => source.id === foregroundAssetId)
+      && backgroundCandidates.some((source) => source.id === backgroundAssetId)
+    );
   const totalBytes = entries.reduce((total, entry) => total + entry.file.size, 0)
     + selectedLibraryAssets.reduce((total, asset) => total + asset.byte_size, 0);
-  const allReady = totalItems > 0 && entries.every((entry) => entry.phase === "ready");
+  const transferredEntries = entries.filter((entry) => entry.uploadComplete && entry.phase !== "error").length;
+  const transferredItems = selectedLibraryAssets.length + transferredEntries;
+  const uploadsTransferred = totalItems > 0 && transferredEntries === entries.length;
+  const deviceTransferBytes = entries.reduce((total, entry) => total + entry.totalBytes, 0);
+  const deviceTransferredBytes = entries.reduce((total, entry) => total + Math.min(entry.uploadedBytes, entry.totalBytes), 0);
+  const transferPercent = entries.length === 0
+    ? 100
+    : Math.min(100, Math.round((deviceTransferredBytes / Math.max(1, deviceTransferBytes)) * 100));
+  const automaticProjectName = suggestedProjectName(
+    brief,
+    selectedLibraryAssets[0]?.display_name || selectedLibraryAssets[0]?.source_name || entries[0]?.file.name,
+  );
   const formLocked = projectId !== undefined;
   const compatibleMusicCount = musicTracks.filter(
     (track) =>
@@ -822,6 +928,23 @@ function NewJobFormContent() {
     (asset) => asset.allowed_platforms.includes("all_social")
       || asset.allowed_platforms.includes(targetPlatform),
   ).length;
+  const chooseCompositionMode = (mode: JobCompositionMode) => {
+    setCompositionMode(mode);
+    setFormError(undefined);
+    if (mode !== "green_screen") {
+      setForegroundAssetId(null);
+      setBackgroundAssetId(null);
+      return;
+    }
+    setAssemblyMode("talking_head");
+    const foreground = foregroundCandidates.find((source) => source.id === foregroundAssetId)
+      ?? foregroundCandidates[0];
+    const background = backgroundCandidates.find(
+      (source) => source.id === backgroundAssetId && source.id !== foreground?.id,
+    ) ?? backgroundCandidates.find((source) => source.id !== foreground?.id);
+    setForegroundAssetId(foreground?.id ?? null);
+    setBackgroundAssetId(background?.id ?? null);
+  };
   const updateEntry = (localId: string, changes: Partial<UploadEntry>) => {
     if (!mountedRef.current) return;
     setEntries((current) =>
@@ -1001,14 +1124,26 @@ function NewJobFormContent() {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const cleanName = name.trim();
-    const cleanBrief = brief.trim();
-    if (cleanName.length === 0) {
-      setFormError("Enter a project name.");
+    if (jobId === undefined && createStep !== 3) {
+      if (totalItems === 0) {
+        setFormError("Choose at least one source file before continuing.");
+        return;
+      }
+      if (!compositionReady) {
+        setFormError("Choose different foreground and background sources for green screen.");
+        return;
+      }
+      goToStep(createStep === 1 ? 2 : 3);
       return;
     }
+    const cleanName = name.trim() || automaticProjectName;
+    const cleanBrief = brief.trim();
     if (totalItems === 0) {
       setFormError("Select server media or add at least one new file.");
+      return;
+    }
+    if (!compositionReady) {
+      setFormError("Choose different foreground and background sources for green screen.");
       return;
     }
 
@@ -1117,10 +1252,19 @@ function NewJobFormContent() {
   };
 
   const startEditing = async () => {
-    if (jobId === undefined || !allReady || !assemblyReady) return;
+    if (jobId === undefined || !uploadsTransferred) return;
     setIsSubmitting(true);
     setFormError(undefined);
     try {
+      await setJobComposition(jobId, {
+        mode: compositionMode,
+        foreground_asset_id: compositionMode === "green_screen" ? foregroundAssetId : null,
+        background_asset_id: compositionMode === "green_screen" ? backgroundAssetId : null,
+        chroma_key_color: "#00FF00",
+        chroma_similarity: 0.12,
+        chroma_blend: 0.08,
+        spill_suppression: 0.15,
+      });
       await requestPreview(jobId);
       writeMediaBasket([]);
       router.push(`/jobs/${jobId}`);
@@ -1136,6 +1280,43 @@ function NewJobFormContent() {
       : serverStatus === "offline"
         ? "Server unavailable"
         : "Checking server";
+  const presentationPresetLabel: Record<PublishingPreset, string> = {
+    custom: "Recommended defaults",
+    instagram_reel: "Instagram Reel",
+    tiktok: "TikTok",
+    youtube_short: "YouTube Short",
+    linkedin_landscape: "LinkedIn",
+    facebook_square: "Facebook",
+  };
+  const presentationShapeLabel: Record<OutputAspect, string> = {
+    vertical: "Vertical 9:16",
+    landscape: "Landscape 16:9",
+    square: "Square 1:1",
+  };
+  const presentationDurationLabel = durationMode === "follow_story"
+    ? `Follow the story · up to ${maxDuration}s`
+    : durationMode === "aim"
+      ? `Aim for ${targetDuration}s`
+      : `Exactly ${targetDuration}s`;
+  const presentationStyleLabel = pacingMode === "auto"
+    ? "AI follows your brief"
+    : editStyle.replaceAll("_", " ");
+  const privacySummary = PRIVACY_OPTIONS.find((option) => option.value === privacyMode)?.label ?? "Hybrid";
+  const assemblySummary = assemblyMode === "auto" ? "Automatic assembly" : assemblyMode.replaceAll("_", " ");
+  const selectedMediaNames = [
+    ...selectedLibraryAssets.map((asset) => asset.display_name || asset.source_name),
+    ...entries.map((entry) => entry.file.name),
+  ];
+  const stepHeading = createStep === 1
+    ? ["Choose your media", "Upload from this device or choose footage already stored in your library."]
+    : createStep === 2
+      ? ["Tell GM Studio what to make", "Write the outcome in plain language. Scripts, numbered points and scene order are followed when supplied."]
+      : ["Check your job", "Review the essentials below. Optional settings stay available without getting in the way."];
+  const goToStep = (step: CreateStep) => {
+    setCreateStep(step);
+    setFormError(undefined);
+    window.requestAnimationFrame(() => document.querySelector<HTMLElement>("[data-create-main]")?.scrollTo({ top: 0, behavior: "smooth" }));
+  };
 
   return (
     <form
@@ -1145,45 +1326,83 @@ function NewJobFormContent() {
       onSubmit={handleSubmit}
     >
       <header className="z-40 shrink-0 border-b border-[#D7D9D3] bg-[#F7F7F5] px-4 pt-[max(1rem,env(safe-area-inset-top))] pb-3">
-        <div className="mb-1 flex items-center justify-between gap-3">
-          <StudioNav current="/jobs/new" />
-          <Badge className="rounded-sm border-[#D7D9D3] bg-white px-2 py-1 font-mono text-[10px] font-bold text-[#173F5F] uppercase dark:bg-white" variant="outline">
-            <span
-              aria-hidden="true"
-              className={cn(
-                "size-1.5 rounded-full",
-                serverStatus === "online"
-                  ? "bg-[#3A8F63]"
-                  : serverStatus === "offline"
-                    ? "bg-[#FF8C69]"
-                    : "bg-[#F4D35E]",
-              )}
-            />
-            {statusCopy}
-          </Badge>
+        <div className="mx-auto w-full max-w-7xl">
+          <div className="mb-1 flex items-center justify-between gap-3">
+            <StudioNav current="/jobs/new" />
+            <Badge className="rounded-sm border-[#D7D9D3] bg-white px-2 py-1 font-mono text-[10px] font-bold text-[#173F5F] uppercase dark:bg-white" variant="outline">
+              <span
+                aria-hidden="true"
+                className={cn(
+                  "size-1.5 rounded-full",
+                  serverStatus === "online"
+                    ? "bg-[#3A8F63]"
+                    : serverStatus === "offline"
+                      ? "bg-[#FF8C69]"
+                      : "bg-[#F4D35E]",
+                )}
+              />
+              {statusCopy}
+            </Badge>
+          </div>
+          <p className="font-mono text-[10px] text-[#666862]">Source-led editing · originals stay on this server</p>
         </div>
-        <p className="font-mono text-[10px] text-[#666862]">Source-led editing · originals stay on this server</p>
       </header>
 
-      <main className="min-h-0 flex-1 touch-pan-y space-y-10 overflow-y-auto overscroll-contain px-4 py-8">
+      <main className="mx-auto min-h-0 w-full max-w-7xl flex-1 touch-pan-y space-y-6 overflow-y-auto overscroll-contain px-4 py-5 sm:py-7" data-create-main>
         <section className="space-y-3">
-          <h1 className="text-2xl font-bold tracking-tight text-[#173F5F]">Start a new edit</h1>
-          <p className="text-sm leading-relaxed text-[#666862]">
-            Agents plan the edit. Visuals and speech come only from your selected media; optional music comes from your approved local library.
-          </p>
+          <nav aria-label="Create an edit steps" className="grid grid-cols-3 overflow-hidden rounded-lg border border-[#C7CBD0] bg-white shadow-sm">
+            {([
+              [1, "Choose media"],
+              [2, "Give direction"],
+              [3, "Review & create"],
+            ] as const).map(([step, label]) => (
+              <button
+                aria-current={createStep === step ? "step" : undefined}
+                className={cn(
+                  "relative min-h-16 border-r border-[#D7D9D3] px-2 py-2 text-center text-xs font-bold last:border-r-0 sm:px-4",
+                  createStep === step ? "bg-[#173F5F] text-white" : "text-[#53646F] hover:bg-[#EFF6FA]",
+                )}
+                disabled={step === 3 && totalItems === 0}
+                key={step}
+                onClick={() => goToStep(step)}
+                type="button"
+              >
+                <span className={cn("block font-mono text-[9px]", createStep === step ? "text-[#C9DDE8]" : "text-[#7A7D77]")}>0{step}</span>
+                {label}
+                {step === 1 && totalItems > 0 ? <span className="absolute top-2 right-2 size-2 rounded-full bg-[#3A8F63]" aria-label="Media selected" /> : null}
+              </button>
+            ))}
+          </nav>
+          <div className="pt-2">
+            <p className="font-mono text-[10px] font-bold tracking-wider text-[#174D73] uppercase">Step {createStep} of 3</p>
+            <h1 className="mt-1 text-2xl font-bold tracking-tight text-[#173F5F] sm:text-3xl">{stepHeading[0]}</h1>
+            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-[#666862]">{stepHeading[1]}</p>
+          </div>
+          {createStep === 1 ? <div className="flex flex-col gap-2 rounded-md border border-[#BFD2DE] bg-[#EFF6FA] px-4 py-3 text-xs leading-relaxed text-[#53646F] sm:flex-row sm:items-center sm:justify-between">
+            <p className="flex items-start gap-2"><BookOpenIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-[#174D73]" /><span><strong className="text-[#173F5F]">First edit?</strong> Start with only the footage that might belong in this reel.</span></p>
+            <Link className="min-h-9 shrink-0 content-center font-bold text-[#173F5F] underline underline-offset-4" href="/guide#first-edit">Read the 60-second guide</Link>
+          </div> : null}
         </section>
 
-        {jobId !== undefined && allReady ? <AssemblyReadiness jobId={jobId} onReady={setAssemblyReady} onApplied={(settings) => { setAssemblyMode(settings.assembly_mode); setPacingMode(settings.pacing_mode); setEditStyle(settings.edit_style); setReelIntent(settings.reel_intent); }} /> : null}
-        <section className="space-y-4 pb-8" id="server-library">
-          <SectionHeading number="01">Source media</SectionHeading>
-          <div className="rounded-md border border-[#BFD2DE] bg-[#EFF6FA] p-4 text-sm text-[#173F5F]">
-            <p className="font-bold">Combine server footage and new uploads in one job</p>
-            <p className="mt-1 text-xs leading-relaxed">Add files from this device and select existing footage below, then create your job. Both selections are included together.</p>
-            <p aria-live="polite" className="mt-2 font-mono text-xs font-bold">{selectedLibraryAssets.length} from server + {entries.length} from this device</p>
+        {jobId !== undefined ? <section aria-label="Upload handoff" className="rounded-xl border border-[#BFD2DE] bg-white p-4 shadow-sm sm:p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-mono text-[10px] font-bold tracking-widest text-[#174D73] uppercase">Job created</p><h2 className="mt-1 text-lg font-bold text-[#173F5F]">{uploadsTransferred ? "Uploads complete" : "Sending media to the server"}</h2><p className="mt-1 text-sm leading-6 text-[#666862]">{uploadsTransferred ? "Continue now. Final checks and source analysis will finish inside the queued edit." : `Keep this page open while ${entries.length - transferredEntries} ${entries.length - transferredEntries === 1 ? "file finishes" : "files finish"} uploading.`}</p></div><span className={cn("rounded-full px-3 py-1 text-xs font-bold", uploadsTransferred ? "bg-[#E4F1E9] text-[#215B43]" : "bg-[#EFF6FA] text-[#173F5F]")}>{transferredItems} of {totalItems} transferred</span></div>
+          <div aria-label="Overall upload progress" aria-valuemax={100} aria-valuemin={0} aria-valuenow={transferPercent} className="mt-4 h-2 overflow-hidden rounded-full bg-[#E9EDF0]" role="progressbar"><div className="h-full bg-[#173F5F] transition-[width] motion-reduce:transition-none" style={{ width: `${transferPercent}%` }} /></div>
+          {entries.length ? <ul aria-label="Active job uploads" className="mt-4 space-y-2">{entries.map((entry) => <UploadRow entry={entry} key={entry.localId} onPause={(selected) => void pauseUpload(selected)} onRemove={removeUpload} onResume={resumeUpload} onRetry={retryUpload} />)}</ul> : null}
+        </section> : null}
+        <section className={cn("space-y-4 pb-4", createStep !== 1 && "hidden")} id="server-library">
+          <div className="rounded-lg border border-[#D7D9D3] bg-white p-4 shadow-sm sm:p-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+              <div><h2 className="text-lg font-bold text-[#173F5F]">Add source media</h2><p className="mt-1 text-xs leading-5 text-[#666862]">You can combine files from this device with originals already on the server.</p></div>
+              <p aria-live="polite" className="font-mono text-xs font-bold text-[#173F5F]">{selectedLibraryAssets.length} server + {entries.length} new</p>
+            </div>
+            <div aria-label="Choose a media source" className="mt-4 grid grid-cols-2 rounded-md bg-[#F1F2EF] p-1" role="tablist">
+              <button aria-controls="device-media-panel" aria-selected={mediaSourceTab === "upload"} className={cn("min-h-11 rounded px-3 text-sm font-bold", mediaSourceTab === "upload" ? "bg-white text-[#173F5F] shadow-sm" : "text-[#666862]")} onClick={() => setMediaSourceTab("upload")} role="tab" type="button">From this device {entries.length ? `(${entries.length})` : ""}</button>
+              <button aria-controls="library-media-panel" aria-selected={mediaSourceTab === "library"} className={cn("min-h-11 rounded px-3 text-sm font-bold", mediaSourceTab === "library" ? "bg-white text-[#173F5F] shadow-sm" : "text-[#666862]")} onClick={() => setMediaSourceTab("library")} role="tab" type="button">Server library {selectedLibraryAssets.length ? `(${selectedLibraryAssets.length})` : ""}</button>
+            </div>
           </div>
 
-            <div aria-label="Upload new source media" className="space-y-4">
-              <h3 className="text-sm font-bold text-[#173F5F]">Add from this device</h3>
+            <div aria-label="Upload new source media" className={cn("space-y-4 rounded-lg border border-[#D7D9D3] bg-white p-4 shadow-sm sm:p-5", mediaSourceTab !== "upload" && "hidden")} id="device-media-panel" role="tabpanel">
+              <h3 className="text-sm font-bold text-[#173F5F]">Upload from this device</h3>
               <label
                 className={cn(
                   "flex min-h-36 w-full cursor-pointer flex-col items-center justify-center rounded-md border-2 border-dashed border-[#C7CBD0] bg-white p-6 text-center transition-colors hover:border-[#173F5F] focus-within:border-[#173F5F] focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-[#173F5F] dark:bg-white",
@@ -1258,7 +1477,7 @@ function NewJobFormContent() {
                 Keep this page open while uploading. Interrupted uploads can resume when this device reconnects.
               </p>
             </div>
-            <div aria-label="Choose existing server media" className="space-y-4 border-t border-[#D7D9D3] pt-5">
+            <div aria-label="Choose existing server media" className={cn("space-y-4 rounded-lg border border-[#D7D9D3] bg-white p-4 shadow-sm sm:p-5", mediaSourceTab !== "library" && "hidden")} id="library-media-panel" role="tabpanel">
               <h3 className="text-sm font-bold text-[#173F5F]">Choose from the server library</h3>
               <div className="flex items-center justify-between gap-4">
                 <p className="font-mono text-[10px] font-bold tracking-wide text-[#666862] uppercase">Analyzed originals</p>
@@ -1349,33 +1568,38 @@ function NewJobFormContent() {
                   </button>
                 ))}
               </div>
-              <label className="block space-y-2 text-xs font-bold text-[#173F5F]" htmlFor="library-purpose">FOOTAGE ROLE
-                <select className="h-11 w-full rounded-md border border-[#D7D9D3] bg-white px-3 text-sm text-[#20211F]" id="library-purpose" onChange={(event) => library.changeFilters({ purpose: event.currentTarget.value })} value={libraryPurpose}>
-                  <option value="all">All roles</option><option value="talking">Talking footage</option><option value="broll">B-roll</option><option value="auto">Unsorted video</option>
-                </select>
-              </label>
-              <label className="block space-y-2 text-xs font-bold text-[#173F5F]" htmlFor="library-project">
-                PROJECT
-                <select
-                  className="h-11 w-full rounded-md border border-[#D7D9D3] bg-white px-3 text-sm text-[#20211F] shadow-none focus:border-[#173F5F] focus:outline-none focus:ring-2 focus:ring-[#173F5F]/20"
-                  id="library-project"
-                  onChange={(event) => library.changeFilters({ projectId: event.currentTarget.value })}
-                  value={libraryProjectId}
-                >
-                  <option value="all">All projects</option>
-                  {library.projects.map(({id, name: projectName}) => (
-                    <option key={id} value={id}>{projectName}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="block space-y-2 text-xs font-bold text-[#173F5F]" htmlFor="library-folder">FOLDER
-                <select className="min-h-11 w-full min-w-0 rounded-md border border-[#D7D9D3] bg-white px-3 text-sm" id="library-folder" value={library.filters.folderId} onChange={event => library.changeFilters({ folderId: event.currentTarget.value })}>
-                  <option value="">All folders</option><option value="unfiled">Not in folders</option>
-                  {library.folders.map(folder => <option key={folder.id} value={folder.id}>{folderLabel(library.folders, folder.id)}</option>)}
-                </select>
-                <span className="block text-xs font-normal text-[#666862]">Shows media filed directly in this folder. Choose a subfolder to see its files.</span>
-              </label>
-              {library.optionsError ? <p role="alert" className="text-xs text-[#A23B2A]">Folder/project choices could not be loaded. Refresh server media to retry.</p> : null}
+              <details className="rounded-md border border-[#D7D9D3] bg-white p-3">
+                <summary className="min-h-11 cursor-pointer content-center text-sm font-bold text-[#173F5F]">More filters · role, project &amp; folder</summary>
+                <div className="mt-3 grid gap-4 border-t border-[#E5E6E1] pt-4 md:grid-cols-3">
+                  <label className="block space-y-2 text-xs font-bold text-[#173F5F]" htmlFor="library-purpose">FOOTAGE ROLE
+                    <select className="h-11 w-full rounded-md border border-[#D7D9D3] bg-white px-3 text-sm text-[#20211F]" id="library-purpose" onChange={(event) => library.changeFilters({ purpose: event.currentTarget.value })} value={libraryPurpose}>
+                      <option value="all">All roles</option><option value="talking">Talking footage</option><option value="broll">B-roll</option><option value="auto">Unsorted video</option>
+                    </select>
+                  </label>
+                  <label className="block space-y-2 text-xs font-bold text-[#173F5F]" htmlFor="library-project">
+                    PROJECT
+                    <select
+                      className="h-11 w-full rounded-md border border-[#D7D9D3] bg-white px-3 text-sm text-[#20211F] shadow-none focus:border-[#173F5F] focus:outline-none focus:ring-2 focus:ring-[#173F5F]/20"
+                      id="library-project"
+                      onChange={(event) => library.changeFilters({ projectId: event.currentTarget.value })}
+                      value={libraryProjectId}
+                    >
+                      <option value="all">All projects</option>
+                      {library.projects.map(({id, name: projectName}) => (
+                        <option key={id} value={id}>{projectName}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block space-y-2 text-xs font-bold text-[#173F5F]" htmlFor="library-folder">FOLDER
+                    <select className="min-h-11 w-full min-w-0 rounded-md border border-[#D7D9D3] bg-white px-3 text-sm" id="library-folder" value={library.filters.folderId} onChange={event => library.changeFilters({ folderId: event.currentTarget.value })}>
+                      <option value="">All folders</option><option value="unfiled">Not in folders</option>
+                      {library.folders.map(folder => <option key={folder.id} value={folder.id}>{folderLabel(library.folders, folder.id)}</option>)}
+                    </select>
+                    <span className="block text-xs font-normal text-[#666862]">Choose a folder to see files stored directly inside it.</span>
+                  </label>
+                  {library.optionsError ? <p role="alert" className="text-xs text-[#A23B2A] md:col-span-3">Folder/project choices could not be loaded. Refresh server media to retry.</p> : null}
+                </div>
+              </details>
               <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-[#53646F]">
                 <span aria-live="polite">{libraryLoading ? "Loading server media…" : libraryError ? "Server media unavailable" : `${library.total ? library.filters.offset + 1 : 0}–${Math.min(library.filters.offset + filteredLibraryAssets.length, library.total)} of ${library.total} matching originals`}</span>
                 <button className="min-h-11 rounded border border-[#D7D9D3] px-3 font-bold text-[#173F5F]" onClick={library.refresh} type="button">Refresh server media</button>
@@ -1391,7 +1615,7 @@ function NewJobFormContent() {
                   Loading server media…
                 </p>
               ) : filteredLibraryAssets.length > 0 ? (
-                <div className="max-h-96 space-y-2 overflow-y-auto overscroll-contain" aria-label="Server media library">
+                <div className="grid max-h-[42rem] gap-3 overflow-y-auto overscroll-contain pr-1 sm:grid-cols-2 xl:grid-cols-3" aria-label="Server media library">
                   {filteredLibraryAssets.map((asset) => (
                     <LibraryAssetRow
                       asset={asset}
@@ -1428,21 +1652,71 @@ function NewJobFormContent() {
                 Selecting an item attaches the existing original. It does not copy or re-upload the file.
               </p>
             </div>
+          <section className="rounded-lg border border-[#D7D9D3] bg-white p-4 shadow-sm sm:p-5" aria-labelledby="composition-heading">
+            <div>
+              <p className="font-mono text-[10px] font-bold tracking-wider text-[#174D73] uppercase">Composition</p>
+              <h2 className="mt-1 text-lg font-bold text-[#173F5F]" id="composition-heading">How should these pictures work together?</h2>
+              <p className="mt-1 text-xs leading-5 text-[#666862]">Most jobs can stay automatic. Choose green screen when one video contains the presenter and another item is the intended background.</p>
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+              {([
+                ["auto", "Automatic", "GM Studio chooses a normal source-led edit."],
+                ["standard", "Standard edit", "Use cuts, framing and supporting pictures without keying."],
+                ["green_screen", "Green screen", "Place a keyed presenter over one chosen background."],
+              ] as const).map(([value, label, description]) => (
+                <label className={cn("min-h-28 rounded-md p-4", compositionMode === value ? "border-2 border-[#173F5F] bg-[#EFF6FA]" : "border border-[#D7D9D3] bg-white", formLocked ? "cursor-not-allowed opacity-60" : "cursor-pointer")} key={value}>
+                  <span className="flex items-center gap-2">
+                    <input checked={compositionMode === value} className="size-5 accent-[#173F5F]" disabled={formLocked} name="composition-mode" onChange={() => chooseCompositionMode(value)} type="radio" value={value} />
+                    <span className="text-sm font-bold text-[#173F5F]">{label}</span>
+                  </span>
+                  <span className="mt-2 block text-xs leading-5 text-[#666862]">{description}</span>
+                </label>
+              ))}
+            </div>
+            {compositionMode === "green_screen" ? (
+              <div className="mt-4 rounded-md border border-[#BFD2DE] bg-[#EFF6FA] p-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <label className="space-y-2 text-xs font-bold text-[#173F5F]">
+                    FOREGROUND · PRESENTER
+                    <select className="h-12 w-full rounded-md border border-[#BFD2DE] bg-white px-3 text-sm font-normal text-[#20211F]" disabled={formLocked} onChange={(event) => {
+                      const next = event.currentTarget.value || null;
+                      setForegroundAssetId(next);
+                      if (next === backgroundAssetId) setBackgroundAssetId(backgroundCandidates.find((source) => source.id !== next)?.id ?? null);
+                    }} value={foregroundAssetId ?? ""}>
+                      <option value="">Choose presenter video</option>
+                      {foregroundCandidates.map((source) => <option key={source.id} value={source.id}>{source.label} · {source.origin}</option>)}
+                    </select>
+                    <span className="block font-normal leading-5 text-[#53646F]">This video supplies the keyed picture and the recorded speech.</span>
+                  </label>
+                  <label className="space-y-2 text-xs font-bold text-[#173F5F]">
+                    BACKGROUND
+                    <select className="h-12 w-full rounded-md border border-[#BFD2DE] bg-white px-3 text-sm font-normal text-[#20211F]" disabled={formLocked} onChange={(event) => setBackgroundAssetId(event.currentTarget.value || null)} value={backgroundAssetId ?? ""}>
+                      <option value="">Choose background</option>
+                      {backgroundCandidates.filter((source) => source.id !== foregroundAssetId).map((source) => <option key={source.id} value={source.id}>{source.label} · {source.origin}</option>)}
+                    </select>
+                    <span className="block font-normal leading-5 text-[#53646F]">A photo or video fills the complete frame behind the presenter.</span>
+                  </label>
+                </div>
+                {!compositionReady ? <p className="mt-3 flex items-start gap-1.5 text-xs text-[#A23B2A]" role="status"><CircleAlertIcon aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />Add at least one presenter video and a different image or video background.</p> : <p className="mt-3 flex items-center gap-1.5 text-xs font-bold text-[#215B43]"><CheckIcon aria-hidden="true" className="size-3.5" />Green-screen sources assigned</p>}
+              </div>
+            ) : null}
+          </section>
           {jobId ? (
             <p className="text-center font-mono text-[10px] text-[#666862]" aria-live="polite">
               Job {jobId.slice(0, 8)} created
             </p>
           ) : null}
         </section>
-        <section className="space-y-4">
-          <SectionHeading number="02">Describe your edit</SectionHeading>
-          <div className="space-y-5">            <div className="space-y-2">
+        <div className={cn("space-y-5", createStep !== 2 && "hidden")}>
+        <section className="scroll-mt-4 space-y-4 rounded-lg border border-[#D7D9D3] bg-white p-4 shadow-sm sm:p-6" id="edit-direction">
+          <div><h2 className="text-lg font-bold text-[#173F5F]">Describe the result</h2><p className="mt-1 text-xs leading-5 text-[#666862]">A short plain-language instruction is enough. Add exact wording or an ordered list only when it must be followed.</p></div>
+          <div className="space-y-5">
+            <div className="space-y-2">
               <label className="flex justify-between text-xs font-bold text-[#173F5F]" htmlFor="project-name">
                 <span>PROJECT NAME</span>
-                <span className="text-[10px] text-[#A23B2A]">REQUIRED</span>
+                <span className="text-[10px] text-[#666862]">OPTIONAL</span>
               </label>
               <Input
-                aria-invalid={formError === "Enter a project name."}
                 className="h-12 rounded-sm border-[#D7D9D3] bg-white text-[#20211F] shadow-none focus-visible:border-[#173F5F] focus-visible:ring-[#173F5F]/20 dark:bg-white dark:text-[#20211F]"
                 disabled={formLocked}
                 id="project-name"
@@ -1451,10 +1725,10 @@ function NewJobFormContent() {
                   setName(event.currentTarget.value);
                   setFormError(undefined);
                 }}
-                placeholder="e.g. Spring launch interview"
-                required
+                placeholder={automaticProjectName}
                 value={name}
               />
+              {!name.trim() ? <p className="text-xs text-[#666862]">GM Studio will save this as <span className="font-bold text-[#173F5F]">{automaticProjectName}</span>. Type a name only if you want something different.</p> : null}
             </div>
             <div className="space-y-2">
               <label className="text-xs font-bold text-[#173F5F]" htmlFor="project-brief">
@@ -1472,6 +1746,28 @@ function NewJobFormContent() {
                 placeholder="e.g. Make a warm product story. Keep my explanation and show the cream close-ups. No sales ending."
                 value={brief}
               />
+              {briefInterpretation ? (
+                <div className="rounded-md border border-[#BFE3FF] bg-[#EFF6FA] p-4" aria-live="polite">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-mono text-[10px] font-bold tracking-wider text-[#174D73] uppercase">Instructions detected</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {briefInterpretation.wording_fidelity === "verbatim" ? <Badge variant="outline">Wording locked</Badge> : null}
+                      {briefInterpretation.sequence_locked ? <Badge variant="outline">Order locked</Badge> : null}
+                    </div>
+                  </div>
+                  <p className="mt-2 text-sm font-bold text-[#173F5F]">{briefInterpretation.interpretation}</p>
+                  <p className="mt-1 text-xs leading-relaxed text-[#53646F]">
+                    AI may decide {briefInterpretation.ai_may_decide.map((item) => item.replaceAll("_", " ")).join(", ")}. Explicit requirements in your brief still take priority.
+                  </p>
+                  {briefInterpretation.suggested_publishing_preset !== "custom" ? (
+                    <p className="mt-2 text-xs font-bold text-[#174D73]">
+                      {presentationCustomized
+                        ? `Your brief suggests ${presentationPresetLabel[briefInterpretation.suggested_publishing_preset]}; your manually adjusted presentation settings were kept.`
+                        : `${presentationPresetLabel[briefInterpretation.suggested_publishing_preset]} setup applied from your brief. You can change it under Optional presentation.`}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
             <fieldset className="space-y-2" disabled={formLocked}>
               <legend className="text-xs font-bold text-[#173F5F]">OPTIONAL BRIEF STARTERS</legend>
@@ -1529,9 +1825,17 @@ function NewJobFormContent() {
             </div>
           </div>
         </section>
-        <details className="space-y-4" open>
-          <summary className="min-h-11 cursor-pointer content-center text-sm font-bold text-[#173F5F]">03 · Presentation: length, music, effects &amp; saved defaults</summary>
-          <div className="space-y-5">
+        <details className="group rounded-lg border border-[#D7D9D3] bg-white p-4 shadow-sm">
+          <summary className="min-h-11 cursor-pointer text-[#173F5F] marker:text-[#173F5F]">
+            <span className="ml-2 inline-flex max-w-[calc(100%-2rem)] flex-col align-middle">
+              <span className="text-sm font-bold">Optional presentation</span>
+              <span className="mt-1 text-xs font-normal leading-relaxed text-[#666862]">
+                {presentationPresetLabel[publishingPreset]} · {presentationShapeLabel[outputAspect]} · {presentationDurationLabel} · {presentationStyleLabel}
+              </span>
+              <span className="mt-1 text-[11px] font-bold text-[#174D73] group-open:hidden">Open only if you want to change the recommended setup</span>
+            </span>
+          </summary>
+          <div className="mt-5 space-y-5 border-t border-[#E5E6E1] pt-5">
             {creativeProfiles.length > 0 ? (
               <div className="space-y-2 rounded-md border border-[#BFE3FF] bg-[#F4FAFE] p-4">
                 <label className="text-xs font-bold text-[#173F5F]" htmlFor="creative-profile">
@@ -1542,6 +1846,7 @@ function NewJobFormContent() {
                   disabled={formLocked}
                   id="creative-profile"
                   onChange={(event) => {
+                    setPresentationCustomized(true);
                     const profile = creativeProfiles.find((item) => item.id === event.currentTarget.value);
                     setCreativeProfileId(profile?.id ?? null);
                     if (profile) {
@@ -1580,12 +1885,7 @@ function NewJobFormContent() {
                   id="publishing-preset"
                   onChange={(event) => {
                     const preset = event.currentTarget.value as PublishingPreset;
-                    setPublishingPreset(preset);
-                    if (preset === "instagram_reel") { setTargetPlatform("instagram"); setOutputAspect("vertical"); setTargetDuration(30); }
-                    if (preset === "tiktok") { setTargetPlatform("tiktok"); setOutputAspect("vertical"); setTargetDuration(30); }
-                    if (preset === "youtube_short") { setTargetPlatform("youtube"); setOutputAspect("vertical"); setTargetDuration(45); }
-                    if (preset === "linkedin_landscape") { setTargetPlatform("linkedin"); setOutputAspect("landscape"); setTargetDuration(30); }
-                    if (preset === "facebook_square") { setTargetPlatform("facebook"); setOutputAspect("square"); setTargetDuration(30); }
+                    applyPublishingPreset(preset, true);
                   }}
                   value={publishingPreset}
                 >
@@ -1616,7 +1916,7 @@ function NewJobFormContent() {
             </div>
             <DurationFields disabled={formLocked}
               settings={{ duration_mode: durationMode, target_duration_seconds: targetDuration, max_duration_seconds: maxDuration }}
-              onChange={(value) => { setDurationMode(value.duration_mode); setTargetDuration(value.target_duration_seconds); setMaxDuration(value.max_duration_seconds); }} />
+              onChange={(value) => { setPresentationCustomized(true); setDurationMode(value.duration_mode); setTargetDuration(value.target_duration_seconds); setMaxDuration(value.max_duration_seconds); }} />
             <fieldset className="space-y-3" disabled={formLocked}>
               <legend className="text-xs font-bold text-[#173F5F]">OUTPUT SHAPE</legend>
               <div className="grid grid-cols-3 gap-2">
@@ -1638,7 +1938,7 @@ function NewJobFormContent() {
                       checked={outputAspect === option.value}
                       className="sr-only"
                       name="output-aspect"
-                      onChange={() => setOutputAspect(option.value)}
+                      onChange={() => { setPresentationCustomized(true); setOutputAspect(option.value); }}
                       type="radio"
                       value={option.value}
                     />
@@ -1650,7 +1950,7 @@ function NewJobFormContent() {
             <fieldset className="space-y-3" disabled={formLocked}>
               <legend className="text-xs font-bold text-[#173F5F]">EDITING STYLE</legend>
               <div className="space-y-2">
-                <CreativeOptionCard description={`Use explicit pacing in your brief; otherwise use ${editStyle.replaceAll("_", " ")} presentation defaults.`} disabled={formLocked} label="Follow my brief" name="edit-style" onChange={() => setPacingMode("auto")} selected={pacingMode === "auto"} value="auto" />
+                <CreativeOptionCard description={`Use explicit pacing in your brief; otherwise use ${editStyle.replaceAll("_", " ")} presentation defaults.`} disabled={formLocked} label="Follow my brief" name="edit-style" onChange={() => { setPresentationCustomized(true); setPacingMode("auto"); }} selected={pacingMode === "auto"} value="auto" />
                 {EDIT_STYLE_OPTIONS.map((option) => (
                   <CreativeOptionCard
                     description={option.description}
@@ -1659,6 +1959,7 @@ function NewJobFormContent() {
                     label={option.label}
                     name="edit-style"
                     onChange={() => {
+                      setPresentationCustomized(true);
                       setEditStyle(option.value);
                       setPacingMode("manual");
                       if (option.value === "high_impact" && effectLevel === "off" && compatibleEffectCount > 0 && privacyMode !== "local_only") setEffectLevel("social");
@@ -1679,6 +1980,7 @@ function NewJobFormContent() {
                   disabled={formLocked}
                   id="target-platform"
                   onChange={(event) => {
+                    setPresentationCustomized(true);
                     const selected = event.currentTarget.value as TargetPlatform;
                     setTargetPlatform(selected);
                     const hasCompatibleTrack = musicTracks.some(
@@ -1750,15 +2052,22 @@ function NewJobFormContent() {
             </details>
           </div>
         </details>
-        <details className="space-y-4 rounded-md border border-[#D7D9D3] bg-white p-4">
-          <summary className="min-h-11 cursor-pointer content-center text-sm font-bold text-[#173F5F]">Advanced: assembly, purpose, privacy &amp; model</summary>
+        <details className="group rounded-lg border border-[#D7D9D3] bg-white p-4 shadow-sm">
+          <summary className="min-h-11 cursor-pointer text-[#173F5F] marker:text-[#173F5F]">
+            <span className="ml-2 inline-flex max-w-[calc(100%-2rem)] flex-col align-middle">
+              <span className="text-sm font-bold">Advanced editor controls</span>
+              <span className="mt-1 text-xs font-normal leading-relaxed text-[#666862]">{assemblySummary} · {privacySummary} privacy · {reasoningEffort} model effort</span>
+              <span className="mt-1 text-[11px] font-bold text-[#174D73] group-open:hidden">Most users can leave these unchanged</span>
+            </span>
+          </summary>
+          <div className="mt-5 space-y-5 border-t border-[#E5E6E1] pt-5">
           <fieldset className="space-y-4" disabled={formLocked}>
             <label className="block text-xs font-bold text-[#173F5F]" htmlFor="assembly-mode">ASSEMBLY
               <select id="assembly-mode" className="mt-2 h-12 w-full rounded-md border border-[#D7D9D3] bg-white px-3 text-sm" value={assemblyMode} onChange={(event) => setAssemblyMode(event.currentTarget.value as AssemblyMode)}>
                 <option value="auto">Automatic from brief and analysed media</option><option value="talking_head">Speech with supporting pictures</option><option value="montage">Visual montage</option>
               </select>
             </label>
-            <p className="text-xs text-[#666862]">Automatic keeps recorded dialogue when it is central, or uses a visual sequence. You will see the interpretation after analysis and before Start editing.</p>
+            <p className="text-xs text-[#666862]">Automatic keeps recorded dialogue when it is central, or uses a visual sequence. Source analysis and interpretation continue automatically after the edit is queued.</p>
           <div className="space-y-2">
             <label className="text-xs font-bold text-[#173F5F]" htmlFor="reel-intent">REEL PURPOSE</label>
             <select
@@ -1866,19 +2175,58 @@ function NewJobFormContent() {
                 Lower effort generally uses fewer reasoning tokens. The final screen records the actual usage.
               </p>
             </fieldset>
+          </div>
         </details>
+        </div>
+
+        <section className={cn("space-y-4", createStep !== 3 && "hidden")} aria-label="Review job before creating">
+          <div className="grid gap-4 lg:grid-cols-2">
+            <article className="rounded-lg border border-[#D7D9D3] bg-white p-5 shadow-sm">
+              <div className="flex items-start justify-between gap-4">
+                <div><p className="font-mono text-[10px] font-bold tracking-wide text-[#174D73] uppercase">Media</p><h2 className="mt-1 text-lg font-bold text-[#173F5F]">{totalItems} selected {totalItems === 1 ? "item" : "items"}</h2></div>
+                <button className="min-h-10 text-xs font-bold text-[#173F5F] underline underline-offset-4" onClick={() => goToStep(1)} type="button">Change</button>
+              </div>
+              {selectedMediaNames.length ? <ul className="mt-4 space-y-2 text-sm text-[#53646F]">{selectedMediaNames.slice(0, 5).map((item, index) => <li className="truncate" key={`${item}-${index}`}>• {item}</li>)}</ul> : <p className="mt-4 text-sm text-[#A23B2A]">No media selected.</p>}
+              {selectedMediaNames.length > 5 ? <p className="mt-2 text-xs text-[#666862]">+ {selectedMediaNames.length - 5} more</p> : null}
+            </article>
+
+            <article className="rounded-lg border border-[#D7D9D3] bg-white p-5 shadow-sm">
+              <div className="flex items-start justify-between gap-4">
+                <div><p className="font-mono text-[10px] font-bold tracking-wide text-[#174D73] uppercase">Direction</p><h2 className="mt-1 text-lg font-bold text-[#173F5F]">{name.trim() || automaticProjectName}</h2></div>
+                <button className="min-h-10 text-xs font-bold text-[#173F5F] underline underline-offset-4" onClick={() => goToStep(2)} type="button">Change</button>
+              </div>
+              <p className="mt-4 line-clamp-5 whitespace-pre-line text-sm leading-6 text-[#53646F]">{brief.trim() || "No brief supplied. GM Studio will find a coherent story from the selected media."}</p>
+              {briefInterpretation ? <div className="mt-4 rounded-md bg-[#EFF6FA] p-3"><p className="text-xs font-bold text-[#173F5F]">{briefInterpretation.interpretation}</p>{briefInterpretation.sequence_locked ? <p className="mt-1 text-xs text-[#53646F]">Requested order will be protected.</p> : null}</div> : null}
+              <p className="mt-3 text-xs text-[#53646F]"><span className="font-bold text-[#173F5F]">Composition:</span> {compositionMode === "green_screen" ? "Green screen with assigned presenter and background" : compositionMode === "standard" ? "Standard edit" : "Automatic"}</p>
+            </article>
+          </div>
+
+          <article className="rounded-lg border border-[#BFD2DE] bg-[#EFF6FA] p-5">
+            <div className="flex items-start justify-between gap-4"><div><p className="font-mono text-[10px] font-bold tracking-wide text-[#174D73] uppercase">Output</p><h2 className="mt-1 text-lg font-bold text-[#173F5F]">{presentationPresetLabel[publishingPreset]} · {presentationShapeLabel[outputAspect]}</h2></div><button className="min-h-10 text-xs font-bold text-[#173F5F] underline underline-offset-4" onClick={() => goToStep(2)} type="button">Change</button></div>
+            <div className="mt-4 grid gap-3 text-sm text-[#53646F] sm:grid-cols-3">
+              <p><span className="block text-[10px] font-bold tracking-wide uppercase">Duration</span>{presentationDurationLabel}</p>
+              <p><span className="block text-[10px] font-bold tracking-wide uppercase">Editing</span>{presentationStyleLabel}</p>
+              <p><span className="block text-[10px] font-bold tracking-wide uppercase">Processing</span>{assemblySummary} · {privacySummary}</p>
+            </div>
+          </article>
+
+          <div className="rounded-md border border-[#D7D9D3] bg-white p-4 text-xs leading-5 text-[#666862]">
+            <strong className="text-[#173F5F]">What happens next:</strong> GM Studio creates the job, uploads any new files, analyses the media, and shows its interpretation before editing starts. Nothing is published automatically.
+          </div>
+        </section>
       </main>
 
-      <footer className="z-50 shrink-0 touch-none border-t border-[#D7D9D3] bg-white px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] dark:bg-white">
+      <footer className="z-50 shrink-0 touch-none scroll-mt-4 border-t border-[#D7D9D3] bg-white px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))] dark:bg-white" id="create-action">
+        <div className="mx-auto w-full max-w-7xl">
         {formError ? (
           <p className="mb-3 flex items-start gap-1.5 text-xs leading-relaxed text-[#A23B2A]" role="alert">
             <CircleAlertIcon aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
             {formError}
           </p>
         ) : null}
-        <div className="mb-4 flex items-end justify-between">
+        <div className="mb-3 flex items-end justify-between">
           <div>
-            <span className="block font-mono text-[10px] font-bold text-[#666862] uppercase">Total selected</span>
+            <span className="block font-mono text-[10px] font-bold text-[#666862] uppercase">{jobId ? "Job progress" : `Step ${createStep} of 3`}</span>
             <span className="text-sm font-bold text-[#173F5F]">
               {totalItems === 0
                 ? "No media"
@@ -1890,40 +2238,38 @@ function NewJobFormContent() {
               </span>
             ) : null}
           </div>
-          {allReady ? (
+          {uploadsTransferred ? (
             <Badge className="rounded-sm border-[#BFE3FF] bg-[#E8F5FF] font-mono text-[10px] font-bold text-[#173F5F]" variant="outline">
-              <CheckIcon aria-hidden="true" /> Ready
+              <CheckIcon aria-hidden="true" /> Uploaded
             </Badge>
           ) : null}
         </div>
-        <Button
-          className="h-14 w-full touch-manipulation rounded-md bg-[#173F5F] text-sm font-bold text-white hover:bg-[#12344F] focus-visible:ring-[#173F5F]/35 disabled:bg-[#8A9CAB]"
-          disabled={isSubmitting || !library.selectionReady || (jobId !== undefined && (!allReady || !assemblyReady))}
-          onClick={jobId !== undefined && allReady ? () => void startEditing() : undefined}
-          type={jobId !== undefined && allReady ? "button" : "submit"}
-        >
-          {isSubmitting ? (
-            <>
-              <LoaderCircleIcon aria-hidden="true" className="animate-spin motion-reduce:animate-none" />
-              Creating job…
-            </>
-          ) : jobId !== undefined && allReady ? (
-            <>
-              Start editing
-              <ArrowRightIcon aria-hidden="true" />
-            </>
-          ) : jobId !== undefined ? (
-            <>
-              <LoaderCircleIcon aria-hidden="true" className="animate-spin motion-reduce:animate-none" />
-              Uploads underway
-            </>
-          ) : (
-            <>
-              {entries.length > 0 ? "Create job & upload" : "Create job"}
-              <ArrowRightIcon aria-hidden="true" />
-            </>
-          )}
-        </Button>
+        {jobId !== undefined ? (
+          <Button
+            className="h-14 w-full touch-manipulation rounded-md bg-[#173F5F] text-sm font-bold text-white hover:bg-[#12344F] focus-visible:ring-[#173F5F]/35 disabled:bg-[#8A9CAB]"
+            disabled={isSubmitting || !uploadsTransferred}
+            onClick={uploadsTransferred ? () => void startEditing() : undefined}
+            type="button"
+          >
+            {isSubmitting ? <><LoaderCircleIcon aria-hidden="true" className="animate-spin motion-reduce:animate-none" /><span>Starting edit…</span></> : uploadsTransferred ? <><span>Continue to editing</span><ArrowRightIcon aria-hidden="true" /></> : <><LoaderCircleIcon aria-hidden="true" className="animate-spin motion-reduce:animate-none" /><span>Finish uploads to continue</span></>}
+          </Button>
+        ) : (
+          <div className={cn("grid gap-2", createStep > 1 && "grid-cols-[auto_1fr]")}>
+            {createStep > 1 ? <Button className="h-14 px-5" onClick={() => goToStep(createStep === 3 ? 2 : 1)} type="button" variant="outline">Back</Button> : null}
+            <Button
+              className="h-14 w-full touch-manipulation rounded-md bg-[#173F5F] text-sm font-bold text-white hover:bg-[#12344F] focus-visible:ring-[#173F5F]/35 disabled:bg-[#8A9CAB]"
+              disabled={isSubmitting || !library.selectionReady || totalItems === 0 || !compositionReady}
+              onClick={createStep < 3 ? () => goToStep((createStep + 1) as CreateStep) : undefined}
+              type={createStep === 3 ? "submit" : "button"}
+            >
+              {isSubmitting ? <><LoaderCircleIcon aria-hidden="true" className="animate-spin motion-reduce:animate-none" />Creating job…</>
+                : createStep === 1 ? <>Continue to direction<ArrowRightIcon aria-hidden="true" /></>
+                  : createStep === 2 ? <>Review job<ArrowRightIcon aria-hidden="true" /></>
+                    : <>{entries.length > 0 ? "Create job & upload" : "Create job"}<ArrowRightIcon aria-hidden="true" /></>}
+            </Button>
+          </div>
+        )}
+        </div>
       </footer>
     </form>
   );

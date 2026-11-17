@@ -64,6 +64,45 @@ class EditPlanValidationTests(unittest.TestCase):
             self.assertIn("source_audio_gain_db", schema["required"])
             self.assertEqual(schema["properties"]["source_audio_gain_db"]["maximum"], 12)
 
+    def test_ai_schema_exposes_every_supported_transition(self) -> None:
+        supported = {"cut", "dip_to_black", "cross_dissolve"}
+
+        for recipe in ("talking_head", "montage"):
+            schema = schema_for_recipe(recipe)["properties"]["clips"]["items"]
+            self.assertEqual(
+                set(schema["properties"]["transition"]["enum"]),
+                supported,
+            )
+
+    def test_green_screen_plan_keeps_dialogue_on_selected_foreground(self) -> None:
+        background_id = uuid4()
+        self.assets.append(
+            {
+                "asset_id": str(background_id),
+                "duration_seconds": 30.0,
+                "mime_type": "video/mp4",
+                "has_video": True,
+                "has_audio": True,
+            }
+        )
+        direction = {
+            "composition": {
+                "mode": "green_screen",
+                "foreground_asset_id": str(self.asset_id),
+                "background_asset_id": str(background_id),
+            }
+        }
+
+        plan = validate_edit_plan(self.document, self.assets, creative_direction=direction)
+        self.assertEqual(plan.clips[0].asset_id, self.asset_id)
+
+        invalid = {
+            **self.document,
+            "clips": [{**self.document["clips"][0], "asset_id": str(background_id)}],
+        }
+        with self.assertRaisesRegex(ValueError, "selected foreground"):
+            validate_edit_plan(invalid, self.assets, creative_direction=direction)
+
     def test_rejects_invented_asset(self) -> None:
         self.document["clips"][0]["asset_id"] = str(uuid4())
         with self.assertRaisesRegex(ValueError, "does not belong"):

@@ -319,6 +319,15 @@ def request_preview(job_id: UUID) -> dict[str, Any]:
     context = _context_or_http(job_id)
     if not context["assets"]:
         raise HTTPException(status_code=409, detail="the job has no source media")
+    composition = context["job"].get("composition") or {}
+    if composition.get("mode") == "green_screen":
+        attached = {str(asset["asset_id"]) for asset in context["assets"]}
+        foreground = str(composition.get("foreground_asset_id") or "")
+        background = str(composition.get("background_asset_id") or "")
+        if not foreground or not background or foreground == background:
+            raise HTTPException(status_code=409, detail="green screen needs distinct foreground and background sources")
+        if foreground not in attached or background not in attached:
+            raise HTTPException(status_code=409, detail="green-screen sources are no longer attached to this job")
     with connection() as database:
         database.execute("SELECT id FROM jobs WHERE id = %s FOR UPDATE", (job_id,)).fetchone()
         latest = database.execute(
@@ -352,12 +361,9 @@ def request_preview(job_id: UUID) -> dict[str, Any]:
             "ready",
         }:
             return _response(latest)
-        if context["job"].get("assembly_mode") and not context["job"].get("assembly_decision"):
-            from app.assembly import persist_assembly
-            try:
-                persist_assembly(database, context)
-            except ValueError as error:
-                raise HTTPException(status_code=422, detail=str(error)) from error
+        # Queue immediately, even while a just-finished upload is being finalized
+        # and analysed. claim_pending_edit only releases the run when every source
+        # is ready, and the worker persists the assembly decision at that point.
         if latest is not None and latest["status"] == "failed":
             assert_job_capacity(database, job_id)
             row = database.execute(

@@ -18,10 +18,7 @@ export function PreciseClipEditor({
   const [split, setSplit] = useState(
     ((clip.source_in + clip.source_out) / 2).toFixed(3),
   );
-  const [mode, setMode] = useState("trim");
-  const [transition, setTransition] = useState<
-    "cut" | "dip_to_black" | "cross_dissolve"
-  >("cross_dissolve");
+  const [mode, setMode] = useState<"trim" | "split">("trim");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   async function submit(event: FormEvent) {
@@ -38,9 +35,7 @@ export function PreciseClipEditor({
             clip_index: clip.clip_index,
             clip_id: clip.clip_id || undefined,
             action: "keep",
-            ...(mode === "transition"
-              ? { transition }
-              : mode === "split"
+            ...(mode === "split"
                 ? { split_at: Number(split) }
                 : { source_in: Number(start), source_out: Number(end) }),
           },
@@ -73,15 +68,12 @@ export function PreciseClipEditor({
           <select
             className={input}
             value={mode}
-            onChange={(e) => setMode(e.currentTarget.value)}
+            onChange={(e) =>
+              setMode(e.currentTarget.value as "trim" | "split")
+            }
           >
             <option value="trim">Trim / slip source range</option>
             <option value="split">Split at source time</option>
-            {clip.clip_index > 0 ? (
-              <option value="transition">
-                Picture transition into this clip
-              </option>
-            ) : null}
           </select>
         </label>
         {mode === "trim" ? (
@@ -146,23 +138,6 @@ export function PreciseClipEditor({
               </div>
             ) : null}
           </>
-        ) : mode === "transition" ? (
-          <label className="block text-xs">
-            Picture transition
-            <select
-              className={input}
-              value={transition}
-              onChange={(e) =>
-                setTransition(e.currentTarget.value as typeof transition)
-              }
-            >
-              <option value="cross_dissolve">
-                Soft dissolve · speech stays in time
-              </option>
-              <option value="dip_to_black">Dip to black</option>
-              <option value="cut">Cut</option>
-            </select>
-          </label>
         ) : (
           <label className="block text-xs">
             Split at

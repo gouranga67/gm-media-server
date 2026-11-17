@@ -128,6 +128,47 @@ class ProjectResponse(BaseModel):
     updated_at: datetime
 
 
+class BriefInterpretationRequest(BaseModel):
+    brief: str = Field(default="", max_length=4000)
+
+
+class BriefInterpretationResponse(BaseModel):
+    instruction_mode: Literal[
+        "supplied_script", "ordered_scenes", "ordered_points", "creative_brief"
+    ]
+    wording_fidelity: Literal["verbatim", "meaning", "flexible"]
+    sequence_locked: bool
+    required_item_count: int = Field(ge=0)
+    interpretation: str
+    ai_may_decide: list[str]
+    suggested_publishing_preset: Literal[
+        "custom", "instagram_reel", "tiktok", "youtube_short", "linkedin_landscape", "facebook_square"
+    ]
+
+
+class JobComposition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["auto", "standard", "green_screen"] = "auto"
+    foreground_asset_id: UUID | None = None
+    background_asset_id: UUID | None = None
+    chroma_key_color: str = Field(default="#00FF00", pattern=r"^#[0-9A-Fa-f]{6}$")
+    chroma_similarity: float = Field(default=0.12, ge=0.01, le=0.4)
+    chroma_blend: float = Field(default=0.08, ge=0, le=0.3)
+    spill_suppression: float = Field(default=0.15, ge=0, le=1)
+
+    @model_validator(mode="after")
+    def validate_roles(self):
+        if self.mode == "green_screen":
+            if self.foreground_asset_id is None or self.background_asset_id is None:
+                raise ValueError("green screen requires a foreground and background source")
+            if self.foreground_asset_id == self.background_asset_id:
+                raise ValueError("foreground and background must use different sources")
+        elif self.foreground_asset_id is not None or self.background_asset_id is not None:
+            raise ValueError("source roles are only used for green screen composition")
+        return self
+
+
 class JobCreate(BaseModel):
     id: UUID | None = None
     recipe: Recipe = Recipe.TALKING_HEAD
@@ -204,6 +245,7 @@ class JobResponse(BaseModel):
     creative_profile_id: UUID | None = None
     brand_kit_id: UUID | None = None
     publishing_preset: PublishingPreset = PublishingPreset.CUSTOM
+    composition: JobComposition = Field(default_factory=JobComposition)
     cover_time_seconds: float = 1.0
     created_at: datetime
     updated_at: datetime

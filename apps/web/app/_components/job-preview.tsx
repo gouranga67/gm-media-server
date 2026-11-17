@@ -37,6 +37,7 @@ function formatTokens(value: number) {
 
 export function JobPreview({ jobId }: { readonly jobId: string }) {
   const previewVideo = useRef<HTMLVideoElement>(null);
+  const getPreviewVideo = () => previewVideo.current;
   const seekPreview = (seconds: number) => {
     const video = previewVideo.current;
     if (!video || !Number.isFinite(seconds)) return;
@@ -138,6 +139,7 @@ export function JobPreview({ jobId }: { readonly jobId: string }) {
   const fileUrl = retainedFinalAvailable ? `/api/media/jobs/${encodeURIComponent(jobId)}/final/video` : `${previewRoot}${run ? `?version=${run.version}` : ""}`;
   const downloadUrl = retainedFinalAvailable ? `/api/media/jobs/${encodeURIComponent(jobId)}/final/video` : `${previewRoot}?download=true${run ? `&version=${run.version}` : ""}`;
   const status = run?.status === "ready" && !run.preview_available && !retainedFinalAvailable ? "failed" : run?.status ?? "pending";
+  const isProcessing = Boolean(run && status !== "ready" && status !== "failed");
   const usesChatGptPlan = run?.provider === "chatgpt_plan";
   const isMontage = review?.job.recipe === "montage";
   const isLandscape = review?.job.output_aspect === "landscape";
@@ -208,6 +210,7 @@ export function JobPreview({ jobId }: { readonly jobId: string }) {
                 ref={previewVideo}
                 className={`${isLandscape ? "aspect-video" : isSquare ? "aspect-square" : "aspect-[9/16]"} w-full rounded-md bg-black object-contain`}
                 controls
+                crossOrigin="anonymous"
                 playsInline
                 preload="metadata"
                 src={fileUrl}
@@ -217,38 +220,10 @@ export function JobPreview({ jobId }: { readonly jobId: string }) {
               {run ? <SubtitleEditor key={run.id} jobId={jobId} runId={run.id} version={run.version} videoUrl={fileUrl}
                 onOpen={() => previewVideo.current?.pause()} onApplied={() => setPollGeneration((current) => current + 1)} /> : null}
               {typeof run?.manifest.subtitle_notice === "string" ? <p className="rounded border border-[#D7D9D3] bg-white p-3 text-sm text-[#173F5F]">{run.manifest.subtitle_notice}</p> : null}
-              <Button asChild className="h-14 w-full bg-[#173F5F] text-white hover:bg-[#12344F]">
-                <a href={downloadUrl}>
-                  <DownloadIcon aria-hidden="true" /> Download MP4
-                </a>
-              </Button>
-              <Button
-                className="h-12 w-full"
-                disabled={rebuilding}
-                onClick={() => void rebuild()}
-                type="button"
-                variant="outline"
-              >
-                {rebuilding ? <LoaderCircleIcon aria-hidden="true" className="animate-spin" /> : <RefreshCwIcon aria-hidden="true" />}
-                Re-render exact edit
-              </Button>
-              <p className="text-center text-xs leading-relaxed text-[#666862]">
-                Keeps this cut and uses the latest local audio and colour processing · zero AI tokens
-              </p>
-              <p className="text-center font-mono text-[10px] leading-relaxed text-[#666862]">
-                Version {run?.version} · {durationLabel} · {review?.job.edit_style ?? "legacy"} style · {review?.job.music_mode ?? "none"} music{retainedFinalAvailable ? " · final delivery playback" : ""}
-              </p>
-              {review?.job.assembly_decision ? <div className="rounded-md bg-[#EFF6FA] p-4 text-sm text-[#173F5F]">
-                <p className="font-bold">{review.job.assembly_decision.label}</p>
-                <p className="mt-1">{review.job.assembly_decision.reason}</p>
-                <p className="mt-1 text-xs">Purpose: {review.job.assembly_decision.purpose === "auto" ? "Follow the brief" : review.job.assembly_decision.purpose}. Pacing: {(review.job.assembly_decision.edit_style ?? "legacy").replaceAll("_", " ")}.</p>
-              </div> : null}
-              {prompts}
-              {review && run ? <AlternativeVersions key={run.id} jobId={jobId} run={run}
-                versions={review.versions} onUpdated={() => setPollGeneration((current) => current + 1)} /> : null}
               {run ? (
                 <JobReviewControls
                   onSeek={seekPreview}
+                  getPreviewVideo={getPreviewVideo}
                   finalExport={currentFinalExport}
                   jobId={jobId}
                   onUpdated={() => setPollGeneration((current) => current + 1)}
@@ -260,11 +235,46 @@ export function JobPreview({ jobId }: { readonly jobId: string }) {
                   )}
                   editorialTimeline={review?.editorial_timeline ?? []}
                   storyAssessment={review?.story_assessment}
+                  composition={review?.job.composition}
                   initialCoverTime={review?.job.cover_time_seconds ?? 1}
                   initialFeedback={review?.latest_feedback ?? null}
                   run={run}
                 />
               ) : null}
+              <details className="rounded-md border border-[#D7D9D3] bg-white p-4">
+                <summary className="min-h-11 cursor-pointer content-center text-sm font-bold text-[#173F5F]">Preview file, history &amp; technical details</summary>
+                <div className="mt-4 space-y-4 border-t border-[#E5E6E1] pt-4">
+                  <Button asChild className="h-12 w-full" variant="outline">
+                    <a href={downloadUrl}>
+                      <DownloadIcon aria-hidden="true" /> Download preview MP4
+                    </a>
+                  </Button>
+                  <Button
+                    className="h-12 w-full"
+                    disabled={rebuilding}
+                    onClick={() => void rebuild()}
+                    type="button"
+                    variant="outline"
+                  >
+                    {rebuilding ? <LoaderCircleIcon aria-hidden="true" className="animate-spin" /> : <RefreshCwIcon aria-hidden="true" />}
+                    Re-render exact edit
+                  </Button>
+                  <p className="text-xs leading-relaxed text-[#666862]">
+                    Re-rendering keeps this cut and uses the latest local audio and colour processing · zero AI tokens.
+                  </p>
+                  <p className="font-mono text-[10px] leading-relaxed text-[#666862]">
+                    Version {run?.version} · {durationLabel} · {review?.job.edit_style ?? "legacy"} style · {review?.job.music_mode ?? "none"} music{retainedFinalAvailable ? " · final delivery playback" : ""}
+                  </p>
+                  {review?.job.assembly_decision ? <div className="rounded-md bg-[#EFF6FA] p-4 text-sm text-[#173F5F]">
+                    <p className="font-bold">{review.job.assembly_decision.label}</p>
+                    <p className="mt-1">{review.job.assembly_decision.reason}</p>
+                    <p className="mt-1 text-xs">Purpose: {review.job.assembly_decision.purpose === "auto" ? "Follow the brief" : review.job.assembly_decision.purpose}. Pacing: {(review.job.assembly_decision.edit_style ?? "legacy").replaceAll("_", " ")}.</p>
+                  </div> : null}
+                  {prompts}
+                  {review && run ? <AlternativeVersions key={run.id} jobId={jobId} run={run}
+                    versions={review.versions} onUpdated={() => setPollGeneration((current) => current + 1)} /> : null}
+                </div>
+              </details>
               {review ? (
                 <section className="rounded-md border border-[#D7D9D3] bg-white p-5">
                   <div className="flex items-start justify-between gap-4">
@@ -315,7 +325,12 @@ export function JobPreview({ jobId }: { readonly jobId: string }) {
               </Button>
             </div>
           ) : run ? (
-            <EditProgress run={run} checkedAt={checkedAt} connectionError={Boolean(error)} />
+            <EditProgress
+              run={run}
+              checkedAt={checkedAt}
+              connectionError={Boolean(error)}
+              events={review?.events}
+            />
           ) : (
             <div className="flex min-h-[45dvh] flex-col items-center justify-center text-center">
               <LoaderCircleIcon aria-hidden="true" className="size-9 animate-spin text-[#173F5F] motion-reduce:animate-none" />
@@ -327,11 +342,11 @@ export function JobPreview({ jobId }: { readonly jobId: string }) {
           )}
           {review && (!run || status === "ready" || status === "failed") ? <JobDurationSettings key={jobId} jobId={jobId} failed={status === "failed"} onUpdated={() => setPollGeneration((value) => value + 1)} /> : null}
           {durationReview?.local_repair?.status === "trimmed_verified_quiet" ? <p className="mt-3 text-sm text-[#215B43]">A small overrun was resolved by trimming measured quiet gaps ({durationReview.local_repair.before_seconds}s → {durationReview.local_repair.after_seconds}s), with no extra model call.</p> : null}
-          {status !== "ready" && prompts ? <div className="mt-5">{prompts}</div> : null}
-          {review && run && status !== "ready" && review.versions.some((version) => version.status === "ready" && version.preview_available)
+          {status !== "ready" && !isProcessing && prompts ? <div className="mt-5">{prompts}</div> : null}
+          {review && run && status !== "ready" && !isProcessing && review.versions.some((version) => version.status === "ready" && version.preview_available)
             ? <div className="mt-5"><AlternativeVersions key={run.id} jobId={jobId} run={run}
                 versions={review.versions} onUpdated={() => setPollGeneration((current) => current + 1)} /></div> : null}
-          {usesChatGptPlan && !hasPlanUsageIssue ? (
+          {usesChatGptPlan && !hasPlanUsageIssue && !isProcessing ? (
             <div className="mt-5 flex items-center justify-between gap-4 rounded-md border border-[#D7D9D3] bg-white px-4 py-3 text-xs">
               <span className="font-mono font-bold text-[#173F5F]">Using ChatGPT plan</span>
               <a
@@ -344,10 +359,10 @@ export function JobPreview({ jobId }: { readonly jobId: string }) {
               </a>
             </div>
           ) : null}
-          {error ? <p className="mt-4 text-center text-xs text-[#A23B2A]" role="alert">{error}</p> : null}
+          {error && !isProcessing ? <p className="mt-4 text-center text-xs text-[#A23B2A]" role="alert">{error}</p> : null}
         </section>
 
-        {review && review.events.length > 0 ? (
+        {review && review.events.length > 0 && !isProcessing ? (
           <section className="mb-8 border-t border-[#D7D9D3] pt-6">
             <h2 className="font-mono text-xs font-bold tracking-wide text-[#173F5F] uppercase">Job timeline</h2>
             <ol className="mt-3 space-y-2">
@@ -364,13 +379,27 @@ export function JobPreview({ jobId }: { readonly jobId: string }) {
         ) : null}
 
         <footer className="text-center">
-          <Link className="text-sm font-bold text-[#173F5F] underline underline-offset-4" href="/jobs/new">
-            Start another job
-          </Link>
-          <span aria-hidden="true" className="mx-2 text-[#9A9C96]">·</span>
-          <Link className="text-sm font-bold text-[#173F5F] underline underline-offset-4" href="/usage">
-            AI usage
-          </Link>
+          {isProcessing ? (
+            <>
+              <Link className="text-sm font-bold text-[#173F5F] underline underline-offset-4" href="/jobs">
+                View all jobs
+              </Link>
+              <span aria-hidden="true" className="mx-2 text-[#9A9C96]">·</span>
+              <Link className="text-sm font-bold text-[#173F5F] underline underline-offset-4" href="/jobs/new">
+                Start another edit
+              </Link>
+            </>
+          ) : (
+            <>
+              <Link className="text-sm font-bold text-[#173F5F] underline underline-offset-4" href="/jobs/new">
+                Start another job
+              </Link>
+              <span aria-hidden="true" className="mx-2 text-[#9A9C96]">·</span>
+              <Link className="text-sm font-bold text-[#173F5F] underline underline-offset-4" href="/usage">
+                AI usage
+              </Link>
+            </>
+          )}
         </footer>
       </div>
     </main>
