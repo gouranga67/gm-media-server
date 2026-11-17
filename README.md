@@ -29,6 +29,8 @@ Editor model ---> constrained JSON edit plan ---> validator ---> FFmpeg renderer
 
 Start with the illustrated [system architecture guide](docs/system-architecture-guide.md), or open its [print-ready PDF edition](docs/GM-Studio-System-Architecture-Guide.pdf). The detailed design is in [the architecture plan](docs/architecture-plan.md), current progress and exit criteria are in [the build phases](docs/build-phases.md), and the layered acceptance process is in [the testing plan](docs/testing-plan.md).
 
+For day-to-day operation, use the living [GM Studio user guide](docs/gm-studio-user-guide.md), also available inside the app at `/guide`. It explains how to prepare media, write briefs and scripts, choose presentation options, review previews, request revisions and approve delivery. Current behaviour and planned interface improvements are labelled separately.
+
 The [26 October system audit and roadmap](docs/system-audit-and-roadmap.md) reviews all page routes, model evidence, compute efficiency, editing tools and proposed next phases. Read the [illustrated audit PDF](docs/GM-Studio-System-Audit-and-Roadmap.pdf) or its [browser edition](docs/system-audit-and-roadmap.html). Proposed features are clearly separated from inspected behavior.
 
 The companion [agent editing toolkit](docs/agent-editing-toolkit.md) ([PDF](docs/GM-Studio-Agent-Editing-Toolkit.pdf)) selects useful CapCut-style capabilities for our agent, with examples, compute tradeoffs and a focused build order.
@@ -105,6 +107,18 @@ sudo ./scripts/install-service.sh
 ```
 
 The installer renders the current absolute repository path into a root-owned systemd unit. Compose publishes the web service on loopback only; route that port privately with Tailscale Serve.
+
+### Invite a trusted pilot editor
+
+For a small private pilot, give the tester network access only to the GM Studio server, then authorize the same identity inside the app:
+
+1. Share the server device through Tailscale, or invite the tester as a restricted tailnet member.
+2. Ask for the exact login email shown by their Tailscale identity.
+3. As the GM Studio owner, open `/access` and add that login as **Editor**.
+4. Have the tester open the normal private Tailscale Serve URL and complete one bounded test job.
+5. When the pilot ends, pause or remove the application member and revoke the Tailscale share or membership.
+
+Editors can create and revise work but cannot manage people, operations, learning, publishing administration or the creative catalogue. GM Studio is currently one shared private studio: editors can see shared jobs and media, so use this only with trusted testers and do not treat it as tenant isolation. Never use Funnel, public port forwarding, SSH access or a shared owner account for pilot access.
 
 ## Connect ChatGPT plan sharing
 

@@ -94,7 +94,7 @@ flowchart TB
 
 ### Private access
 
-Tailscale supplies the encrypted network connection and authenticated identity. The web container listens only on the server's loopback interface. The configured owner can invite active editor or viewer identities that already belong to the tailnet.
+Tailscale supplies the encrypted network connection and authenticated identity. The web container listens only on the server's loopback interface. The configured owner can authorize an active editor or viewer by the exact login supplied through Tailscale Serve. A trusted pilot may reach the server as a restricted tailnet member or through a share of that server device; application access is still granted separately in **People & access**. GM Studio remains one shared studio rather than isolated customer workspaces.
 
 ### Control plane
 

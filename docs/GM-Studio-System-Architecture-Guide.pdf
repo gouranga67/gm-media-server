@@ -184,7 +184,7 @@ endobj
 << /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 3 0 R /F2 4 0 R /F3 5 0 R /F4 6 0 R >> >> /Contents 11 0 R >>
 endobj
 13 0 obj
-<< /Length 5163 >>
+<< /Length 5634 >>
 stream
 BT /F2 9.40 Tf 0.090 0.310 0.470 rg 1 0 0 1 56.00 779.89 Tm (12) Tj ET
 BT /F1 9.40 Tf 0.100 0.150 0.190 rg 1 0 0 1 72.00 779.89 Tm (Job history, model usage, edit provenance, and recovery backups remain available.) Tj ET
@@ -219,24 +219,27 @@ BT /F1 7.50 Tf 0.100 0.150 0.190 rg 1 0 0 1 316.64 554.89 Tm (- AI director) Tj 
 BT /F1 7.50 Tf 0.100 0.150 0.190 rg 1 0 0 1 316.64 542.89 Tm (- Validator + FFmpeg) Tj ET
 BT /F2 11.80 Tf 0.090 0.310 0.470 rg 1 0 0 1 54.00 486.89 Tm (Private access) Tj ET
 BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 465.89 Tm (Tailscale supplies the encrypted network connection and authenticated identity. The web container) Tj ET
-BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 452.49 Tm (listens only on the server's loopback interface. The configured owner can invite active editor or) Tj ET
-BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 439.09 Tm (viewer identities that already belong to the tailnet.) Tj ET
-BT /F2 11.80 Tf 0.090 0.310 0.470 rg 1 0 0 1 54.00 412.69 Tm (Control plane) Tj ET
-BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 391.69 Tm (FastAPI is the authority for projects, assets, jobs, edit plans, approvals, library metadata,) Tj ET
-BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 378.29 Tm (access roles, and downloads. PostgreSQL is the durable source of truth. Redis is a lightweight) Tj ET
-BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 364.89 Tm (wake-up signal; losing Redis does not erase the job because the durable state remains in) Tj ET
-BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 351.49 Tm (PostgreSQL.) Tj ET
-BT /F2 11.80 Tf 0.090 0.310 0.470 rg 1 0 0 1 54.00 325.09 Tm (Media plane) Tj ET
-BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 304.09 Tm (The media filesystem contains originals and separate derived files. The worker claims durable work,) Tj ET
-BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 290.69 Tm (performs analysis or rendering, writes results atomically, and updates PostgreSQL. Originals are) Tj ET
-BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 277.29 Tm (never overwritten by an edit.) Tj ET
-BT /F2 11.80 Tf 0.090 0.310 0.470 rg 1 0 0 1 54.00 250.89 Tm (Editorial plane) Tj ET
-BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 229.89 Tm (The editorial model receives structured evidence and returns JSON matching a strict schema. It does) Tj ET
-BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 216.49 Tm (not receive shell access, Docker access, arbitrary filesystem paths, or permission to invent an) Tj ET
-BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 203.09 Tm (asset ID. The validator rejects unknown sources, invalid time ranges, unsupported effects, and) Tj ET
-BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 189.69 Tm (unsafe plans before FFmpeg sees them.) Tj ET
-q 0.270 0.720 0.780 rg 54.00 161.29 4.00 15.00 re f Q
-BT /F2 15.50 Tf 0.067 0.176 0.302 rg 1 0 0 1 66.00 157.29 Tm (Services and responsibilities) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 452.49 Tm (listens only on the server's loopback interface. The configured owner can authorize an active) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 439.09 Tm (editor or viewer by the exact login supplied through Tailscale Serve. A trusted pilot may reach the) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 425.69 Tm (server as a restricted tailnet member or through a share of that server device; application access) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 412.29 Tm (is still granted separately in People & access. GM Studio remains one shared studio rather than) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 398.89 Tm (isolated customer workspaces.) Tj ET
+BT /F2 11.80 Tf 0.090 0.310 0.470 rg 1 0 0 1 54.00 372.49 Tm (Control plane) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 351.49 Tm (FastAPI is the authority for projects, assets, jobs, edit plans, approvals, library metadata,) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 338.09 Tm (access roles, and downloads. PostgreSQL is the durable source of truth. Redis is a lightweight) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 324.69 Tm (wake-up signal; losing Redis does not erase the job because the durable state remains in) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 311.29 Tm (PostgreSQL.) Tj ET
+BT /F2 11.80 Tf 0.090 0.310 0.470 rg 1 0 0 1 54.00 284.89 Tm (Media plane) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 263.89 Tm (The media filesystem contains originals and separate derived files. The worker claims durable work,) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 250.49 Tm (performs analysis or rendering, writes results atomically, and updates PostgreSQL. Originals are) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 237.09 Tm (never overwritten by an edit.) Tj ET
+BT /F2 11.80 Tf 0.090 0.310 0.470 rg 1 0 0 1 54.00 210.69 Tm (Editorial plane) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 189.69 Tm (The editorial model receives structured evidence and returns JSON matching a strict schema. It does) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 176.29 Tm (not receive shell access, Docker access, arbitrary filesystem paths, or permission to invent an) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 162.89 Tm (asset ID. The validator rejects unknown sources, invalid time ranges, unsupported effects, and) Tj ET
+BT /F1 9.60 Tf 0.100 0.150 0.190 rg 1 0 0 1 54.00 149.49 Tm (unsafe plans before FFmpeg sees them.) Tj ET
+q 0.270 0.720 0.780 rg 54.00 121.09 4.00 15.00 re f Q
+BT /F2 15.50 Tf 0.067 0.176 0.302 rg 1 0 0 1 66.00 117.09 Tm (Services and responsibilities) Tj ET
 q 0.820 0.850 0.860 RG 0.50 w 54.00 35.00 m 541.28 35.00 l S Q
 BT /F1 7.20 Tf 0.340 0.390 0.420 rg 1 0 0 1 54.00 21.00 Tm (GM Studio System Architecture) Tj ET
 BT /F2 7.20 Tf 0.340 0.390 0.420 rg 1 0 0 1 507.28 21.00 Tm (4 / 11) Tj ET
@@ -787,23 +790,23 @@ xref
 0000004806 00000 n 
 0000013504 00000 n 
 0000013668 00000 n 
-0000018883 00000 n 
-0000019047 00000 n 
-0000028650 00000 n 
-0000028814 00000 n 
-0000036158 00000 n 
-0000036322 00000 n 
-0000037085 00000 n 
-0000037249 00000 n 
-0000043005 00000 n 
-0000043169 00000 n 
-0000050211 00000 n 
-0000050375 00000 n 
-0000055445 00000 n 
-0000055609 00000 n 
-0000063199 00000 n 
+0000019354 00000 n 
+0000019518 00000 n 
+0000029121 00000 n 
+0000029285 00000 n 
+0000036629 00000 n 
+0000036793 00000 n 
+0000037556 00000 n 
+0000037720 00000 n 
+0000043476 00000 n 
+0000043640 00000 n 
+0000050682 00000 n 
+0000050846 00000 n 
+0000055916 00000 n 
+0000056080 00000 n 
+0000063670 00000 n 
 trailer
 << /Size 29 /Root 1 0 R >>
 startxref
-63363
+63834
 %%EOF
