@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Consolidate the streamlined Create, review, composition and media-library work into a deployable checkpoint before inviting a second real editor. This checkpoint records source and pre-deployment appliance evidence; it does not claim that the current migration or worker image is deployed.
+Consolidate the streamlined Create, review, composition and media-library work into a deployable checkpoint before inviting a second real editor. The checkpoint was deployed after its source and pre-deployment appliance evidence passed.
 
 ## Evidence available
 
@@ -24,17 +24,26 @@ The authenticated read-only health snapshot generated at `2026-11-17T04:37:08Z` 
 - a checked encrypted local backup completed at `2026-11-17T03:27:46Z`;
 - a checked encrypted off-site copy last verified at `2026-11-16T05:13:35Z`.
 
-This is the rollback baseline. The current branch still requires a privileged install and migration before its new build identity can be accepted.
+This is the rollback baseline used for the rollout.
+
+## Post-deployment verification
+
+The controlled restart completed successfully at 3:18 pm AEST on 17 November 2026. Independent authenticated checks then confirmed:
+
+- deployed build `307fbbcdd455350acd1cc55743fc99ffd584e303`;
+- all seven expected services healthy and all application timers active;
+- no pending analysis, visual, catalogue, edit or final jobs;
+- no job failures in the preceding 24 hours;
+- migration 050 active, demonstrated by the persisted job composition contract;
+- the appliance health summary remained healthy after the restart.
 
 ## Deployment acceptance still required
 
-1. Create a current backup and record the deployed rollback point.
-2. Install migration `050_job_composition.sql` and verify it is the database checkpoint.
-3. Run `sudo ./scripts/verify-live-suite.sh` without the render/AI lane.
-4. Run the opt-in render/AI lane in a maintenance window.
-5. Review real outputs for ordinary speech, exact script, multi-source B-roll, green screen, transitions, captions and effects.
-6. Test a second real Tailscale identity as Editor and confirm owner-only routes are refused.
-7. Record Dubai upload, queue, render, playback and download observations against exact job IDs.
+1. Retain the complete `sudo ./scripts/verify-live-suite.sh` terminal result with the deployment evidence.
+2. Run the opt-in render/AI lane in a maintenance window.
+3. Review real outputs for ordinary speech, exact script, multi-source B-roll, green screen, transitions, captions and effects.
+4. Test a second real Tailscale identity as Editor and confirm owner-only routes are refused.
+5. Record Dubai upload, queue, render, playback and download observations against exact job IDs.
 
 ## Pilot boundary
 
