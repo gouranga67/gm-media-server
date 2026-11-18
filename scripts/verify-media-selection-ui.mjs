@@ -2389,11 +2389,12 @@ test('archiving a playback case and upgrading an old lesson remain separate loca
 function releaseReadinessFixture(){return {version:1,build_id:'a'.repeat(40),generated_at:'2026-11-03T00:00:00Z',schema_ready:true,
   private_pilot_complete:false,publishing_acceptance_complete:false,public_customer_launch_ready:false,automatic_model_calls:0,automatic_posts:0,
   checks:[{key:'story_playback',label:'Downloaded final reel',scope:'private',evidence_kind:'edit',allow_na:false,observation:null},
+    {key:'green_screen_playback',label:'Green-screen quality',scope:'private',evidence_kind:'edit',allow_na:false,observation:null},
     {key:'library_intake',label:'Library intake',scope:'private',evidence_kind:'note',allow_na:false,observation:null},
     {key:'scheduled_post',label:'Scheduled post',scope:'publishing',evidence_kind:'post',allow_na:false,observation:null}],
   technical:[{key:'meta',label:'Meta app configured',scope:'publishing',status:'pending',detail:'Connect the account.'}],
   queues:{edits:1,analysis:0,exports:0,posts:0,failed_posts:0,uncertain_posts:0},history:[],
-  playback_options:[{job_id:jobId,version:3,project_name:'Good product edit',has_final:true},{job_id:serverId,version:1,project_name:'Preview only',has_final:false}],
+  playback_options:[{job_id:jobId,version:3,project_name:'Good product edit',composition_mode:'auto',has_final:true},{job_id:serverId,version:1,project_name:'Green presenter',composition_mode:'green_screen',has_final:false}],
   published_posts:[{id:'scheduled',platform:'instagram',account_name:'Studio',version:3,job_id:jobId,schedule_requested:true,publish_at:'2026-11-02T01:00:00Z'},
     {id:'legacy',platform:'instagram',account_name:'Earlier post',version:2,job_id:jobId,schedule_requested:null,publish_at:'2026-11-01T01:00:00Z'}]};}
 async function mountRelease(){releaseFailure=false;releaseFixture=releaseReadinessFixture();await act(async()=>root.render(React.createElement(PilotChecklist)));await waitFor(()=>document.querySelector('[aria-label="Acceptance check"]'));}
@@ -2401,7 +2402,7 @@ async function mountRelease(){releaseFailure=false;releaseFixture=releaseReadine
 test('release acceptance stays read-only until an explicit, complete observed result',async()=>{
   await mountRelease();assert.equal(calls.filter(c=>c.method!=='GET').length,0);
   assert.equal(button('Save acceptance observation').disabled,true);
-  assert.equal([...document.querySelector('select[aria-label="Acceptance preview"]').options].some(o=>o.textContent==='Preview only · version 1'),false);
+  assert.equal([...document.querySelector('select[aria-label="Acceptance preview"]').options].some(o=>o.textContent==='Green presenter · version 1'),false);
   await chooseOption('select[aria-label="Acceptance preview"]',`${jobId}/3`);
   await type('textarea[aria-label="Acceptance observation note"]','Downloaded and watched the final reel on my phone.');
   assert.equal(button('Save acceptance observation').disabled,true);
@@ -2413,6 +2414,19 @@ test('release acceptance stays read-only until an explicit, complete observed re
   assert.equal(posts('release/acceptance')[0].body.version,3);
   assert.equal(posts('publish').length,0);assert.equal(posts('trial').length,0);
   assert.ok(document.body.textContent.includes('Observation saved'));
+});
+
+test('green-screen acceptance guides the quality check and offers only matching previews',async()=>{
+  await mountRelease();assert.ok(document.body.textContent.includes('Check hair and hand edges'));
+  assert.ok([...document.querySelectorAll('a[href="/jobs/new"]')].some(link=>link.textContent.includes('Start green-screen test')));
+  await chooseOption('select[aria-label="Acceptance check"]','green_screen_playback');
+  const options=[...document.querySelector('select[aria-label="Acceptance preview"]').options].map(option=>[option.value,option.textContent]);
+  assert.deepEqual(options,[['','Choose a completed preview…'],[`${serverId}/1`,'Green presenter · version 1']]);
+  await chooseOption('select[aria-label="Acceptance preview"]',`${serverId}/1`);
+  await type('textarea[aria-label="Acceptance observation note"]','Checked hair, hands, background, captions and speech sync on my phone.');
+  await click(document.querySelector('[aria-label="Confirm actual observation"]'));await click(button('Save acceptance observation'));
+  assert.equal(posts('release/acceptance')[0].body.check_key,'green_screen_playback');
+  assert.equal(posts('release/acceptance')[0].body.job_id,serverId);assert.equal(posts('release/acceptance')[0].body.version,1);
 });
 
 test('release saving failures preserves the note and stable retry identity',async()=>{

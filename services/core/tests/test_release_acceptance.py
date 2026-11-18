@@ -16,7 +16,10 @@ from test_publishing import settings
 class ReleaseDatabase:
     def __init__(self):
         self.calls=[];self.saved={};self.current=[]
-        self.run=dict(id=uuid4(),version=2,status='ready',preview_path='preview.mp4',approved_at=datetime.now(timezone.utc),manifest={'edit_plan_sha256':'b'*64})
+        self.composition=dict(mode='green_screen',foreground_asset_id=str(uuid4()),background_asset_id=str(uuid4()),
+            chroma_key_color='#00FF00',chroma_similarity=0.12,chroma_blend=0.08,spill_suppression=0.15)
+        self.run=dict(id=uuid4(),version=2,status='ready',preview_path='preview.mp4',approved_at=datetime.now(timezone.utc),
+            manifest={'edit_plan_sha256':'b'*64,'creative_direction':{'composition':self.composition}})
         self.final=dict(id=uuid4(),video_path='final.mp4')
         self.post=dict(id=uuid4(),status='published',schedule_requested=True,publish_at=datetime.now(timezone.utc),approved_revision=1,platform='instagram',video_sha256='c'*64)
     @contextmanager
@@ -91,6 +94,14 @@ class ReleaseAcceptanceTests(unittest.TestCase):
         with self.assertRaises(HTTPException):release.record_observation(payload.model_copy(update={'id':uuid4()}),'owner')
         self.db.run['preview_path']='../outside.mp4'
         with self.assertRaises(HTTPException):release.record_observation(payload.model_copy(update={'id':uuid4()}),'owner')
+    def test_green_screen_pass_requires_and_records_exact_composition(self):
+        payload=self.payload().model_copy(update=dict(check_key='green_screen_playback',job_id=uuid4(),version=2))
+        release.record_observation(payload,'owner')
+        evidence=self.db.saved[payload.id]['evidence']['composition']
+        self.assertEqual(evidence['mode'],'green_screen');self.assertEqual(evidence['chroma_key_color'],'#00FF00')
+        self.db.run['manifest']['creative_direction']['composition']={'mode':'auto'}
+        with self.assertRaisesRegex(HTTPException,'green-screen composition'):
+            release.record_observation(payload.model_copy(update={'id':uuid4()}),'owner')
     def test_failure_can_be_recorded_without_a_playable_edit(self):
         release.record_observation(self.payload().model_copy(update={'result':'fail','check_key':'story_playback'}),'owner')
         self.assertEqual(next(iter(self.db.saved.values()))['result'],'fail')

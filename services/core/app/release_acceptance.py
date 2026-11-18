@@ -25,6 +25,7 @@ from app import meta_publishing as meta
 router = APIRouter(prefix="/api/v1/release", tags=["release acceptance"])
 CHECKS = (
     ("story_playback", "Downloaded final reel: story, words, colour and sound on a phone", "private", "edit", False),
+    ("green_screen_playback", "Review a green-screen preview: key edges, background, captions and sound", "private", "edit", False),
     ("caption_revision", "Edit captions and make a targeted revision", "private", "edit", False),
     ("library_intake", "Import, organise and find mixed media", "private", "note", False),
     ("concurrent_work", "Upload or search while another edit renders", "private", "edit", False),
@@ -174,6 +175,7 @@ def readiness(x_gm_user_login: str | None = Header(default=None)):
             JOIN publishing_drafts d ON d.id=p.draft_id JOIN final_exports f ON f.id=d.final_export_id
             JOIN edit_runs r ON r.id=f.edit_run_id WHERE p.status='published' ORDER BY p.updated_at DESC LIMIT 50""").fetchall())
         playback = list(database.execute("""SELECT r.job_id,r.version,pr.name AS project_name,
+            COALESCE(j.composition->>'mode','auto') AS composition_mode,
             r.approved_at IS NOT NULL AND EXISTS(SELECT 1 FROM final_exports f WHERE f.edit_run_id=r.id AND f.status='ready') AS has_final FROM edit_runs r
             JOIN jobs j ON j.id=r.job_id JOIN projects pr ON pr.id=j.project_id
             WHERE r.status='ready' AND j.archived_at IS NULL ORDER BY r.completed_at DESC NULLS LAST,r.id DESC LIMIT 50""").fetchall())
@@ -190,7 +192,7 @@ class ObservationCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     id: UUID
     build_id: str = Field(pattern=r"^[0-9a-f]{7,64}$")
-    check_key: Literal["story_playback","caption_revision","library_intake","concurrent_work","access_roles","restore_recovery","reboot_recovery","instagram_post","facebook_post","scheduled_post"]
+    check_key: Literal["story_playback","green_screen_playback","caption_revision","library_intake","concurrent_work","access_roles","restore_recovery","reboot_recovery","instagram_post","facebook_post","scheduled_post"]
     result: Literal["pass","fail","not_applicable"]
     note: str = Field(min_length=8,max_length=2000)
     job_id: UUID | None = None
@@ -237,7 +239,19 @@ def record_observation(payload: ObservationCreate, x_gm_user_login: str | None =
             if not run or (payload.result == "pass" and not preview_available(run,settings.media_root)):
                 raise HTTPException(409,"choose an available exact preview for a passing playback check")
             run_id = run["id"]
-            evidence["edit"] = {"run_id":str(run_id),"version":run["version"],"plan_sha256":(run.get("manifest") or {}).get("edit_plan_sha256")}
+            manifest = run.get("manifest") or {}
+            evidence["edit"] = {"run_id":str(run_id),"version":run["version"],"plan_sha256":manifest.get("edit_plan_sha256")}
+            if payload.check_key == "green_screen_playback" and payload.result == "pass":
+                direction = manifest.get("creative_direction") if isinstance(manifest.get("creative_direction"),dict) else {}
+                composition = direction.get("composition") if isinstance(direction.get("composition"),dict) else {}
+                if composition.get("mode") != "green_screen":
+                    raise HTTPException(409,"choose a preview created with the green-screen composition mode")
+                evidence["composition"] = {
+                    key:composition.get(key) for key in (
+                        "mode","foreground_asset_id","background_asset_id","chroma_key_color",
+                        "chroma_similarity","chroma_blend","spill_suppression",
+                    )
+                }
             if payload.check_key == "story_playback" and payload.result == "pass":
                 final = database.execute("SELECT id,video_path FROM final_exports WHERE edit_run_id=%s AND status='ready' ORDER BY created_at DESC LIMIT 1",(run_id,)).fetchone()
                 try:

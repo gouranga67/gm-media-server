@@ -51,6 +51,19 @@ For an uneven or non-standard screen, pause the main preview on a representative
 
 **Create composition preview** keeps the current cut, speech, captions, music and effects and makes a new local version with zero AI tokens. Source roles remain fixed after editing begins.
 
+### Quality-test a green-screen edit
+
+Use one short presenter clip with visible hair, hands and some movement. Choose a background with enough detail to reveal missed green edges, but avoid a very busy pattern for the first test.
+
+1. Create the job in **Green screen** mode and assign both roles before submission.
+2. Watch the first preview without tuning it. Note the exact moments where edges, shadows or reflected green look wrong.
+3. If necessary, sample an evenly lit part of the screen, then adjust similarity in small steps. Increase edge blend only enough to soften chatter; excessive blend can erase hair and fingers. Add spill suppression only when reflected green is visible on skin, hair or clothing.
+4. Create a composition preview and watch it at normal speed, paused on difficult edges, and full-screen on a phone.
+5. Confirm that the background fills the frame, the presenter remains sharp, speech and captions stay synchronized, and no background audio has been introduced.
+6. Open **Studio → Pilot acceptance**, choose the green-screen quality check and record the exact preview as Pass or Fail with the device and moments inspected.
+
+A failed result is useful evidence. Record it before experimenting further so the affected version and settings remain identifiable.
+
 ## Find and organise media
 
 **Current:** The main Library is a search-first gallery. The large search box is always available and can match display names, recorded words and indexed scene descriptions. Start typing from the folder home and GM Studio automatically opens the searchable **All media** view.
