@@ -134,6 +134,7 @@ def system_information() -> dict[str, Any]:
         "cutout_lab": {"version": "person_cutout_lab_v1", "manual_comparison_only": True,
             "model": "PPHumanSeg 2023mar", "max_sample_seconds": 3, "sample_fps": 8,
             "processing_budget_seconds": 20, "cpu_only": True, "automatic_processing": False,
+            "in_app_chosen_background_comparison": True,
             "edit_application": False, "quality_approved": False, "hosted_model_calls": 0},
         "grounded_revisions": {"version": 1, "quoted_phrase_audio": True, "verified_quiet_pause": True, "server_preflight": True, "hosted_model_calls": 0},
         "context_intelligence": {"version": 2, "incident_bundle_version": 2, "complete_attempt_and_response": True,

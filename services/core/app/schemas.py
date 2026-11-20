@@ -149,7 +149,7 @@ class BriefInterpretationResponse(BaseModel):
 class JobComposition(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    mode: Literal["auto", "standard", "green_screen"] = "auto"
+    mode: Literal["auto", "standard", "person_cutout", "green_screen"] = "auto"
     foreground_asset_id: UUID | None = None
     background_asset_id: UUID | None = None
     chroma_key_color: str = Field(default="#00FF00", pattern=r"^#[0-9A-Fa-f]{6}$")
@@ -159,13 +159,13 @@ class JobComposition(BaseModel):
 
     @model_validator(mode="after")
     def validate_roles(self):
-        if self.mode == "green_screen":
+        if self.mode in {"person_cutout", "green_screen"}:
             if self.foreground_asset_id is None or self.background_asset_id is None:
-                raise ValueError("green screen requires a foreground and background source")
+                raise ValueError("background replacement requires a foreground and background source")
             if self.foreground_asset_id == self.background_asset_id:
                 raise ValueError("foreground and background must use different sources")
         elif self.foreground_asset_id is not None or self.background_asset_id is not None:
-            raise ValueError("source roles are only used for green screen composition")
+            raise ValueError("source roles are only used for background replacement")
         return self
 
 

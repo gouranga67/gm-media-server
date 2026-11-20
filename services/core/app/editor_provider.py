@@ -633,11 +633,12 @@ def _model_content(context: dict[str, Any], settings: Settings) -> list[dict[str
             "A selected concept's cited source order takes precedence over generic hook ranking.\n\n"
         )
     composition = public.get("job", {}).get("composition") or {}
-    if composition.get("mode") == "green_screen":
+    if composition.get("mode") in {"green_screen", "person_cutout"}:
+        composition_label = "Green-screen composition" if composition.get("mode") == "green_screen" else "Background-replacement testing"
         source_instruction += (
-            "Green-screen composition is already configured by the user. Use only the asset marked "
+            f"{composition_label} is already configured by the user. Use only the asset marked "
             "composition_role=foreground for dialogue clips. The asset marked composition_role=background "
-            "is a full-frame presentation layer rendered behind the keyed foreground; do not use it as a "
+            "is reserved as a full-frame presentation layer; do not use it as a "
             "dialogue clip, B-roll cue or substitute source. Preserve the foreground's recorded speech and "
             "choose cuts exactly as you would for an ordinary talking-head edit.\n\n"
         )
@@ -1080,7 +1081,7 @@ def create_edit_plan(
         planner = deterministic_montage_plan if recipe == "montage" else deterministic_plan
         composition = context.get("job", {}).get("composition") or {}
         planning_assets = assets
-        if composition.get("mode") == "green_screen":
+        if composition.get("mode") in {"green_screen", "person_cutout"}:
             foreground = str(composition.get("foreground_asset_id") or "")
             planning_assets = [asset for asset in assets if str(asset.get("asset_id")) == foreground]
         return planner(

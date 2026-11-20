@@ -116,25 +116,44 @@ def segment(model, frame):
     return np.rint(probability * 255).astype(np.uint8)
 
 
-def comparison_panel(frame, alpha, source_time):
+def comparison_panel(frame, alpha, source_time, background=None):
     import cv2
     import numpy as np
     height, width = alpha.shape
     yy, xx = np.indices((height, width))
-    board = np.where((xx // 16 + yy // 16) % 2, 180, 225).astype(np.uint8)
-    board = np.repeat(board[:, :, None], 3, axis=2)
+    board = background
+    if board is None:
+        board = np.where((xx // 16 + yy // 16) % 2, 180, 225).astype(np.uint8)
+        board = np.repeat(board[:, :, None], 3, axis=2)
+    if board.shape != frame.shape:
+        raise ValueError("replacement background dimensions do not match the sample")
     weight = alpha[:, :, None].astype(np.float32) / 255
     composite = np.rint(frame * weight + board * (1 - weight)).astype(np.uint8)
     mask = np.repeat(alpha[:, :, None], 3, axis=2)
     panel = np.full((height + 28, width * 3, 3), 245, np.uint8)
     panel[28:] = np.concatenate((frame, composite, mask), axis=1)
-    for i, title in enumerate(("Original", "Cutout test", "Mask")):
+    middle_title = "Chosen background" if background is not None else "Cutout test"
+    for i, title in enumerate(("Original", middle_title, "Mask")):
         cv2.putText(panel, f"{title} {source_time:.2f}s", (i * width + 4, 18), cv2.FONT_HERSHEY_SIMPLEX,
             min(.4, width / 340), (35, 45, 50), 1, cv2.LINE_AA)
     return panel
 
 
-def render_comparison(source, sample, model_path, output):
+def decode_background(source, width, height):
+    import numpy as np
+    result = subprocess.run([
+        "ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-i", str(source),
+        "-vf", f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height}",
+        "-frames:v", "1", "-pix_fmt", "bgr24", "-f", "rawvideo", "pipe:1",
+    ], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        timeout=6, check=True)
+    expected = width * height * 3
+    if len(result.stdout) != expected:
+        raise ValueError("replacement background could not be decoded")
+    return np.frombuffer(result.stdout, np.uint8).reshape(height, width, 3)
+
+
+def render_comparison(source, sample, model_path, output, background_source=None):
     import cv2
     import numpy as np
     from app.product_tracking import decoder
@@ -147,6 +166,7 @@ def render_comparison(source, sample, model_path, output):
     if not math.floor((sample.end - sample.start) * FPS) <= count <= MAX_FRAMES:
         raise ValueError("incomplete sample decode")
     frames = np.frombuffer(decoded.stdout, np.uint8).reshape(count, height, width, 3)
+    background = decode_background(background_source, width, height) if background_source else None
     decode_seconds = time.monotonic() - started
     panels, coverages, uncertainty, changes = [], [], [], []
     previous = None
@@ -157,7 +177,7 @@ def render_comparison(source, sample, model_path, output):
         uncertainty.append(float(np.mean((alpha > 25) & (alpha < 230))))
         if previous is not None:
             changes.append(float(np.mean((alpha >= 128) != (previous >= 128))))
-        panels.append(comparison_panel(frame, alpha, sample.start + index / FPS))
+        panels.append(comparison_panel(frame, alpha, sample.start + index / FPS, background))
         if index == 0:
             rgba = cv2.cvtColor(frame, cv2.COLOR_BGR2BGRA)
             rgba[:, :, 3] = alpha
@@ -249,12 +269,18 @@ def artifact_path(media_root, job_id, key, filename):
     return path, ARTIFACT_TYPES[filename]
 
 
-def create_comparison(source, sample, settings):
+def create_comparison(source, sample, settings, *, background_source=None, background_asset_id=None):
     from app.media_analysis import ensure_capacity
     sample = Sample.model_validate(sample)
     model_path = checked_model(getattr(settings, "cutout_model_path", MODEL_PATH))
     stat = Path(source).stat()
-    identity = [VERSION, MODEL_SHA256, sample.model_dump(mode="json"), str(source), stat.st_size, stat.st_mtime_ns]
+    background_identity = None
+    if background_source is not None:
+        background_stat = Path(background_source).stat()
+        background_identity = [str(background_source), background_stat.st_size, background_stat.st_mtime_ns,
+            str(UUID(str(background_asset_id)))]
+    identity = [VERSION, MODEL_SHA256, sample.model_dump(mode="json"), str(source), stat.st_size, stat.st_mtime_ns,
+        background_identity]
     key = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
     root = lab_root(settings.media_root)
     with lab_slot(root):
@@ -277,7 +303,8 @@ def create_comparison(source, sample, settings):
                 env={**os.environ, "OMP_NUM_THREADS": "1", "OPENBLAS_NUM_THREADS": "1", "CUDA_VISIBLE_DEVICES": "-1"})
             try:
                 output, _ = process.communicate(json.dumps(dict(source=str(source), sample=sample.model_dump(mode="json"),
-                    model=str(model_path), output=str(temporary))).encode(), timeout=BUDGET_SECONDS)
+                    model=str(model_path), output=str(temporary),
+                    background=str(background_source) if background_source is not None else None)).encode(), timeout=BUDGET_SECONDS)
             except subprocess.TimeoutExpired:
                 try:
                     os.killpg(process.pid, signal.SIGKILL)
@@ -297,6 +324,8 @@ def create_comparison(source, sample, settings):
                 artifacts[name] = dict(bytes=path.stat().st_size, sha256=hashlib.sha256(path.read_bytes()).hexdigest())
             report = dict(version=VERSION, model="PPHumanSeg 2023mar", model_sha256=MODEL_SHA256, model_license="Apache-2.0",
                 cache_key=key, sample=sample.model_dump(mode="json"), metrics=metrics, artifacts=artifacts,
+                background_asset_id=str(UUID(str(background_asset_id))) if background_asset_id is not None else None,
+                comparison_kind="chosen_background" if background_source is not None else "checkerboard",
                 eligible_for_edit_application=False, quality_approved=False, human_review_items=REVIEW_ITEMS,
                 alpha_kind="segmentation_probability_not_hair_matting", hosted_model_calls=0,
                 original_files_changed=0, edit_versions_created=0, final_exports_created=0)
@@ -333,7 +362,8 @@ if __name__ == "__main__":
     try:
         if sys.argv[1:] == ["--inspect"]:
             payload = json.loads(sys.stdin.read(8192))
-            result = render_comparison(Path(payload["source"]), Sample.model_validate(payload["sample"]), Path(payload["model"]), Path(payload["output"]))
+            result = render_comparison(Path(payload["source"]), Sample.model_validate(payload["sample"]), Path(payload["model"]),
+                Path(payload["output"]), Path(payload["background"]) if payload.get("background") else None)
             print(json.dumps(result, allow_nan=False))
         else:
             main()

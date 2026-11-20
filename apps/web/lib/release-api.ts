@@ -19,7 +19,7 @@ export type ReleaseReadiness = {
   readonly queues: Readonly<Record<string, number>>;
   readonly history: readonly ReleaseObservation[];
   readonly playback_options: readonly { readonly job_id: string; readonly version: number; readonly project_name: string;
-    readonly composition_mode: "auto" | "green_screen"; readonly has_final: boolean }[];
+    readonly composition_mode: "auto" | "standard" | "person_cutout" | "green_screen"; readonly has_final: boolean }[];
   readonly published_posts: readonly { readonly id: string; readonly platform: string; readonly account_name: string;
     readonly schedule_requested: boolean | null; readonly publish_at: string; readonly version: number; readonly job_id: string }[];
 };

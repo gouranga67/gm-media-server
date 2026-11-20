@@ -896,7 +896,8 @@ function NewJobFormContent() {
   const backgroundCandidates = compositionSources.filter(
     (source) => source.mediaType.startsWith("video/") || source.mediaType.startsWith("image/"),
   );
-  const compositionReady = compositionMode !== "green_screen"
+  const usesAssignedBackground = compositionMode === "person_cutout" || compositionMode === "green_screen";
+  const compositionReady = !usesAssignedBackground
     || (
       foregroundAssetId !== null
       && backgroundAssetId !== null
@@ -931,7 +932,7 @@ function NewJobFormContent() {
   const chooseCompositionMode = (mode: JobCompositionMode) => {
     setCompositionMode(mode);
     setFormError(undefined);
-    if (mode !== "green_screen") {
+    if (mode !== "green_screen" && mode !== "person_cutout") {
       setForegroundAssetId(null);
       setBackgroundAssetId(null);
       return;
@@ -1130,7 +1131,7 @@ function NewJobFormContent() {
         return;
       }
       if (!compositionReady) {
-        setFormError("Choose different foreground and background sources for green screen.");
+        setFormError("Choose different presenter and background sources for background replacement.");
         return;
       }
       goToStep(createStep === 1 ? 2 : 3);
@@ -1143,7 +1144,7 @@ function NewJobFormContent() {
       return;
     }
     if (!compositionReady) {
-      setFormError("Choose different foreground and background sources for green screen.");
+      setFormError("Choose different presenter and background sources for background replacement.");
       return;
     }
 
@@ -1258,8 +1259,8 @@ function NewJobFormContent() {
     try {
       await setJobComposition(jobId, {
         mode: compositionMode,
-        foreground_asset_id: compositionMode === "green_screen" ? foregroundAssetId : null,
-        background_asset_id: compositionMode === "green_screen" ? backgroundAssetId : null,
+        foreground_asset_id: usesAssignedBackground ? foregroundAssetId : null,
+        background_asset_id: usesAssignedBackground ? backgroundAssetId : null,
         chroma_key_color: "#00FF00",
         chroma_similarity: 0.12,
         chroma_blend: 0.08,
@@ -1656,13 +1657,13 @@ function NewJobFormContent() {
             <div>
               <p className="font-mono text-[10px] font-bold tracking-wider text-[#174D73] uppercase">Composition</p>
               <h2 className="mt-1 text-lg font-bold text-[#173F5F]" id="composition-heading">How should these pictures work together?</h2>
-              <p className="mt-1 text-xs leading-5 text-[#666862]">Most jobs can stay automatic. Choose green screen when one video contains the presenter and another item is the intended background.</p>
+              <p className="mt-1 text-xs leading-5 text-[#666862]">Most jobs can stay automatic. Choose background replacement only when you want the presenter placed over a specific image or video.</p>
             </div>
             <div className="mt-4 grid gap-3 sm:grid-cols-3">
               {([
                 ["auto", "Automatic", "GM Studio chooses a normal source-led edit."],
                 ["standard", "Standard edit", "Use cuts, framing and supporting pictures without keying."],
-                ["green_screen", "Green screen", "Place a keyed presenter over one chosen background."],
+                ["person_cutout", "Replace background · Beta", "Test a presenter filmed against an ordinary wall or room."],
               ] as const).map(([value, label, description]) => (
                 <label className={cn("min-h-28 rounded-md p-4", compositionMode === value ? "border-2 border-[#173F5F] bg-[#EFF6FA]" : "border border-[#D7D9D3] bg-white", formLocked ? "cursor-not-allowed opacity-60" : "cursor-pointer")} key={value}>
                   <span className="flex items-center gap-2">
@@ -1673,8 +1674,16 @@ function NewJobFormContent() {
                 </label>
               ))}
             </div>
-            {compositionMode === "green_screen" ? (
+            <details className="mt-3 rounded-md border border-[#D7D9D3] bg-[#F7F7F5] px-3 py-2" open={compositionMode === "green_screen"}>
+              <summary className="min-h-11 cursor-pointer content-center text-xs font-bold text-[#173F5F]">Advanced · I filmed against a solid green or blue screen</summary>
+              <label className={cn("mt-2 flex min-h-14 items-center gap-3 rounded-md border bg-white p-3", compositionMode === "green_screen" ? "border-[#173F5F]" : "border-[#D7D9D3]", formLocked ? "cursor-not-allowed opacity-60" : "cursor-pointer")}>
+                <input checked={compositionMode === "green_screen"} className="size-5 accent-[#173F5F]" disabled={formLocked} name="composition-mode" onChange={() => chooseCompositionMode("green_screen")} type="radio" value="green_screen" />
+                <span><span className="block text-sm font-bold text-[#173F5F]">Chroma key · prepared screen</span><span className="mt-1 block text-xs leading-5 text-[#666862]">Only use this for a real, evenly lit green or blue backdrop—not a white or timber wall.</span></span>
+              </label>
+            </details>
+            {usesAssignedBackground ? (
               <div className="mt-4 rounded-md border border-[#BFD2DE] bg-[#EFF6FA] p-4">
+                <p className="mb-3 text-xs leading-5 text-[#53646F]">{compositionMode === "person_cutout" ? "Beta creates a short isolation test after the first edit. The normal preview and export always keep the original background in this beta." : "Chroma key removes the selected solid screen throughout the preview."}</p>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <label className="space-y-2 text-xs font-bold text-[#173F5F]">
                     FOREGROUND · PRESENTER
@@ -1686,7 +1695,7 @@ function NewJobFormContent() {
                       <option value="">Choose presenter video</option>
                       {foregroundCandidates.map((source) => <option key={source.id} value={source.id}>{source.label} · {source.origin}</option>)}
                     </select>
-                    <span className="block font-normal leading-5 text-[#53646F]">This video supplies the keyed picture and the recorded speech.</span>
+                    <span className="block font-normal leading-5 text-[#53646F]">This video supplies the presenter picture and recorded speech.</span>
                   </label>
                   <label className="space-y-2 text-xs font-bold text-[#173F5F]">
                     BACKGROUND
@@ -1697,7 +1706,7 @@ function NewJobFormContent() {
                     <span className="block font-normal leading-5 text-[#53646F]">A photo or video fills the complete frame behind the presenter.</span>
                   </label>
                 </div>
-                {!compositionReady ? <p className="mt-3 flex items-start gap-1.5 text-xs text-[#A23B2A]" role="status"><CircleAlertIcon aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />Add at least one presenter video and a different image or video background.</p> : <p className="mt-3 flex items-center gap-1.5 text-xs font-bold text-[#215B43]"><CheckIcon aria-hidden="true" className="size-3.5" />Green-screen sources assigned</p>}
+                {!compositionReady ? <p className="mt-3 flex items-start gap-1.5 text-xs text-[#A23B2A]" role="status"><CircleAlertIcon aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />Add at least one presenter video and a different image or video background.</p> : <p className="mt-3 flex items-center gap-1.5 text-xs font-bold text-[#215B43]"><CheckIcon aria-hidden="true" className="size-3.5" />Presenter and background assigned</p>}
               </div>
             ) : null}
           </section>
@@ -2197,7 +2206,7 @@ function NewJobFormContent() {
               </div>
               <p className="mt-4 line-clamp-5 whitespace-pre-line text-sm leading-6 text-[#53646F]">{brief.trim() || "No brief supplied. GM Studio will find a coherent story from the selected media."}</p>
               {briefInterpretation ? <div className="mt-4 rounded-md bg-[#EFF6FA] p-3"><p className="text-xs font-bold text-[#173F5F]">{briefInterpretation.interpretation}</p>{briefInterpretation.sequence_locked ? <p className="mt-1 text-xs text-[#53646F]">Requested order will be protected.</p> : null}</div> : null}
-              <p className="mt-3 text-xs text-[#53646F]"><span className="font-bold text-[#173F5F]">Composition:</span> {compositionMode === "green_screen" ? "Green screen with assigned presenter and background" : compositionMode === "standard" ? "Standard edit" : "Automatic"}</p>
+              <p className="mt-3 text-xs text-[#53646F]"><span className="font-bold text-[#173F5F]">Composition:</span> {compositionMode === "green_screen" ? "Chroma key with assigned presenter and background" : compositionMode === "person_cutout" ? "Ordinary-background replacement beta test" : compositionMode === "standard" ? "Standard edit" : "Automatic"}</p>
             </article>
           </div>
 

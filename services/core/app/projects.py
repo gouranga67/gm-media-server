@@ -1166,7 +1166,7 @@ def attach_job_assets(job_id: UUID, payload: JobAssetAttach) -> dict[str, Any]:
 
 @router.put("/jobs/{job_id}/composition", response_model=JobComposition)
 def set_job_composition(job_id: UUID, payload: JobComposition) -> dict[str, Any]:
-    """Set draft roles or tune an existing green-screen composition."""
+    """Set draft picture roles or tune an existing chroma-key composition."""
 
     with connection() as database:
         job = database.execute(
@@ -1193,9 +1193,9 @@ def set_job_composition(job_id: UUID, payload: JobComposition) -> dict[str, Any]
                 detail="source roles are fixed after editing starts; only green-screen key settings can change",
             )
 
-        if payload.mode == "green_screen":
+        if payload.mode in {"person_cutout", "green_screen"}:
             if job["recipe"] != "talking_head":
-                raise HTTPException(status_code=422, detail="green screen requires a talking-head job")
+                raise HTTPException(status_code=422, detail="background replacement requires a talking-head job")
             role_ids = [payload.foreground_asset_id, payload.background_asset_id]
             rows = database.execute(
                 """
@@ -1213,9 +1213,9 @@ def set_job_composition(job_id: UUID, payload: JobComposition) -> dict[str, Any]
                     detail="foreground and background must already be attached to this job",
                 )
             if not inventory[payload.foreground_asset_id].startswith("video/"):
-                raise HTTPException(status_code=422, detail="green-screen foreground must be video")
+                raise HTTPException(status_code=422, detail="the presenter source must be video")
             if not inventory[payload.background_asset_id].startswith(("video/", "image/")):
-                raise HTTPException(status_code=422, detail="green-screen background must be video or an image")
+                raise HTTPException(status_code=422, detail="the replacement background must be video or an image")
 
         document = payload.model_dump(mode="json")
         database.execute(

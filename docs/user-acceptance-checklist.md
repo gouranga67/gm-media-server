@@ -120,7 +120,8 @@ Open **Finishing tools · local preview** on a ready job. These tools require ex
 | F6 | Review image as a contained picture layer | The whole intended card remains readable, with no accidental fill-crop or caption collision. |
 | F7 | Picture-in-picture, circle crop, opacity and entrance animation | Size/position/timing match the settings. A circle intentionally crops; a rectangle contains the image. |
 | F8 | Genuine transparent PNG | Actual transparency reveals the underlying video. A checkerboard baked into the image is not transparency. |
-| F9 | Green/blue-screen keying | The chosen screen colour disappears with acceptable edges. It does not promise automatic person/background cutout on ordinary footage. |
+| F9 | Prepared green/blue-screen chroma keying | The chosen screen colour disappears with acceptable edges. This mode is labelled as requiring a real solid screen. |
+| F9b | Replace background beta with white, timber or ordinary room wall | The review page creates a bounded two-second original/result/mask comparison using the chosen background. Inspect hair, hands, held items, holes and flicker. The edit, original and final export remain unchanged; a usable sample is not yet production approval. |
 | F10 | Retime or freeze a silent picture layer | Its visual timing changes without speeding, slowing or desynchronizing the main speech. |
 | F11 | Selected music and excerpt start | The chosen track is audible from the requested part, speech remains clear and the ending fades appropriately. |
 | F12 | Independent audio/picture join at a quiet boundary | One clip's recorded audio can lead or trail its picture without cutting a word, overlapping unrelated speech or moving captions to the wrong audio. |

@@ -157,6 +157,9 @@ globalThis.fetch = async (url, options = {}) => {
   else if (route.endsWith("/ranges") && route.startsWith("library/assets/")) payload = [];
   else if (route.includes("/ranges/") && route.startsWith("library/assets/")) payload = body;
   else if (route === `jobs/${jobId}/review`) payload=previewFixture;
+  else if (route === `jobs/${jobId}/cutout-lab`) payload={cache_key:"c".repeat(64),comparison_kind:"chosen_background",background_asset_id:serverId,
+    eligible_for_edit_application:false,quality_approved:false,human_review_items:["Hair and face edges","Both hands and fingers","Entire held product and its label","Background holes and unwanted objects","Temporal flicker through the whole sample","Local processing cost"],
+    metrics:{sampled_frames:16,sample_fps:8,processing_seconds:1.5,warnings:[]}};
   else if (route === `jobs/${jobId}/revisions`) {
     if (revisionFailure) return {ok:false,status:422,json:async()=>({detail:"That quote occurs more than once. Add in clip N; no new edit was queued."})};
     payload = { id: "revision", version: 3, status: "pending" };
@@ -438,7 +441,7 @@ test("green screen assigns uploaded or library media before preview and freezes 
   const background = new File(["background fixture"], "office-background.jpg", { type: "image/jpeg" });
   await selectFiles('input[aria-label="Add files from this device"]', [background]);
   await click(document.querySelector('input[name="composition-mode"][value="green_screen"]'));
-  assert.match(document.body.textContent, /Green-screen sources assigned/);
+  assert.match(document.body.textContent, /Presenter and background assigned/);
   await click(button("Continue to direction"));
   await click(button("Review job"));
   await click(button("Create job & upload"));
@@ -459,6 +462,21 @@ test("green screen assigns uploaded or library media before preview and freezes 
     spill_suppression: .15,
   });
   assert.equal(posts("/preview").length, 1);
+});
+
+test("ordinary-wall replacement is a separate beta and keeps assigned sources for its review test", async () => {
+  await act(async () => root.render(React.createElement(NewJobForm)));
+  await waitFor(() => document.querySelector(`input[aria-label="Use ${serverAsset.source_name}"]`));
+  await click(document.querySelector(`input[aria-label="Use ${serverAsset.source_name}"]`));
+  await selectFiles('input[aria-label="Add files from this device"]', [new File(["background"], "room.jpg", { type: "image/jpeg" })]);
+  await click(document.querySelector('input[name="composition-mode"][value="person_cutout"]'));
+  assert.match(document.body.textContent, /white, timber or normal room background is allowed|ordinary wall or room/i);
+  assert.match(document.body.textContent, /Presenter and background assigned/);
+  await click(button("Continue to direction"));await click(button("Review job"));await click(button("Create job & upload"));
+  await waitFor(() => transfers.length === 1);const background=posts("/assets").find(call=>call.route.startsWith("projects/"));
+  await act(async () => transfers[0].callbacks.onSuccess());await waitFor(() => !button("Continue to editing").disabled);await click(button("Continue to editing"));
+  const saved=calls.find(call=>call.method==="PUT"&&call.route===`jobs/${jobId}/composition`).body;
+  assert.equal(saved.mode,"person_cutout");assert.equal(saved.foreground_asset_id,serverId);assert.equal(saved.background_asset_id,background.body.id);
 });
 
 test("library upload waits for submission, creates no job, resumes, and refreshes after analysis", async () => {
@@ -1508,6 +1526,23 @@ test("green-screen review tunes the saved key only after explicit preview submis
   dom.HTMLCanvasElement.prototype.getContext=originalContext;
 });
 
+test("ordinary-background beta creates an explicit comparison and never presents it as an applied export", async () => {
+  const run={id:"ready",version:2,status:"ready",caption_settings:{},manifest:{}};
+  const composition={mode:"person_cutout",foreground_asset_id:"presenter",background_asset_id:"background",
+    chroma_key_color:"#00FF00",chroma_similarity:.12,chroma_blend:.08,spill_suppression:.15};
+  await act(async()=>root.render(React.createElement(JobReviewControls,{jobId,run,finalExport:null,
+    outputAspect:"vertical",recipe:"talking_head",targetDuration:30,deliveryVariants:[],editorialTimeline:[],
+    composition,initialCoverTime:1,initialFeedback:null,onUpdated:()=>{}})));
+  assert.match(document.body.textContent,/Test your ordinary wall/);
+  assert.match(document.body.textContent,/does not change the edit or final export/);
+  await click(button("Create background replacement test"));
+  await waitFor(()=>document.querySelector('video[src*="cutout-lab"]'));
+  assert.equal(posts("cutout-lab")[0].body.edit_version,2);
+  assert.match(document.body.textContent,/Original.*Chosen background.*Mask/s);
+  await click(button("Looks usable for this shot"));
+  assert.match(document.body.textContent,/exported reel still keeps its original background/);
+});
+
 test("finishing workspace reveals task groups before individual controls", async () => {
   await act(async()=>root.render(React.createElement(FinishingWorkspace,{jobId,version:2,clips:[toolClip],onUpdated:()=>{}})));
   const details=document.querySelector("details");
@@ -2416,9 +2451,9 @@ test('release acceptance stays read-only until an explicit, complete observed re
   assert.ok(document.body.textContent.includes('Observation saved'));
 });
 
-test('green-screen acceptance guides the quality check and offers only matching previews',async()=>{
-  await mountRelease();assert.ok(document.body.textContent.includes('Check hair and hand edges'));
-  assert.ok([...document.querySelectorAll('a[href="/jobs/new"]')].some(link=>link.textContent.includes('Start green-screen test')));
+test('pilot page guides ordinary-wall beta separately and green-screen acceptance still filters matching previews',async()=>{
+  await mountRelease();assert.ok(document.body.textContent.includes('Ordinary-wall background replacement'));
+  assert.ok([...document.querySelectorAll('a[href="/jobs/new"]')].some(link=>link.textContent.includes('Start background test')));
   await chooseOption('select[aria-label="Acceptance check"]','green_screen_playback');
   const options=[...document.querySelector('select[aria-label="Acceptance preview"]').options].map(option=>[option.value,option.textContent]);
   assert.deepEqual(options,[['','Choose a completed preview…'],[`${serverId}/1`,'Green presenter · version 1']]);

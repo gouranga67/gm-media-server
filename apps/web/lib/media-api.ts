@@ -39,7 +39,7 @@ export type ReasoningEffort = "low" | "medium" | "high";
 export type OutputAspect = "vertical" | "landscape" | "square";
 export type TargetPlatform = "all_social" | "facebook" | "instagram" | "linkedin" | "tiktok" | "youtube";
 export type PublishingPreset = "custom" | "instagram_reel" | "tiktok" | "youtube_short" | "linkedin_landscape" | "facebook_square";
-export type JobCompositionMode = "auto" | "standard" | "green_screen";
+export type JobCompositionMode = "auto" | "standard" | "person_cutout" | "green_screen";
 
 export type JobComposition = {
   readonly mode: JobCompositionMode;
@@ -49,6 +49,21 @@ export type JobComposition = {
   readonly chroma_similarity: number;
   readonly chroma_blend: number;
   readonly spill_suppression: number;
+};
+
+export type CutoutLabReport = {
+  readonly cache_key: string;
+  readonly comparison_kind: "chosen_background" | "checkerboard";
+  readonly background_asset_id: string | null;
+  readonly eligible_for_edit_application: false;
+  readonly quality_approved: false;
+  readonly human_review_items: readonly string[];
+  readonly metrics: {
+    readonly sampled_frames: number;
+    readonly sample_fps: number;
+    readonly processing_seconds: number;
+    readonly warnings: readonly string[];
+  };
 };
 
 export type Project = {
@@ -867,6 +882,17 @@ export function setJobComposition(jobId: string, composition: JobComposition) {
     method: "PUT",
     body: JSON.stringify(composition),
   });
+}
+
+export function createCutoutComparison(jobId: string, editVersion: number) {
+  return apiRequest<CutoutLabReport>(`jobs/${jobId}/cutout-lab`, {
+    method: "POST",
+    body: JSON.stringify({ edit_version: editVersion }),
+  });
+}
+
+export function cutoutArtifactUrl(jobId: string, key: string, filename: "comparison.mp4" | "contact.png" | "matte.png") {
+  return `/api/media/jobs/${encodeURIComponent(jobId)}/cutout-lab/${encodeURIComponent(key)}/${filename}`;
 }
 
 const MEDIA_TYPES_BY_EXTENSION: Readonly<Record<string, string>> = {

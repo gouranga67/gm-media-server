@@ -10,8 +10,13 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt ./
-RUN pip install --no-cache-dir --requirement requirements.txt
+COPY requirements.txt requirements-visual.txt ./
+RUN pip install --no-cache-dir --requirement requirements.txt --requirement requirements-visual.txt
+
+# The private API creates only the explicit bounded comparison. Keep the same
+# pinned local model as the worker so runtime requests never download weights.
+COPY model-assets /opt/gm-model-assets
+RUN python /opt/gm-model-assets/fetch-cutout-model.py
 
 RUN groupadd --gid 10001 gmmedia \
     && useradd --uid 10001 --gid gmmedia --create-home --shell /usr/sbin/nologin gmmedia

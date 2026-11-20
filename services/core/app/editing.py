@@ -320,14 +320,14 @@ def request_preview(job_id: UUID) -> dict[str, Any]:
     if not context["assets"]:
         raise HTTPException(status_code=409, detail="the job has no source media")
     composition = context["job"].get("composition") or {}
-    if composition.get("mode") == "green_screen":
+    if composition.get("mode") in {"green_screen", "person_cutout"}:
         attached = {str(asset["asset_id"]) for asset in context["assets"]}
         foreground = str(composition.get("foreground_asset_id") or "")
         background = str(composition.get("background_asset_id") or "")
         if not foreground or not background or foreground == background:
-            raise HTTPException(status_code=409, detail="green screen needs distinct foreground and background sources")
+            raise HTTPException(status_code=409, detail="background replacement needs distinct presenter and background sources")
         if foreground not in attached or background not in attached:
-            raise HTTPException(status_code=409, detail="green-screen sources are no longer attached to this job")
+            raise HTTPException(status_code=409, detail="background-replacement sources are no longer attached to this job")
     with connection() as database:
         database.execute("SELECT id FROM jobs WHERE id = %s FOR UPDATE", (job_id,)).fetchone()
         latest = database.execute(

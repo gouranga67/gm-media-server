@@ -19,6 +19,18 @@ class JobCompositionTests(unittest.TestCase):
                 background_asset_id=foreground,
             )
 
+    def test_person_cutout_requires_two_distinct_sources(self) -> None:
+        foreground = uuid4()
+        background = uuid4()
+        composition = JobComposition(
+            mode="person_cutout",
+            foreground_asset_id=foreground,
+            background_asset_id=background,
+        )
+        self.assertEqual(composition.mode, "person_cutout")
+        with self.assertRaises(ValidationError):
+            JobComposition(mode="person_cutout", foreground_asset_id=foreground)
+
     def test_green_screen_tuning_is_bounded(self) -> None:
         foreground = uuid4()
         background = uuid4()

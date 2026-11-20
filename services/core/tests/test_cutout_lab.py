@@ -12,11 +12,11 @@ import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import MagicMock, patch
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from fastapi import HTTPException
 from app import cutout_lab as lab
-from app.cutout_lab_routes import get_cutout_artifact
+from app.cutout_lab_routes import CutoutComparisonRequest, create_cutout_preview, get_cutout_artifact
 
 
 def sample(**changes):
@@ -108,6 +108,18 @@ class CutoutLabTests(unittest.TestCase):
         path.write_bytes(b'changed')
         with self.assertRaisesRegex(ValueError,'changed'):lab.artifact_path(self.root,self.sample.job_id,result['cache_key'],'comparison.mp4')
 
+    def test_chosen_background_is_bound_to_the_non_destructive_comparison(self):
+        background=self.root/'background.jpg';background.write_bytes(b'background bytes')
+        background_id=uuid4();process=MagicMock(returncode=0);process.communicate.side_effect=self.fake_runner
+        with patch('app.cutout_lab.checked_model',return_value=self.root/'model.onnx'),patch('app.cutout_lab.subprocess.Popen',return_value=process):
+            result=lab.create_comparison(self.source,self.sample,self.settings,
+                background_source=background,background_asset_id=background_id)
+        request=json.loads(process.communicate.call_args.args[0])
+        self.assertEqual(request['background'],str(background))
+        self.assertEqual(result['background_asset_id'],str(background_id))
+        self.assertEqual(result['comparison_kind'],'chosen_background')
+        self.assertFalse(result['eligible_for_edit_application'])
+
     def test_preview_uses_normalized_inputs_single_thread_and_a_killable_process_group(self):
         process=MagicMock(returncode=0);process.communicate.side_effect=self.fake_runner
         with patch('app.cutout_lab.checked_model',return_value=self.root/'model.onnx'),patch('app.cutout_lab.subprocess.Popen',return_value=process) as spawn:
@@ -157,6 +169,24 @@ class CutoutLabTests(unittest.TestCase):
             db.__enter__.return_value.execute.return_value.fetchone.return_value=None
             with self.assertRaises(HTTPException) as error:get_cutout_artifact(self.sample.job_id,result['cache_key'],'contact.png')
             self.assertEqual(error.exception.status_code,404)
+
+    def test_create_route_uses_saved_presenter_and_background_without_applying_edit(self):
+        from test_stabilization import plan_for
+        document=plan_for().model_dump(mode='json');foreground_id=UUID(document['clips'][0]['asset_id']);background_id=uuid4()
+        job=dict(id=self.sample.job_id,composition=dict(mode='person_cutout',foreground_asset_id=str(foreground_id),
+            background_asset_id=str(background_id)))
+        row=dict(version=3,status='ready',document=document)
+        database=MagicMock();database.__enter__.return_value.execute.return_value.fetchone.side_effect=[job,row]
+        context=dict(assets=[dict(asset_id=str(foreground_id),_storage_key='foreground.mp4'),
+            dict(asset_id=str(background_id),_storage_key='background.jpg')])
+        expected=dict(cache_key='b'*64,eligible_for_edit_application=False)
+        with patch('app.cutout_lab_routes.connection',return_value=database),\
+             patch('app.cutout_lab_routes.build_editor_context',return_value=context),\
+             patch('app.cutout_lab_routes.resolve_internal_asset_source',side_effect=[self.source,self.root/'background.jpg']),\
+             patch('app.cutout_lab_routes.get_settings',return_value=self.settings),\
+             patch('app.cutout_lab_routes.create_comparison',return_value=expected) as create:
+            self.assertEqual(create_cutout_preview(self.sample.job_id,CutoutComparisonRequest(edit_version=3)),expected)
+        self.assertEqual(create.call_args.kwargs['background_asset_id'],background_id)
 
     def test_wrapper_passes_bounded_arguments_without_a_shell_and_never_posts_or_revises(self):
         script=Path(__file__).resolve().parents[3]/'scripts/preview-cutout.py'

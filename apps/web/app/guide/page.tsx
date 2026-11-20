@@ -130,7 +130,8 @@ export default function GuidePage() {
           </div>
           <p className="mt-4 text-xs leading-5 text-[#666862]">Open <strong>Filters</strong> only for category, favourites, repeated uploads, sort order, or AI-assisted auto-sort. Open a thumbnail to preview it and edit detailed metadata.</p>
           <div className="mt-4 rounded-md border border-[#BFD2DE] bg-[#EFF6FA] p-5 text-sm leading-6 text-[#53646F]">
-            For green screen, choose <strong>Green screen</strong> while selecting media, then assign one presenter video and one background photo or video. You can mix a device upload with Library media. The presenter supplies the recorded speech; the background remains a silent visual layer. When you are ready to test quality, open <Link className="font-bold text-[#173F5F] underline" href="/studio/pilot">Pilot acceptance</Link> for the exact playback checklist.
+            To test a white wall, timber wall or ordinary room, choose <strong>Replace background · Beta</strong>, then assign one presenter video and one background photo or video. The first edit keeps the original room. On the review screen, create the two-second comparison and inspect hair, hands, held objects and flicker before deciding whether the local cutout is usable. This beta does not yet apply the effect to the final export.
+            <p className="mt-3">If you actually filmed against a solid, evenly lit green or blue screen, open <strong>Advanced</strong> and choose <strong>Chroma key · prepared screen</strong>. That dependable path applies the selected background throughout the edit and exposes key-colour controls during review.</p>
           </div>
         </section>
 
@@ -211,6 +212,9 @@ export default function GuidePage() {
           </div>
           <p className="mt-4 rounded-md border border-[#D7D9D3] bg-white p-4 text-sm leading-6 text-[#53646F]">
             <strong>What this preview uses</strong> summarises the applied treatment. Green-screen jobs also show <strong>Green-screen composition</strong>, where you can choose a preset, enter a colour, or pause the preview and sample an evenly lit part of the screen. Sampling only prepares the setting; adjust background removal, edge softness and colour spill, then explicitly create a zero-AI local preview.
+          </p>
+          <p className="mt-4 rounded-md border border-[#E7C4BC] bg-[#FFF8F4] p-4 text-sm leading-6 text-[#6E3B2F]">
+            <strong>Replace background · Beta</strong> jobs show a separate two-second comparison before the approval controls. The three panels are the original, the chosen background result and the model mask. Marking the sample usable is only a testing note in the current beta; it does not change the edit or export.
           </p>
           <div className="mt-4 rounded-md border border-[#BFD2DE] bg-[#EFF6FA] p-5 text-sm leading-6 text-[#53646F]">
             <h3 className="font-bold text-[#173F5F]">Find a treatment on the edit map</h3>

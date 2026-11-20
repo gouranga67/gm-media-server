@@ -955,18 +955,18 @@ def _validate_broll(plan: EditPlan, assets: list[dict[str, Any]], duration: floa
 
 def _validate_composition(plan: EditPlan, direction: dict[str, Any]) -> None:
     composition = direction.get("composition")
-    if not isinstance(composition, dict) or composition.get("mode") != "green_screen":
+    if not isinstance(composition, dict) or composition.get("mode") not in {"green_screen", "person_cutout"}:
         return
     if isinstance(plan, MontageEditPlan):
-        raise ValueError("green-screen composition requires the talking-head recipe")
+        raise ValueError("background replacement requires the talking-head recipe")
     foreground = str(composition.get("foreground_asset_id") or "")
     background = str(composition.get("background_asset_id") or "")
     if not foreground or not background or foreground == background:
-        raise ValueError("green-screen composition needs distinct foreground and background sources")
+        raise ValueError("background replacement needs distinct foreground and background sources")
     if any(str(clip.asset_id) != foreground for clip in plan.clips):
-        raise ValueError("green-screen dialogue clips must use the selected foreground source")
+        raise ValueError("background-replacement dialogue clips must use the selected foreground source")
     if any(str(cue.asset_id) == background for cue in plan.broll):
-        raise ValueError("the green-screen background is a composition layer, not B-roll")
+        raise ValueError("the replacement background is a composition layer, not B-roll")
 
 
 def _validate_effect_cues(

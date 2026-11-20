@@ -24,6 +24,7 @@ import { TreatmentTimeline } from "./treatment-timeline";
 import { EditingReceipt } from "./editing-receipt";
 import { PreciseClipEditor } from "./precise-clip-editor";
 import { GreenScreenCompositionControls } from "./green-screen-composition-controls";
+import { BackgroundReplacementTest } from "./background-replacement-test";
 import { TransitionBoundaryEditor } from "./transition-boundary-editor";
 import { EditFeedbackCard } from "@/app/_components/edit-feedback-card";
 import { RenderQualityCard } from "@/app/_components/render-quality-card";
@@ -480,6 +481,10 @@ export function JobReviewControls({
         </section>
       ) : null}
 
+      {composition?.mode === "person_cutout" ? (
+        <BackgroundReplacementTest jobId={jobId} key={`cutout-test-${run.version}`} version={run.version} />
+      ) : null}
+
       <section className="rounded-md border border-[#BFD2DE] bg-white p-5 shadow-sm">
         <p className="font-mono text-xs font-bold tracking-wide text-[#173F5F] uppercase">Approve version {run.version}</p>
         <h2 className="mt-2 text-xl font-bold text-[#173F5F]">What would you like to do?</h2>
@@ -520,6 +525,7 @@ export function JobReviewControls({
           <span className="rounded border border-[#D7D9D3] bg-white px-2 py-1.5">{cutCount} cuts{dissolveCount ? ` · ${dissolveCount} dissolve${dissolveCount === 1 ? "" : "s"}` : ""}{transitionCount ? ` · ${transitionCount} dip${transitionCount === 1 ? "" : "s"}` : ""}</span>
           <span className="rounded border border-[#D7D9D3] bg-white px-2 py-1.5">{plannedBroll.length} supporting visuals</span>
           {composition?.mode === "green_screen" ? <span className="rounded border border-[#BFD2DE] bg-[#EFF6FA] px-2 py-1.5 font-bold">Green screen</span> : null}
+          {composition?.mode === "person_cutout" ? <span className="rounded border border-[#E7C4BC] bg-[#FFF8F4] px-2 py-1.5 font-bold">Background replacement beta · original retained</span> : null}
           <span className="rounded border border-[#D7D9D3] bg-white px-2 py-1.5">{plannedEffects.length + localGraphics} sounds &amp; graphics</span>
           <span className="rounded border border-[#D7D9D3] bg-white px-2 py-1.5">{creativeDirection?.music_mode && creativeDirection.music_mode !== "none" ? "Music" : "No music"}</span>
           <span className="rounded border border-[#D7D9D3] bg-white px-2 py-1.5">Captions</span>
