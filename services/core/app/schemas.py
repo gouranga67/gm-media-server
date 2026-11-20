@@ -156,6 +156,7 @@ class JobComposition(BaseModel):
     chroma_similarity: float = Field(default=0.12, ge=0.01, le=0.4)
     chroma_blend: float = Field(default=0.08, ge=0, le=0.3)
     spill_suppression: float = Field(default=0.15, ge=0, le=1)
+    person_cutout_enabled: bool = False
 
     @model_validator(mode="after")
     def validate_roles(self):
@@ -166,6 +167,8 @@ class JobComposition(BaseModel):
                 raise ValueError("foreground and background must use different sources")
         elif self.foreground_asset_id is not None or self.background_asset_id is not None:
             raise ValueError("source roles are only used for background replacement")
+        if self.person_cutout_enabled and self.mode != "person_cutout":
+            raise ValueError("full-reel person cutout is only available in Replace background mode")
         return self
 
 

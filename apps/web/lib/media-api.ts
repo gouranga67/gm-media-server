@@ -49,6 +49,7 @@ export type JobComposition = {
   readonly chroma_similarity: number;
   readonly chroma_blend: number;
   readonly spill_suppression: number;
+  readonly person_cutout_enabled: boolean;
 };
 
 export type CutoutLabReport = {
@@ -888,6 +889,22 @@ export function createCutoutComparison(jobId: string, editVersion: number) {
   return apiRequest<CutoutLabReport>(`jobs/${jobId}/cutout-lab`, {
     method: "POST",
     body: JSON.stringify({ edit_version: editVersion }),
+  });
+}
+
+export function setFullReelCutout(
+  jobId: string,
+  editVersion: number,
+  enabled: boolean,
+  comparisonKey?: string,
+) {
+  return apiRequest<EditRun>(`jobs/${jobId}/person-cutout`, {
+    method: "POST",
+    body: JSON.stringify({
+      edit_version: editVersion,
+      enabled,
+      comparison_key: comparisonKey ?? null,
+    }),
   });
 }
 

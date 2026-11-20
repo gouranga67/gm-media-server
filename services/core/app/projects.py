@@ -1182,6 +1182,11 @@ def set_job_composition(job_id: UUID, payload: JobComposition) -> dict[str, Any]
             )
 
         current = JobComposition.model_validate(job.get("composition") or {})
+        if payload.person_cutout_enabled != current.person_cutout_enabled:
+            raise HTTPException(
+                status_code=409,
+                detail="use the review-screen background replacement control after testing a sample",
+            )
         if job["status"] != "draft" and (
             current.mode != "green_screen"
             or payload.mode != current.mode

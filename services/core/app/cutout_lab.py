@@ -212,6 +212,84 @@ def render_comparison(source, sample, model_path, output, background_source=None
         "uncompensated_mask_change_max": round(max(changes, default=0), 4), "warnings": warnings}
 
 
+def render_full_matte(source, model_path, destination, *, fps, width, height, duration):
+    """Create a frame-aligned lossless grayscale matte for an already assembled reel.
+
+    The caller supplies picture-only video with the exact crop, timing and camera
+    treatments used by the final render. Captions and overlays are deliberately
+    applied later, after compositing, so the person model cannot erase them.
+    """
+    import cv2
+    import numpy as np
+    source = Path(source)
+    destination = Path(destination)
+    if not source.is_file() or not 1 <= fps <= 60 or not 1 <= duration <= 120:
+        raise ValueError("invalid full-reel cutout input")
+    model = open_model(model_path)
+    capture = cv2.VideoCapture(str(source))
+    expected_frames = round(duration * fps)
+    temporary = destination.with_name(f".{destination.name}.part.mkv")
+    temporary.unlink(missing_ok=True)
+    encoder = subprocess.Popen([
+        "ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-y",
+        "-f", "rawvideo", "-pix_fmt", "gray", "-s", f"{width}x{height}",
+        "-r", str(fps), "-i", "pipe:0", "-an", "-c:v", "ffv1", "-level", "3",
+        "-pix_fmt", "gray", str(temporary),
+    ], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    frames = 0
+    started = time.monotonic()
+    try:
+        if not capture.isOpened() or encoder.stdin is None:
+            raise ValueError("the assembled reel could not be opened for person isolation")
+        while True:
+            ok, frame = capture.read()
+            if not ok:
+                break
+            if frame.shape[:2] != (height, width):
+                raise ValueError("the assembled reel changed dimensions during person isolation")
+            alpha = segment(model, frame)
+            # Preserve the probability-shaped edge seen in the accepted sample.
+            # Only lock near-certain pixels to remove compression shimmer.
+            alpha = np.where(alpha <= 3, 0, np.where(alpha >= 252, 255, alpha)).astype(np.uint8)
+            encoder.stdin.write(alpha.tobytes())
+            frames += 1
+            if frames > expected_frames + 1:
+                raise ValueError("the assembled reel exceeded its expected frame count")
+        encoder.stdin.close()
+        encoder.stdin = None
+        try:
+            _, errors = encoder.communicate(timeout=max(30, min(600, round(duration * 5))))
+        except subprocess.TimeoutExpired:
+            encoder.kill()
+            _, errors = encoder.communicate()
+            raise ValueError("full-reel person isolation exceeded its processing budget")
+        if encoder.returncode or not temporary.is_file() or temporary.stat().st_size <= 0:
+            detail = errors.decode("utf-8", "replace")[-240:] if errors else ""
+            raise ValueError(f"the full-reel person matte could not be encoded: {detail}")
+        if abs(frames - expected_frames) > 1:
+            raise ValueError("the full-reel person matte is incomplete")
+        temporary.chmod(0o440)
+        os.replace(temporary, destination)
+        return {
+            "frames": frames,
+            "fps": fps,
+            "width": width,
+            "height": height,
+            "processing_seconds": round(time.monotonic() - started, 3),
+            "model": "PPHumanSeg 2023mar",
+            "model_sha256": MODEL_SHA256,
+            "backend": "opencv_cpu",
+        }
+    except (BrokenPipeError, OSError) as error:
+        raise ValueError("full-reel person isolation stopped before completion") from error
+    finally:
+        capture.release()
+        if encoder.poll() is None:
+            encoder.kill()
+            encoder.wait()
+        temporary.unlink(missing_ok=True)
+
+
 def lab_root(media_root):
     root = Path(media_root).resolve()
     target = (root / "derived" / "cutout-lab").resolve()

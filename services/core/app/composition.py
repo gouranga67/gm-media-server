@@ -17,12 +17,18 @@ from app.media_analysis import (
 )
 
 
-def selected_green_screen_background(
-    context: dict[str, Any], settings: Any, input_index: int
+def selected_composition_background(
+    context: dict[str, Any], settings: Any, input_index: int,
+    *, cutout_matte_path: Any | None = None,
 ) -> dict[str, Any] | None:
     composition = context.get("job", {}).get("composition") or {}
-    if composition.get("mode") != "green_screen":
+    mode = composition.get("mode")
+    if mode == "person_cutout" and not composition.get("person_cutout_enabled"):
         return None
+    if mode not in {"green_screen", "person_cutout"}:
+        return None
+    if mode == "person_cutout" and cutout_matte_path is None:
+        raise ValueError("full-reel background replacement needs a prepared person matte")
     background_id = str(composition.get("background_asset_id") or "")
     asset = next(
         (item for item in context.get("assets", []) if str(item.get("asset_id")) == background_id),
@@ -37,8 +43,11 @@ def selected_green_screen_background(
         else resolve_internal_asset_render_source(settings, asset)
     )
     return {
+        "kind": mode,
         "asset_id": background_id,
         "input_index": input_index,
+        "matte_input_index": input_index + 1 if mode == "person_cutout" else None,
+        "matte_path": cutout_matte_path,
         "media_kind": media_kind,
         "path": path,
         "hdr_mode": (
@@ -55,11 +64,21 @@ def composition_background_inputs(
     if background is None:
         return []
     if background["media_kind"] == "image":
-        return still_image_input_arguments(background["path"], duration=duration)
-    return ["-stream_loop", "-1", "-i", str(background["path"])]
+        result = still_image_input_arguments(background["path"], duration=duration)
+    else:
+        result = ["-stream_loop", "-1", "-i", str(background["path"])]
+    if background.get("kind") == "person_cutout":
+        result.extend(["-i", str(background["matte_path"])])
+    return result
 
 
-def append_green_screen_background(
+def composition_input_count(background: dict[str, Any] | None) -> int:
+    if background is None:
+        return 0
+    return 2 if background.get("kind") == "person_cutout" else 1
+
+
+def append_composition_background(
     graph: str,
     background: dict[str, Any] | None,
     *,
@@ -93,22 +112,40 @@ def append_green_screen_background(
         f"crop={width}:{height},setsar=1,fps={fps},"
         f"trim=duration={duration:.3f},setpts=PTS-STARTPTS[compositionbackground]"
     )
-    settings = composition or {}
-    key_color = str(settings.get("chroma_key_color") or "#00FF00")
-    similarity = float(settings.get("chroma_similarity") or 0.12)
-    blend = float(settings.get("chroma_blend") or 0.08)
-    spill = float(settings.get("spill_suppression") or 0)
-    key_filter = (
-        "[compositionforeground]format=yuva444p,"
-        f"chromakey=0x{key_color[1:]}:{similarity:.4f}:{blend:.4f}"
-    )
-    if spill > 0:
-        spill_type = "blue" if key_color.upper() == "#0000FF" else "green"
-        key_filter += f",despill=type={spill_type}:mix={spill:.4f}"
-    parts.append(key_filter + ",format=rgba[compositionkeyed]")
+    if background.get("kind") == "person_cutout":
+        parts.append(
+            f"[{background['matte_input_index']}:v:0]"
+            f"scale={width}:{height},fps={fps},trim=duration={duration:.3f},"
+            "setpts=PTS-STARTPTS,format=gray[compositionalpha]"
+        )
+        parts.append(
+            "[compositionforeground]format=rgb24[compositioncolour]"
+        )
+        parts.append(
+            "[compositioncolour][compositionalpha]alphamerge[compositionkeyed]"
+        )
+    else:
+        settings = composition or {}
+        key_color = str(settings.get("chroma_key_color") or "#00FF00")
+        similarity = float(settings.get("chroma_similarity") or 0.12)
+        blend = float(settings.get("chroma_blend") or 0.08)
+        spill = float(settings.get("spill_suppression") or 0)
+        key_filter = (
+            "[compositionforeground]format=yuva444p,"
+            f"chromakey=0x{key_color[1:]}:{similarity:.4f}:{blend:.4f}"
+        )
+        if spill > 0:
+            spill_type = "blue" if key_color.upper() == "#0000FF" else "green"
+            key_filter += f",despill=type={spill_type}:mix={spill:.4f}"
+        parts.append(key_filter + ",format=rgba[compositionkeyed]")
     parts.append(
         "[compositionbackground][compositionkeyed]"
         "overlay=x=0:y=0:eof_action=pass:repeatlast=1[compositionbase]"
     )
     parts.append(f"[compositionbase]{captions or 'null'}[vout]")
     return ";".join(parts)
+
+
+# Compatibility names for the existing chroma-key contract and tests.
+selected_green_screen_background = selected_composition_background
+append_green_screen_background = append_composition_background

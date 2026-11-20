@@ -3,7 +3,7 @@ from uuid import uuid4
 
 from pydantic import ValidationError
 
-from app.composition import append_green_screen_background
+from app.composition import append_composition_background, append_green_screen_background, composition_input_count
 from app.schemas import JobComposition
 
 
@@ -28,8 +28,13 @@ class JobCompositionTests(unittest.TestCase):
             background_asset_id=background,
         )
         self.assertEqual(composition.mode, "person_cutout")
+        self.assertFalse(composition.person_cutout_enabled)
+        applied = composition.model_copy(update={"person_cutout_enabled": True})
+        self.assertTrue(applied.person_cutout_enabled)
         with self.assertRaises(ValidationError):
             JobComposition(mode="person_cutout", foreground_asset_id=foreground)
+        with self.assertRaises(ValidationError):
+            JobComposition(mode="standard", person_cutout_enabled=True)
 
     def test_green_screen_tuning_is_bounded(self) -> None:
         foreground = uuid4()
@@ -85,6 +90,21 @@ class JobCompositionTests(unittest.TestCase):
         )
         self.assertIn("chromakey=0x0000FF:0.2000:0.1000", result)
         self.assertIn("despill=type=blue:mix=0.3500", result)
+
+    def test_person_matte_is_composited_before_captions(self) -> None:
+        graph = "[0:v]null[base];[base]subtitles=filename='captions.ass'[vout];[0:a]anull[aout]"
+        background = {
+            "kind": "person_cutout", "input_index": 1, "matte_input_index": 2,
+            "matte_path": "matte.mkv", "media_kind": "image", "path": "background.jpg",
+            "hdr_mode": None,
+        }
+        result = append_composition_background(
+            graph, background, width=540, height=960, fps=30, duration=8,
+        )
+        self.assertEqual(composition_input_count(background), 2)
+        self.assertIn("[2:v:0]scale=540:960", result)
+        self.assertIn("[compositioncolour][compositionalpha]alphamerge", result)
+        self.assertLess(result.index("alphamerge"), result.index("subtitles="))
 
 
 if __name__ == "__main__":

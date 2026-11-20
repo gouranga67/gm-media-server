@@ -160,6 +160,7 @@ globalThis.fetch = async (url, options = {}) => {
   else if (route === `jobs/${jobId}/cutout-lab`) payload={cache_key:"c".repeat(64),comparison_kind:"chosen_background",background_asset_id:serverId,
     eligible_for_edit_application:false,quality_approved:false,human_review_items:["Hair and face edges","Both hands and fingers","Entire held product and its label","Background holes and unwanted objects","Temporal flicker through the whole sample","Local processing cost"],
     metrics:{sampled_frames:16,sample_fps:8,processing_seconds:1.5,warnings:[]}};
+  else if (route === `jobs/${jobId}/person-cutout`) payload={id:"cutout-version",version:3,status:"pending"};
   else if (route === `jobs/${jobId}/revisions`) {
     if (revisionFailure) return {ok:false,status:422,json:async()=>({detail:"That quote occurs more than once. Add in clip N; no new edit was queued."})};
     payload = { id: "revision", version: 3, status: "pending" };
@@ -429,7 +430,7 @@ test("one job combines server footage and a device upload, then continues as soo
   const compositionCalls = calls.filter((call) => call.method === "PUT" && call.route === `jobs/${jobId}/composition`);
   assert.equal(compositionCalls.length, 1);
   assert.deepEqual(compositionCalls[0].body, { mode: "auto", foreground_asset_id: null, background_asset_id: null,
-    chroma_key_color:"#00FF00",chroma_similarity:.12,chroma_blend:.08,spill_suppression:.15 });
+    chroma_key_color:"#00FF00",chroma_similarity:.12,chroma_blend:.08,spill_suppression:.15,person_cutout_enabled:false });
   assert.equal(posts("/preview").length, 1);
   assert.deepEqual(navigation, [`/jobs/${jobId}`]);
 });
@@ -460,6 +461,7 @@ test("green screen assigns uploaded or library media before preview and freezes 
     chroma_similarity: .12,
     chroma_blend: .08,
     spill_suppression: .15,
+    person_cutout_enabled: false,
   });
   assert.equal(posts("/preview").length, 1);
 });
@@ -1526,21 +1528,25 @@ test("green-screen review tunes the saved key only after explicit preview submis
   dom.HTMLCanvasElement.prototype.getContext=originalContext;
 });
 
-test("ordinary-background beta creates an explicit comparison and never presents it as an applied export", async () => {
+test("ordinary-background beta requires an accepted comparison before queuing a separate full-reel preview", async () => {
   const run={id:"ready",version:2,status:"ready",caption_settings:{},manifest:{}};
   const composition={mode:"person_cutout",foreground_asset_id:"presenter",background_asset_id:"background",
-    chroma_key_color:"#00FF00",chroma_similarity:.12,chroma_blend:.08,spill_suppression:.15};
+    chroma_key_color:"#00FF00",chroma_similarity:.12,chroma_blend:.08,spill_suppression:.15,person_cutout_enabled:false};
   await act(async()=>root.render(React.createElement(JobReviewControls,{jobId,run,finalExport:null,
     outputAspect:"vertical",recipe:"talking_head",targetDuration:30,deliveryVariants:[],editorialTimeline:[],
     composition,initialCoverTime:1,initialFeedback:null,onUpdated:()=>{}})));
   assert.match(document.body.textContent,/Test your ordinary wall/);
-  assert.match(document.body.textContent,/does not change the edit or final export/);
+  assert.match(document.body.textContent,/original version remains available/);
+  assert.equal([...document.querySelectorAll("button")].some(item=>item.textContent.trim()==="Apply background to full reel"),false);
   await click(button("Create background replacement test"));
   await waitFor(()=>document.querySelector('video[src*="cutout-lab"]'));
   assert.equal(posts("cutout-lab")[0].body.edit_version,2);
   assert.match(document.body.textContent,/Original.*Chosen background.*Mask/s);
   await click(button("Looks usable for this shot"));
-  assert.match(document.body.textContent,/exported reel still keeps its original background/);
+  assert.match(document.body.textContent,/Apply it to create a new full-reel preview/);
+  await click(button("Apply background to full reel"));
+  const applied=posts("person-cutout")[0].body;
+  assert.deepEqual(applied,{edit_version:2,enabled:true,comparison_key:"c".repeat(64)});
 });
 
 test("finishing workspace reveals task groups before individual controls", async () => {

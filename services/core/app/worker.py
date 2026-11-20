@@ -1598,6 +1598,9 @@ def process_one_final_export(state: WorkerState) -> bool:
             for key in ("story_contract_review", "story_finishing", "story_sequence_review", "editing_receipt"):
                 context[key] = export["preview_manifest"].get(key)
             context["duration_repair"] = (export["preview_manifest"].get("duration_review") or {}).get("local_repair")
+            saved_composition = ((export["preview_manifest"].get("creative_direction") or {}).get("composition"))
+            if isinstance(saved_composition, dict):
+                context["job"] = {**context["job"], "composition": saved_composition}
         render_document, _ = repair_predictable_plan_defaults(
             plan_row["document"],
             creative_direction=context["job"],
@@ -1725,7 +1728,8 @@ def claim_pending_delivery_variant() -> dict[str, Any] | None:
             """
             SELECT delivery_variants.*, edit_runs.version, edit_runs.edit_plan_id,
                    edit_runs.provider, edit_runs.model, edit_runs.caption_corrections,
-                   edit_runs.approved_at, edit_runs.duration_policy
+                   edit_runs.approved_at, edit_runs.duration_policy,
+                   edit_runs.manifest AS preview_manifest
             FROM delivery_variants
             JOIN edit_runs ON edit_runs.id = delivery_variants.edit_run_id
             WHERE delivery_variants.status = 'pending'
@@ -1776,6 +1780,10 @@ def process_one_delivery_variant(state: WorkerState) -> bool:
             apply_snapshot(context, plan_row["speech_precision_snapshot"], get_settings())
         from app.duration_policy import apply_duration_snapshot
         apply_duration_snapshot(context, variant)
+        if isinstance(variant.get("preview_manifest"), dict):
+            saved_composition = ((variant["preview_manifest"].get("creative_direction") or {}).get("composition"))
+            if isinstance(saved_composition, dict):
+                context["job"] = {**context["job"], "composition": saved_composition}
         render_document, _ = repair_predictable_plan_defaults(
             plan_row["document"],
             creative_direction=context["job"],

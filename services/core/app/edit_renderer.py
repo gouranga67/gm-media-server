@@ -4,9 +4,10 @@ from app.visual_finishing import source_crop_filter
 from app.stabilization import stabilization_filter
 from app.finishing_renderer import position_broll_cards
 from app.composition import (
-    append_green_screen_background,
+    append_composition_background,
+    composition_input_count,
     composition_background_inputs,
-    selected_green_screen_background,
+    selected_composition_background,
 )
 from app.finishing_tools import (
     apply_graph_finishing,
@@ -489,7 +490,7 @@ def _render_video(
     if music_source is not None:
         common.extend(["-stream_loop", "-1", *(["-ss", f"{plan.finishing.music_start_seconds:.3f}"] if plan.finishing and plan.finishing.music_start_seconds else []), "-i", str(music_source)])
     common.extend(composition_background_inputs(composition_background, duration=total_duration))
-    composition_inputs = 1 if composition_background is not None else 0
+    composition_inputs = composition_input_count(composition_background)
     effects = effect_sources or []
     common.extend(effect_input_arguments(effects))
     overlays = broll_sources or []
@@ -509,7 +510,7 @@ def _render_video(
     common.extend(
         [
             "-filter_complex",
-            normalize_render_audio(append_picture_layers(append_effect_filters(append_broll_filters(append_green_screen_background(_ffmpeg_filter(
+            normalize_render_audio(append_picture_layers(append_effect_filters(append_broll_filters(append_composition_background(_ffmpeg_filter(
                 plan,
                 captions_path,
                 width=width,
@@ -625,6 +626,74 @@ def _selected_music(
     return resolve_source(settings.media_root, track["_storage_key"]), public_track
 
 
+def _person_cutout_requested(context: dict[str, Any]) -> bool:
+    composition = context.get("job", {}).get("composition") or {}
+    return composition.get("mode") == "person_cutout" and bool(composition.get("person_cutout_enabled"))
+
+
+def _picture_only_plan(plan: TalkingHeadEditPlan) -> TalkingHeadEditPlan:
+    """Keep frame transforms but exclude anything that belongs above the matte."""
+    if plan.finishing is None:
+        return plan
+    tools = plan.finishing.model_copy(update={
+        "callouts": [], "pointers": [], "music_regions": [],
+        "audio_regions": [], "caption_regions": [], "layers": [], "audio_joins": [],
+        "voice_denoise": False, "voice_cleanup": "off", "voice_cleanup_profiles": [],
+    })
+    return plan.model_copy(update={"finishing": tools})
+
+
+def _prepare_person_cutout_matte(
+    context: dict[str, Any], sources: list[tuple[Path, float, float]],
+    plan: TalkingHeadEditPlan, settings: Settings, output_directory: Path,
+    *, width: int, height: int, fps: int, hdr_modes: list[str | None],
+) -> tuple[Path | None, dict[str, Any] | None]:
+    if not _person_cutout_requested(context):
+        return None, None
+    from app.cutout_lab import checked_model, render_full_matte
+
+    duration = sum(float(clip.source_out - clip.source_in) for clip in plan.clips)
+    output_directory.mkdir(parents=True, exist_ok=True)
+    assembled = output_directory / f".cutout-picture-{width}x{height}.mp4"
+    matte = output_directory / f"person-matte-{width}x{height}.mkv"
+    assembled.unlink(missing_ok=True)
+    matte.unlink(missing_ok=True)
+    picture_plan = _picture_only_plan(plan)
+    parts = []
+    for index, clip in enumerate(picture_plan.clips):
+        clip_duration = float(clip.source_out - clip.source_in)
+        parts.append(_clip_video_filter(
+            index=index, duration=clip_duration, visual_preset=clip.visual_preset,
+            fade_in=index > 0 and clip.transition == "dip_to_black",
+            fade_out=index + 1 < len(picture_plan.clips) and picture_plan.clips[index + 1].transition == "dip_to_black",
+            width=width, height=height, frames_per_second=fps,
+            hdr_mode=hdr_modes[index], framing=source_crop_filter(picture_plan, index, width, height),
+            stabilization=stabilization_filter(picture_plan, index, width, height, fps),
+        ))
+    assembly = [item for item in assemble_clip_graph(picture_plan, fps).split(";") if not item.endswith("[acat]")]
+    graph = apply_graph_finishing(";".join(parts + assembly + ["[vcat]null[vout]"]),
+        picture_plan, width=width, height=height, fps=fps)
+    command = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-nostdin", "-y"]
+    for source, source_in, source_out in sources:
+        command.extend(["-ss", f"{source_in:.3f}", "-t", f"{source_out-source_in:.3f}", "-i", str(source)])
+    command.extend([
+        "-filter_complex", graph, "-map", "[vout]", "-an", "-c:v", "libx264",
+        "-preset", "veryfast", "-crf", "18", "-pix_fmt", "yuv420p", "-map_metadata", "-1",
+        str(assembled),
+    ])
+    try:
+        completed = run_command(command, timeout=max(settings.analysis_command_timeout_seconds, round(duration * 4 + 60)), check=False)
+        if completed.returncode or not assembled.is_file() or assembled.stat().st_size <= 0:
+            raise RuntimeError("could not prepare the edited picture for background replacement: " + _ffmpeg_failure_detail(completed.stderr))
+        metrics = render_full_matte(
+            assembled, checked_model(settings.cutout_model_path), matte,
+            fps=fps, width=width, height=height, duration=duration,
+        )
+        return matte, metrics
+    finally:
+        assembled.unlink(missing_ok=True)
+
+
 def render_edit_preview(
     context: dict[str, Any],
     plan: TalkingHeadEditPlan,
@@ -646,20 +715,6 @@ def render_edit_preview(
         for clip in plan.clips
     ]
     music_source, music_metadata = _selected_music(context, plan, settings)
-    composition_background = selected_green_screen_background(
-        context,
-        settings,
-        len(sources) + (1 if music_source is not None else 0),
-    )
-    composition_inputs = 1 if composition_background is not None else 0
-    effect_sources = selected_effects(
-        context,
-        plan,
-        settings,
-        len(sources) + (1 if music_source is not None else 0) + composition_inputs,
-    )
-    broll_sources = selected_broll(context, plan, settings,
-        len(sources) + (1 if music_source is not None else 0) + composition_inputs + len(effect_sources))
     project_id = str(context["job"]["project_id"])
     job_id = str(context["job"]["id"])
     output_directory = settings.media_root / "exports" / project_id / job_id / f"v{version}"
@@ -667,6 +722,22 @@ def render_edit_preview(
     preview_path = output_directory / "preview.mp4"
     manifest_path = output_directory / "manifest.json"
     width, height = _preview_dimensions(str(context["job"].get("output_aspect") or "vertical"))
+    hdr_modes = [video_probe_hdr_mode(probe_media(source, settings.analysis_command_timeout_seconds)) for source, _, _ in sources]
+    cutout_matte, cutout_metrics = _prepare_person_cutout_matte(
+        context, sources, plan, settings, output_directory,
+        width=width, height=height, fps=PREVIEW_FPS, hdr_modes=hdr_modes,
+    )
+    composition_background = selected_composition_background(
+        context, settings, len(sources) + (1 if music_source is not None else 0),
+        cutout_matte_path=cutout_matte,
+    )
+    composition_inputs = composition_input_count(composition_background)
+    effect_sources = selected_effects(
+        context, plan, settings,
+        len(sources) + (1 if music_source is not None else 0) + composition_inputs,
+    )
+    broll_sources = selected_broll(context, plan, settings,
+        len(sources) + (1 if music_source is not None else 0) + composition_inputs + len(effect_sources))
 
     events = adjust_caption_timing(
         caption_events(plan, context["assets"], caption_corrections),
@@ -719,6 +790,7 @@ def render_edit_preview(
         "editing_receipt": context.get("editing_receipt") or editing_receipt(context, plan, provider),
         "story_finishing": context.get("story_finishing"),
         "story_sequence_review": context.get("story_sequence_review"),
+        "person_cutout": cutout_metrics,
         "speech_precision": context.get("speech_precision"),
         "assembly": context["job"].get("assembly_decision"),
         "creative_direction": {
@@ -884,26 +956,28 @@ def render_final_delivery(
         for clip in plan.clips
     ]
     music_source, music_metadata = _selected_music(context, plan, settings)
-    composition_background = selected_green_screen_background(
-        context,
-        settings,
-        len(sources) + (1 if music_source is not None else 0),
-    )
-    composition_inputs = 1 if composition_background is not None else 0
-    effect_sources = selected_effects(
-        context,
-        plan,
-        settings,
-        len(sources) + (1 if music_source is not None else 0) + composition_inputs,
-    )
-    broll_sources = selected_broll(context, plan, settings,
-        len(sources) + (1 if music_source is not None else 0) + composition_inputs + len(effect_sources))
     project_id = str(context["job"]["project_id"])
     job_id = str(context["job"]["id"])
     output_directory = settings.media_root / "deliveries" / project_id / job_id / f"v{version}"
     if delivery_slug:
         output_directory = output_directory / "variants" / delivery_slug
     width, height = _delivery_dimensions(str(context["job"].get("output_aspect") or "vertical"))
+    hdr_modes = [video_probe_hdr_mode(probe_media(source, settings.analysis_command_timeout_seconds)) for source, _, _ in sources]
+    cutout_matte, cutout_metrics = _prepare_person_cutout_matte(
+        context, sources, plan, settings, output_directory,
+        width=width, height=height, fps=FINAL_FPS, hdr_modes=hdr_modes,
+    )
+    composition_background = selected_composition_background(
+        context, settings, len(sources) + (1 if music_source is not None else 0),
+        cutout_matte_path=cutout_matte,
+    )
+    composition_inputs = composition_input_count(composition_background)
+    effect_sources = selected_effects(
+        context, plan, settings,
+        len(sources) + (1 if music_source is not None else 0) + composition_inputs,
+    )
+    broll_sources = selected_broll(context, plan, settings,
+        len(sources) + (1 if music_source is not None else 0) + composition_inputs + len(effect_sources))
     captions_ass_path = output_directory / "captions.ass"
     captions_vtt_path = output_directory / "captions.vtt"
     video_path = output_directory / "final.mp4"
@@ -1014,6 +1088,7 @@ def render_final_delivery(
         "editing_receipt": context.get("editing_receipt") or editing_receipt(context, plan, provider),
         "story_finishing": context.get("story_finishing"),
         "story_sequence_review": context.get("story_sequence_review"),
+        "person_cutout": cutout_metrics,
         "speech_precision": context.get("speech_precision"),
         "assembly": context["job"].get("assembly_decision"),
         "creative_direction": {

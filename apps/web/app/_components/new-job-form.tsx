@@ -1265,6 +1265,7 @@ function NewJobFormContent() {
         chroma_similarity: 0.12,
         chroma_blend: 0.08,
         spill_suppression: 0.15,
+        person_cutout_enabled: false,
       });
       await requestPreview(jobId);
       writeMediaBasket([]);
@@ -1683,7 +1684,7 @@ function NewJobFormContent() {
             </details>
             {usesAssignedBackground ? (
               <div className="mt-4 rounded-md border border-[#BFD2DE] bg-[#EFF6FA] p-4">
-                <p className="mb-3 text-xs leading-5 text-[#53646F]">{compositionMode === "person_cutout" ? "Beta creates a short isolation test after the first edit. The normal preview and export always keep the original background in this beta." : "Chroma key removes the selected solid screen throughout the preview."}</p>
+                <p className="mb-3 text-xs leading-5 text-[#53646F]">{compositionMode === "person_cutout" ? "The first preview keeps the original wall. After reviewing a two-second isolation test, you can create a separate full-reel replacement preview and still return to the original." : "Chroma key removes the selected solid screen throughout the preview."}</p>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <label className="space-y-2 text-xs font-bold text-[#173F5F]">
                     FOREGROUND · PRESENTER
@@ -2206,7 +2207,7 @@ function NewJobFormContent() {
               </div>
               <p className="mt-4 line-clamp-5 whitespace-pre-line text-sm leading-6 text-[#53646F]">{brief.trim() || "No brief supplied. GM Studio will find a coherent story from the selected media."}</p>
               {briefInterpretation ? <div className="mt-4 rounded-md bg-[#EFF6FA] p-3"><p className="text-xs font-bold text-[#173F5F]">{briefInterpretation.interpretation}</p>{briefInterpretation.sequence_locked ? <p className="mt-1 text-xs text-[#53646F]">Requested order will be protected.</p> : null}</div> : null}
-              <p className="mt-3 text-xs text-[#53646F]"><span className="font-bold text-[#173F5F]">Composition:</span> {compositionMode === "green_screen" ? "Chroma key with assigned presenter and background" : compositionMode === "person_cutout" ? "Ordinary-background replacement beta test" : compositionMode === "standard" ? "Standard edit" : "Automatic"}</p>
+              <p className="mt-3 text-xs text-[#53646F]"><span className="font-bold text-[#173F5F]">Composition:</span> {compositionMode === "green_screen" ? "Chroma key with assigned presenter and background" : compositionMode === "person_cutout" ? "Human-reviewed ordinary-background replacement beta" : compositionMode === "standard" ? "Standard edit" : "Automatic"}</p>
             </article>
           </div>
 

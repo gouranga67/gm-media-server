@@ -16,7 +16,8 @@ from uuid import UUID, uuid4
 
 from fastapi import HTTPException
 from app import cutout_lab as lab
-from app.cutout_lab_routes import CutoutComparisonRequest, create_cutout_preview, get_cutout_artifact
+from app.cutout_lab_routes import (CutoutApplicationRequest, CutoutComparisonRequest,
+    create_cutout_preview, get_cutout_artifact, set_full_reel_cutout)
 
 
 def sample(**changes):
@@ -187,6 +188,30 @@ class CutoutLabTests(unittest.TestCase):
              patch('app.cutout_lab_routes.create_comparison',return_value=expected) as create:
             self.assertEqual(create_cutout_preview(self.sample.job_id,CutoutComparisonRequest(edit_version=3)),expected)
         self.assertEqual(create.call_args.kwargs['background_asset_id'],background_id)
+
+    def test_full_reel_application_requires_the_exact_latest_comparison_and_keeps_the_base_version(self):
+        from test_stabilization import plan_for
+        from app.edit_plan import document_sha256
+        document=plan_for().model_dump(mode='json');foreground_id=UUID(document['clips'][0]['asset_id']);background_id=uuid4()
+        job=dict(id=self.sample.job_id,composition=dict(mode='person_cutout',foreground_asset_id=str(foreground_id),
+            background_asset_id=str(background_id),person_cutout_enabled=False))
+        base=dict(id=uuid4(),version=3,status='ready',document=document,edit_plan_id=uuid4(),provider='local_tools',
+            model='saved_plan',reasoning_effort='medium',caption_corrections=[],locked_elements=[],duration_policy=None)
+        queued=dict(id=uuid4(),job_id=self.sample.job_id,version=4,status='pending',preview_path=None)
+        database=MagicMock();database.__enter__.return_value.execute.return_value.fetchone.side_effect=[job,None,base,dict(version=3),queued]
+        report=dict(sample=dict(edit_version=3,plan_sha256=document_sha256(document)),background_asset_id=str(background_id))
+        request=CutoutApplicationRequest(edit_version=3,enabled=True,comparison_key='c'*64)
+        with patch('app.cutout_lab_routes.connection',return_value=database),\
+             patch('app.cutout_lab_routes.get_settings',return_value=self.settings),\
+             patch('app.cutout_lab_routes.read_report',return_value=(self.root/'report.json',report)),\
+             patch('app.cutout_lab_routes.assert_job_capacity'):
+            result=set_full_reel_cutout(self.sample.job_id,request)
+        self.assertEqual(result['version'],4);self.assertFalse(result['preview_available'])
+        statements=[call.args[0] for call in database.__enter__.return_value.execute.call_args_list]
+        self.assertTrue(any('person_cutout_applied' in str(call.args) for call in database.__enter__.return_value.execute.call_args_list))
+        composition_update=next(call for call in database.__enter__.return_value.execute.call_args_list if str(call.args[0]).startswith('UPDATE jobs SET composition'))
+        self.assertTrue(composition_update.args[1][0].obj['person_cutout_enabled'])
+        self.assertTrue(any('INSERT INTO edit_runs' in statement for statement in statements))
 
     def test_wrapper_passes_bounded_arguments_without_a_shell_and_never_posts_or_revises(self):
         script=Path(__file__).resolve().parents[3]/'scripts/preview-cutout.py'
