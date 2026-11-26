@@ -10,6 +10,7 @@ const RESPONSE_HEADERS = [
   "content-length",
   "content-range",
   "content-type",
+  "location",
 ] as const;
 
 async function forward(request: NextRequest, path: readonly string[]) {
@@ -30,6 +31,7 @@ async function forward(request: NextRequest, path: readonly string[]) {
     headers,
     body: method === "GET" || method === "HEAD" ? undefined : await request.arrayBuffer(),
     cache: "no-store",
+    redirect: "manual",
   });
 
   const responseHeaders = new Headers();

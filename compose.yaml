@@ -16,6 +16,8 @@ x-core-environment: &core-environment
   MEDIA_ROOT: /media
   UPLOAD_ROOT: /uploads
   MAX_UPLOAD_BYTES: ${MAX_UPLOAD_BYTES:-21474836480}
+  MEDIA_MIN_FREE_BYTES: ${MEDIA_MIN_FREE_BYTES:-53687091200}
+  MEDIA_MIN_FREE_PERCENT: ${MEDIA_MIN_FREE_PERCENT:-15}
   UPLOAD_HOOK_SECRET: ${UPLOAD_HOOK_SECRET:?Set UPLOAD_HOOK_SECRET in .env}
   CHATGPT_MODEL: ${CHATGPT_MODEL:-gpt-6.1-sol}
   APPLIANCE_STATUS_PATH: /host-status/appliance-health.json
@@ -29,6 +31,13 @@ x-core-environment: &core-environment
   META_APP_ORIGIN: ${APP_ORIGIN:-}
   META_LOGIN_CONFIG_ID: ${META_LOGIN_CONFIG_ID:-}
   META_GRAPH_VERSION: ${META_GRAPH_VERSION:-v24.0}
+  GOOGLE_DRIVE_ENABLED: ${GOOGLE_DRIVE_ENABLED:-false}
+  GOOGLE_DRIVE_CLIENT_ID: ${GOOGLE_DRIVE_CLIENT_ID:-}
+  GOOGLE_DRIVE_CLIENT_SECRET: ${GOOGLE_DRIVE_CLIENT_SECRET:-}
+  GOOGLE_DRIVE_TOKEN_ENCRYPTION_KEY: ${GOOGLE_DRIVE_TOKEN_ENCRYPTION_KEY:-}
+  GOOGLE_DRIVE_API_KEY: ${GOOGLE_DRIVE_API_KEY:-}
+  GOOGLE_DRIVE_APP_ID: ${GOOGLE_DRIVE_APP_ID:-}
+  GOOGLE_DRIVE_APP_ORIGIN: ${APP_ORIGIN:-}
   SPEECH_ALIGNMENT_ENABLED: ${SPEECH_ALIGNMENT_ENABLED:-true}
 
 services:
@@ -190,6 +199,24 @@ services:
       timeout: 5s
       retries: 5
       start_period: 15s
+
+  cloud-importer:
+    <<: *app-security
+    build:
+      context: ./services/core
+    command: ["python", "-m", "app.google_drive_imports"]
+    environment: *core-environment
+    volumes:
+      - upload-data:/uploads
+      - media-data:/media:ro
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    networks:
+      - edge
+      - backend
 
   visual-indexer:
     <<: *app-security

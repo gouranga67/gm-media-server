@@ -29,6 +29,7 @@ from app.duration_routes import router as duration_router
 from app.render_integrity import RENDER_TIMING_VERSION
 from app.subtitle_editor import router as subtitle_editor_router
 from app.cutout_lab_routes import router as cutout_lab_router
+from app.google_drive_routes import router as google_drive_router
 
 
 @asynccontextmanager
@@ -66,6 +67,7 @@ app.include_router(publishing_captions_router)
 app.include_router(duration_router)
 app.include_router(subtitle_editor_router)
 app.include_router(cutout_lab_router)
+app.include_router(google_drive_router)
 from app.learning_cases import router as learning_cases_router
 app.include_router(learning_cases_router)
 from app.build_info import deployed_build_id
@@ -118,6 +120,9 @@ def system_information() -> dict[str, Any]:
             "reviewable_folder_suggestions": True,
             "job_picker_pagination": True, "job_picker_folders": True, "exact_selection_lookup": True,
             "upload_concurrency": 2, "automatic_hosted_model_calls": 0},
+        "google_drive_import": {"version": 1, "enabled": settings.google_drive_enabled,
+            "explicit_selection": True, "server_download": True, "watched_folders": False,
+            "automatic_hosted_model_calls": 0},
         "learning_evaluation": {"version": 2,"saved_test_cases":True,"recording_groups":True,
             "complete_trial_readiness":True,"comparison_history_pagination":True,"comparison_page_size":20,
             "paired_checklist":True,"usage_qualification":True,"promotion_history":True,

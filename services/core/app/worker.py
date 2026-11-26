@@ -114,6 +114,10 @@ def finalize_one_upload() -> bool:
                 """,
                 (digest, relative_path, asset_id),
             )
+            database.execute(
+                "UPDATE google_drive_imports SET error = NULL, updated_at = now() WHERE asset_id = %s",
+                (asset_id,),
+            )
             canonical = database.execute(
                 """
                 SELECT existing.id, existing.storage_key
@@ -184,6 +188,10 @@ def finalize_one_upload() -> bool:
                 WHERE id = %s
                 """,
                 (Jsonb({"finalize_error": str(error)[:500]}), asset_id),
+            )
+            database.execute(
+                "UPDATE google_drive_imports SET error = %s, updated_at = now() WHERE asset_id = %s",
+                ("The downloaded file could not be finalized safely.", asset_id),
             )
         print(f"asset finalization failed: {asset_id}: {error}", flush=True)
     return True

@@ -35,12 +35,13 @@ INTAKE_SELECT = """
                 WHEN assets.status = 'ready' AND ingest.status = 'ready' AND catalog.status = 'ready'
                 THEN 'ready'
                 WHEN assets.status = 'uploading' THEN 'uploading' ELSE 'processing' END AS intake_status,
-           left(COALESCE(ingest.error, catalog.error, ''), 1000) AS error
+           left(COALESCE(drive_import.error, ingest.error, catalog.error, ''), 1000) AS error
     FROM library_intakes intake JOIN assets ON assets.id = intake.asset_id
     JOIN projects ON projects.id = assets.project_id
     LEFT JOIN asset_library_metadata meta ON meta.asset_id = assets.id
     LEFT JOIN asset_ingests ingest ON ingest.asset_id = assets.id
     LEFT JOIN asset_catalogs catalog ON catalog.asset_id = assets.id
+    LEFT JOIN google_drive_imports drive_import ON drive_import.asset_id = assets.id
 """
 INTAKE_BASE = INTAKE_SELECT + " WHERE intake.reviewed_at IS NULL AND assets.library_status = 'active'"
 

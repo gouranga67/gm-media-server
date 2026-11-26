@@ -983,6 +983,52 @@ export function getLibraryIntakeStatus(assetIds: readonly string[]) {
   return apiRequest<readonly Pick<LibraryIntakeItem, "id" | "intake_status" | "error">[]>(`library/intake/status?${params}`, { cache: "no-store" });
 }
 
+export type GoogleDriveStatus = {
+  readonly enabled: boolean;
+  readonly connected: boolean;
+  readonly connected_at?: string;
+};
+
+export type GoogleDriveImportItem = {
+  readonly id: string;
+  readonly asset_id: string;
+  readonly remote_name: string;
+  readonly downloaded_bytes?: number;
+  readonly byte_size?: number;
+  readonly status?: "queued" | "downloading" | "processing" | "ready" | "failed";
+  readonly error?: string | null;
+};
+
+export function getGoogleDriveStatus() {
+  return apiRequest<GoogleDriveStatus>("google-drive/status", { cache: "no-store" });
+}
+
+export function getGoogleDrivePickerToken() {
+  return apiRequest<{ readonly access_token: string; readonly developer_key: string; readonly app_id: string }>(
+    "google-drive/picker-token", { cache: "no-store" });
+}
+
+export function createGoogleDriveImports(input: {
+  readonly fileIds: readonly string[];
+  readonly batchName: string;
+  readonly collectionId?: string;
+  readonly namePrefix?: string;
+  readonly mediaRole: MediaRole;
+}) {
+  return apiRequest<{ readonly items: readonly GoogleDriveImportItem[]; readonly created: number; readonly already_imported: number }>(
+    "google-drive/imports", { method: "POST", body: JSON.stringify({
+      file_ids: input.fileIds, batch_name: input.batchName,
+      collection_id: input.collectionId || null, name_prefix: input.namePrefix || null,
+      media_role: input.mediaRole,
+    }) });
+}
+
+export function getGoogleDriveImports(ids: readonly string[]) {
+  const parameters = new URLSearchParams();
+  for (const id of ids) parameters.append("ids", id);
+  return apiRequest<readonly GoogleDriveImportItem[]>(`google-drive/imports?${parameters}`, { cache: "no-store" });
+}
+
 export function browseLibrary(options: {
   view: string; category: string; favorite: boolean; collectionId: string; unfiled: boolean;
   query: string; matchIds: readonly string[]; copies: boolean; sort: string; offset: number;

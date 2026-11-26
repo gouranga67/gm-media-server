@@ -8,6 +8,7 @@ import { CheckIcon, LoaderCircleIcon, PauseIcon, PlayIcon, UploadCloudIcon, XIco
 
 import { createProject, getLibraryIntakeStatus, mediaTypeForFile, registerAsset, type MediaRole, type LibraryCollection, type LibraryIntakePreferences } from "@/lib/media-api";
 import { startResumableUpload } from "@/lib/resumable-upload";
+import { GoogleDriveImport } from "@/app/_components/google-drive-import";
 
 type Phase = "queued" | "waiting" | "preparing" | "uploading" | "paused" | "indexing" | "ready" | "error";
 type Entry = {
@@ -28,6 +29,7 @@ export function LibraryUpload({ onReady, folders = [], destination = "" }: {
   readonly onReady: () => Promise<void>; readonly folders?: readonly LibraryCollection[]; readonly destination?: string;
 }) {
   const [entries, setEntries] = useState<readonly Entry[]>([]);
+  const [source, setSource] = useState<"device" | "drive">("device");
   const [batchName, setBatchName] = useState("Library uploads");
   const [namePrefix, setNamePrefix] = useState("");
   const [mediaRole, setMediaRole] = useState<MediaRole>("auto");
@@ -216,30 +218,35 @@ export function LibraryUpload({ onReady, folders = [], destination = "" }: {
   return (
     <section aria-labelledby="library-upload-heading" className="mt-6 space-y-4 rounded-md border border-[#BFD2DE] bg-[#EFF6FA] p-4 sm:p-5">
       <div>
-        <h2 className="flex items-center gap-2 text-lg font-bold text-[#173F5F]" id="library-upload-heading"><UploadCloudIcon aria-hidden="true" className="size-5" />Upload to library</h2>
-        <p className="mt-1 text-sm leading-6 text-[#4E5960]">Save footage, product close-ups, photos, or audio for future edits. Uploading here creates no editing job.</p>
+        <h2 className="flex items-center gap-2 text-lg font-bold text-[#173F5F]" id="library-upload-heading"><UploadCloudIcon aria-hidden="true" className="size-5" />Add media to your library</h2>
+        <p className="mt-1 text-sm leading-6 text-[#4E5960]">Choose files from this device or let the server fetch selected recordings directly from Google Drive.</p>
       </div>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-        <label className="flex-1 text-xs font-bold text-[#173F5F]">Upload group name
-          <input className="mt-2 h-11 w-full rounded-md border border-[#D7D9D3] bg-white px-3 text-sm text-[#20211F] disabled:opacity-60" disabled={starting || hasProject} maxLength={160} onChange={(event) => setBatchName(event.currentTarget.value)} value={batchName} />
-        </label>
-        <label className={`${actionClass} cursor-pointer focus-within:ring-2 focus-within:ring-[#173F5F]`}>
-          <UploadCloudIcon aria-hidden="true" className="size-4" />Choose files
-          <input accept="video/*,image/*,audio/*,.heic,.heif" aria-label="Choose files for the media library" className="sr-only" disabled={starting} multiple onChange={(event) => { choose(Array.from(event.currentTarget.files ?? [])); event.currentTarget.value = ""; }} type="file" />
-        </label>
-        <button className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-[#173F5F] px-4 text-sm font-bold text-white disabled:opacity-60" disabled={starting || !queuedCount || !batchName.trim()} onClick={() => void uploadSelected()} type="button">
-          {starting ? <LoaderCircleIcon aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" /> : <UploadCloudIcon aria-hidden="true" className="size-4" />}
-          {starting ? "Starting uploads…" : queuedCount ? `Upload ${queuedCount} ${queuedCount === 1 ? "file" : "files"} to library` : "Upload to library"}
-        </button>
+      <div aria-label="Media source" className="inline-flex w-full rounded-lg border border-[#BFD2DE] bg-white p-1 sm:w-auto" role="tablist">
+        <button aria-selected={source === "device"} className={`min-h-11 flex-1 rounded-md px-4 text-sm font-bold sm:flex-none ${source === "device" ? "bg-[#173F5F] text-white" : "text-[#4E5960]"}`} onClick={() => setSource("device")} role="tab" type="button">From this device</button>
+        <button aria-selected={source === "drive"} className={`min-h-11 flex-1 rounded-md px-4 text-sm font-bold sm:flex-none ${source === "drive" ? "bg-[#173F5F] text-white" : "text-[#4E5960]"}`} onClick={() => setSource("drive")} role="tab" type="button">Google Drive</button>
       </div>
+      <label className="block text-xs font-bold text-[#173F5F]">Import group name
+        <input className="mt-2 h-11 w-full rounded-md border border-[#D7D9D3] bg-white px-3 text-sm text-[#20211F] disabled:opacity-60" disabled={starting || hasProject} maxLength={160} onChange={(event) => setBatchName(event.currentTarget.value)} value={batchName} />
+      </label>
       <div className="grid gap-3 sm:grid-cols-3">
         <label className="text-xs font-bold text-[#666862]">Destination folder<select aria-label="Upload destination folder" className="mt-1 min-h-11 w-full rounded-md border border-[#D7D9D3] bg-white px-3 text-sm text-[#20211F]" disabled={starting} onChange={(event) => setFolderId(event.currentTarget.value)} value={folderId}><option value="">Not in folders</option>{folders.map((folder) => <option key={folder.id} value={folder.id}>{folderLabel(folders, folder.id)}</option>)}</select></label>
         <label className="text-xs font-bold text-[#666862]">Name these files <span className="font-normal">(optional)</span><input aria-label="Upload file name prefix" className="mt-1 min-h-11 w-full rounded-md border border-[#D7D9D3] px-3 text-sm text-[#20211F]" disabled={starting || hasProject} maxLength={230} onChange={(event) => setNamePrefix(event.currentTarget.value)} placeholder="e.g. Cream close-up → Cream close-up 001" value={namePrefix} /></label>
         <label className="text-xs font-bold text-[#666862]">Footage role<select aria-label="Upload footage role" className="mt-1 min-h-11 w-full rounded-md border border-[#D7D9D3] bg-white px-3 text-sm text-[#20211F]" disabled={starting || hasProject} onChange={(event) => setMediaRole(event.currentTarget.value as MediaRole)} value={mediaRole}><option value="auto">Unsorted video</option><option value="talking">Talking footage</option><option value="broll">B-roll</option></select></label>
       </div>
-      <p className="text-xs leading-5 text-[#666862]">Two uploads run at a time. Folder, names and video labels are saved before transfer. Photos and audio keep their own views. New imports appear in the Inbox for review.</p>
-      {error ? <p className="text-sm text-[#A23B2A]" role="alert">{error}</p> : null}
-      {entries.length ? <ul aria-label="Library uploads" className="space-y-2">{entries.map((entry) => (
+      {source === "device" ? <>
+        <div className="flex flex-wrap gap-3">
+          <label className={`${actionClass} cursor-pointer focus-within:ring-2 focus-within:ring-[#173F5F]`}>
+            <UploadCloudIcon aria-hidden="true" className="size-4" />Choose files
+            <input accept="video/*,image/*,audio/*,.heic,.heif" aria-label="Choose files for the media library" className="sr-only" disabled={starting} multiple onChange={(event) => { choose(Array.from(event.currentTarget.files ?? [])); event.currentTarget.value = ""; }} type="file" />
+          </label>
+          <button className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-[#173F5F] px-4 text-sm font-bold text-white disabled:opacity-60" disabled={starting || !queuedCount || !batchName.trim()} onClick={() => void uploadSelected()} type="button">
+            {starting ? <LoaderCircleIcon aria-hidden="true" className="size-4 animate-spin motion-reduce:animate-none" /> : <UploadCloudIcon aria-hidden="true" className="size-4" />}
+            {starting ? "Starting uploads…" : queuedCount ? `Upload ${queuedCount} ${queuedCount === 1 ? "file" : "files"} to library` : "Upload to library"}
+          </button>
+        </div>
+        <p className="text-xs leading-5 text-[#666862]">Two uploads run at a time. Keep this page open until device transfers finish. New imports appear in the Inbox for review.</p>
+        {error ? <p className="text-sm text-[#A23B2A]" role="alert">{error}</p> : null}
+        {entries.length ? <ul aria-label="Library uploads" className="space-y-2">{entries.map((entry) => (
         <li className="rounded-md border border-[#D7D9D3] bg-white p-3" key={entry.id}>
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0"><p className="truncate text-sm font-bold text-[#173F5F]">{entry.file.name}</p><p aria-live="polite" className="mt-1 text-xs text-[#666862]">{entry.phase === "queued" ? "Selected · ready to upload" : entry.phase === "waiting" ? "Waiting for an upload slot…" : entry.phase === "preparing" ? "Preparing upload…" : entry.phase === "ready" ? "Ready in your library" : entry.phase === "indexing" ? "Uploaded · analysing on the server" : entry.phase === "paused" ? "Paused" : entry.phase === "error" ? "Needs attention" : `Uploading ${entry.progress}%`}</p></div>
@@ -251,8 +258,9 @@ export function LibraryUpload({ onReady, folders = [], destination = "" }: {
           {entry.phase === "uploading" ? <progress aria-label={`${entry.file.name} upload progress`} className="mt-2 h-1.5 w-full accent-[#173F5F]" max={100} value={entry.progress} /> : null}
           {entry.error ? <p className="mt-2 text-xs text-[#A23B2A]" role="alert">{entry.error}</p> : null}
         </li>
-      ))}</ul> : null}
-      <p className="text-xs leading-5 text-[#4E5960]">{busyCount ? "Keep this page open until transfers finish. " : ""}Once uploaded, analysis continues on the server even after you leave. Reopen the Inbox to check progress, review names and organise your imports.</p>
+        ))}</ul> : null}
+        <p className="text-xs leading-5 text-[#4E5960]">{busyCount ? "Transfer in progress. " : ""}Once uploaded, analysis continues on the server even after you leave.</p>
+      </> : <GoogleDriveImport batchName={batchName} collectionId={folderId} mediaRole={mediaRole} namePrefix={namePrefix} onReady={onReady} />}
     </section>
   );
 }

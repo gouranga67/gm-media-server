@@ -32,7 +32,7 @@ let folderList = [], folderMembers = new Map(), folderFailure = false;
 let creativeImportAttempts = new Map();
 URL.createObjectURL = () => "blob:synthetic-preview";
 URL.revokeObjectURL = () => {};
-let calls = [], transfers = [], navigation = [], readyEvents = 0, analysisStatus = "ready", root, managedAssets = [], batchFailure = false, conceptHistory = [], renderConceptFailure = false, conceptCounter = 0, organizationHistory = [], organizationFailure = false;
+let calls = [], transfers = [], navigation = [], readyEvents = 0, analysisStatus = "ready", root, managedAssets = [], batchFailure = false, conceptHistory = [], renderConceptFailure = false, conceptCounter = 0, organizationHistory = [], organizationFailure = false, googleDriveFixture;
 const serverId = "11111111-1111-4111-8111-111111111111";
 const jobId = "22222222-2222-4222-8222-222222222222";
 const serverAsset = {
@@ -104,6 +104,7 @@ globalThis.fetch = async (url, options = {}) => {
   calls.push({ route, method: options.method ?? "GET", body });
   let payload;
   if (route === "release/readiness") payload=releaseFixture;
+  else if (route === "google-drive/status") payload=googleDriveFixture;
   else if (route === "release/acceptance") {
     if(releaseFailure)return {ok:false,status:409,json:async()=>({detail:"The deployed build changed. Refresh before saving acceptance."})};
     const record={...body,created_at:"2026-11-03T00:00:00Z",recorded_by:"owner"};
@@ -355,6 +356,7 @@ beforeEach(() => {
   lessonProposed=false;labFixture=null;
   assemblySettings={assembly_mode:"auto",pacing_mode:"auto",edit_style:"energetic",reel_intent:"auto"}; assemblyError=null; assemblyLocked=false; profiles=[]; previewFixture=null;
   intakeItems = []; caseSaveFailure=false;
+  googleDriveFixture = { enabled: true, connected: false };
   window.sessionStorage.clear();
   document.body.innerHTML = '<div id="root"></div>';
   root = createRoot(document.getElementById("root"));
@@ -504,6 +506,16 @@ test("library upload waits for submission, creates no job, resumes, and refreshe
   assert.equal(posts("projects").length, 1, "More files use the same batch project");
   assert.equal(posts("/jobs").length, 0);
   assert.equal(posts("/preview").length, 0);
+});
+
+test("Google Drive import is an explicit owner connection and selecting the tab starts no import", async () => {
+  await mountLibrary();
+  await click(button("Google Drive"));
+  await waitFor(() => document.body.textContent.includes("Connect your Google Drive"));
+  const connect = document.querySelector('a[href="/api/media/google-drive/connect"]');
+  assert.ok(connect, "The narrow Google OAuth connection should be the only next action");
+  assert.equal(posts("google-drive/imports").length, 0);
+  assert.equal(posts("projects").length, 0);
 });
 
 test("checking failed analysis never uploads or registers the original twice", async () => {

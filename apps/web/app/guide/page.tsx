@@ -118,8 +118,9 @@ export default function GuidePage() {
           <SectionTitle eyebrow="Your media library" title="Search first; organise only when it helps">
             <p>The Library is a visual workspace, not a filing requirement. Search recorded words or scenes, scan thumbnails, then select the sources you want.</p>
           </SectionTitle>
-          <div className="mt-6 grid gap-3 md:grid-cols-3">
+          <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             {[
+              [UploadCloudIcon, "Bring in recordings", "Choose Add media, then upload from this device or select Google Drive. Drive files download directly to the server and continue after you close the page."],
               [SearchIcon, "Find anything", "Use the large search box for filenames, spoken words, or indexed scene descriptions."],
               [FolderOpenIcon, "Browse visually", "Use media-type tabs and the thumbnail gallery. Folders group sources without copying them."],
               [SlidersHorizontalIcon, "Act on a selection", "Tick one or more items. Start a new edit immediately, or open Organize for folders, labels, names, and Trash."],

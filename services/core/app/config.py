@@ -57,6 +57,13 @@ class Settings(BaseSettings):
     meta_app_origin: str = ""
     meta_login_config_id: str = ""
     meta_graph_version: str = Field(default="v24.0", pattern=r"^v[0-9]{2}\.0$")
+    google_drive_enabled: bool = False
+    google_drive_client_id: str = ""
+    google_drive_client_secret: SecretStr = SecretStr("")
+    google_drive_token_encryption_key: SecretStr = SecretStr("")
+    google_drive_api_key: SecretStr = SecretStr("")
+    google_drive_app_id: str = ""
+    google_drive_app_origin: str = ""
 
     @field_validator("meta_app_origin")
     @classmethod
@@ -67,6 +74,17 @@ class Settings(BaseSettings):
         url = urlsplit(value)
         if url.scheme != "https" or not url.netloc or url.username or url.password or url.query or url.fragment or url.path not in ("", "/"):
             raise ValueError("Meta app origin must be an HTTPS origin without a path")
+        return value.rstrip("/")
+
+    @field_validator("google_drive_app_origin")
+    @classmethod
+    def google_drive_origin(cls, value, info):
+        from urllib.parse import urlsplit
+        if not value or not info.data.get("google_drive_enabled"):
+            return value
+        url = urlsplit(value)
+        if url.scheme != "https" or not url.netloc or url.username or url.password or url.query or url.fragment or url.path not in ("", "/"):
+            raise ValueError("Google Drive app origin must be an HTTPS origin without a path")
         return value.rstrip("/")
 
 
